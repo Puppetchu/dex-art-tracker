@@ -31,7 +31,7 @@ const rawId = id => String(id).replace(/^ja:/, '');
 // How many of the daily requests may go to prices of regular cards (the rest is for art cards).
 const REGULAR_PRICES_PER_DAY = process.env.REGULAR_PRICES_PER_DAY !== undefined ? +process.env.REGULAR_PRICES_PER_DAY : 0; // 0 = no limit
 const DAILY_REQUESTS = process.env.DAILY_REQUESTS !== undefined ? (+process.env.DAILY_REQUESTS || 0) : 0; // 0 = no daily limit
-const REQUEST_DELAY_MS = process.env.REQUEST_DELAY_MS !== undefined ? +process.env.REQUEST_DELAY_MS : 4000; // pause between requests, 4 seconds by default
+const REQUEST_DELAY_MS = process.env.REQUEST_DELAY_MS !== undefined ? +process.env.REQUEST_DELAY_MS : 2000; // pause between requests, 2 seconds by default
 const PRICE_MAX_AGE_DAYS = +process.env.PRICE_MAX_AGE_DAYS || 30;
 const SETS_CHECK_DAYS = +process.env.SETS_CHECK_DAYS || 1; // the set list is checked at start and then this often
 const PRICE_CANDIDATES = +process.env.PRICE_CANDIDATES || 2;
@@ -353,12 +353,17 @@ async function syncLang(lang) {
     const date = d.releaseDate || '';
     const pocket = isPocket(s.id) || (d.serie && d.serie.id === 'tcgp');
     const scan = !pocket && date >= MIN_SET_DATE;
+    const oldCards = new Map(((have && have.cards) || []).map(c => [c.id, c]));
     db.sets[key] = {
       name: d.name, date, scan, pocket: !!pocket, promo: lang === 'en' && /promo/i.test(d.name || ''), lang,
       lg: s.logo || d.logo || null, sy: s.symbol || d.symbol || null,
       official: (d.cardCount && d.cardCount.official) || 0,
       total: (d.cardCount && d.cardCount.total) || 0,
-      cards: scan ? (d.cards || []).map(c => ({ id: p + c.id, l: String(c.localId), n: c.name, i: c.image || null })) : [],
+      cards: scan ? (d.cards || []).map(c => {
+        const o = oldCards.get(p + c.id), n = { id: p + c.id, l: String(c.localId), n: c.name, i: c.image || (o && o.i) || null };
+        if (o && o.pt) { n.eu = o.eu; n.us = o.us; n.cm = o.cm; n.pt = o.pt; } // keep prices already fetched for regular cards
+        return n;
+      }) : [],
     };
     if (scan) { added++; db.regMatched = null; (db.reread = db.reread || {})[key] = todayStr(); }
     persist(false);
@@ -415,10 +420,20 @@ function pendingCards() {
 
 async function fetchCard(id) {
   const lang = langOf(id), p = pfx(lang);
+  if (db.cards[id] && db.cards[id].x && db.cards[id].m) return; // you took this card off the art list: leave it
   const d = await paced('/cards/' + encodeURIComponent(rawId(id)), lang);
   const old = db.cards[id];
   if (d && p === '' && d.category === 'Pokemon' && !(Array.isArray(d.dexId) && d.dexId.length)) { const g = nameDex(d.name); if (g.length) d.dexId = g; }
-  if (d && qualifies(d, p)) { const r = record(d, p); if (old && old.m) r.m = 1; db.cards[id] = r; }
+  if (d && qualifies(d, p)) {
+    const r = record(d, p); if (old && old.m) r.m = 1;
+    if (old && !old.x) { // never replace something known with nothing: keep the last picture, price and shop number
+      if (!r.b && old.b) r.b = old.b;
+      if (r.eu == null && old.eu != null) r.eu = old.eu;
+      if (r.us == null && old.us != null) r.us = old.us;
+      if (!r.cm && old.cm) r.cm = old.cm;
+    }
+    db.cards[id] = r;
+  }
   else if (old && !old.x) old.pt = new Date().toISOString();
   else db.cards[id] = { id, x: 1 };
   persist(false);

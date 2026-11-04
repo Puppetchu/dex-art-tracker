@@ -6,8 +6,8 @@ services:
     environment:
       # Most requests the server may send to TCGdex per day. 0 = no limit (default).
       # DAILY_REQUESTS: "0"
-      # Pause between two requests, in milliseconds (default 4000 = 4 seconds).
-      # REQUEST_DELAY_MS: "4000"
+      # Pause between two requests, in milliseconds (default 2000 = 2 seconds).
+      # REQUEST_DELAY_MS: "2000"
       # Prices of the cheapest art cards are re-checked when older than this many days.
       PRICE_MAX_AGE_DAYS: "30"
       # The set list is checked for new sets when the container starts and then this often (days).

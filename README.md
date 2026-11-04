@@ -52,7 +52,7 @@ Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokea
 1. **Sets.** The set list is checked when the container starts and then once a day. Each new set is fetched once. A set request lists all its cards by name and image, so regular cards are stored from that alone, with no price and no further requests. They are matched to Pokémon by name. Pokémon TCG Pocket sets are ignored.
 2. **Art candidates.** Cards numbered above the official set size (for example 199/198) and every card in a promo set get a request of their own, to read rarity, dex number and price. Candidates whose name contains no Pokémon name (trainers, energy) are skipped. The result is stored for good. Newest sets are done first.
 3. **Prices.** The cheapest 2 art cards per Pokémon are re-priced when older than 30 days, oldest first. Cards you checked as owned, and Pokémon whose art card you own, are never re-priced.
-4. **Pace.** No daily limit, one request every 4 seconds (`REQUEST_DELAY_MS`), so the server never hammers TCGdex. The full database takes days to complete, and cards appear as they are fetched. The first build of the database runs in one go unless you set `STAGGER_INITIAL`. Cards that are still waiting for their details are shown on the status line and appear as the server works through them.
+4. **Pace.** No daily limit, one request every 2 seconds (`REQUEST_DELAY_MS`), so the server never hammers TCGdex. The full database takes days to complete, and cards appear as they are fetched. The first build of the database runs in one go unless you set `STAGGER_INITIAL`. Cards that are still waiting for their details are shown on the status line and appear as the server works through them.
 
 "Refresh prices" in the page fetches at most 25 cards (missing ones first, then the oldest prices), once per 10 minutes.
 
@@ -86,6 +86,14 @@ One port, one page. Everyone who opens it sees a **view-only** version: they can
 - Eight wrong passwords from one address block further tries for 15 minutes. The money totals are hidden from visitors unless `SHOW_VALUE_PUBLIC=1`.
 - **Outside your home:** only publish the page through an https reverse proxy or tunnel (the password travels as plain text over http), (`TRUST_PROXY` is on by default, so the proxy's forwarded address and https are used; set `TRUST_PROXY=0` if there is no proxy). Put the proxy rule on port 8080 only. To keep the login unreachable from outside, publish only the `/view/` path.
 
+## What the background job never overwrites
+
+- A card you took off the art list by hand stays off it.
+- A card you counted as art by hand stays counted, and is re-priced first.
+- Prices already fetched for regular cards survive the daily re-read of growing sets.
+- When a refresh finds no picture or no price, the last known picture and price are kept.
+- Your ticks, picks and currency are only ever changed by you.
+
 ## Generations
 
 The Pokémon tab is split into the nine generations, each with a header showing its range and how many Pokémon you have a card and an art card for. The "Jump to generation" menu next to the filter scrolls straight to the one you pick.
@@ -99,7 +107,7 @@ Saved on the server in `state.json`, so every device sees the same progress. "Sh
 | Variable | Default | Meaning |
 |---|---|---|
 | `DAILY_REQUESTS` | 0 | Most requests per day, 0 = no limit |
-| `REQUEST_DELAY_MS` | 4000 | Pause between requests in milliseconds |
+| `REQUEST_DELAY_MS` | 2000 | Pause between requests in milliseconds |
 | `PRICE_MAX_AGE_DAYS` | 30 | Re-price candidates older than this |
 | `SETS_CHECK_DAYS` | 1 | The set list is checked at start and then every this many days |
 | `PRICE_CANDIDATES` | 2 | Cheapest art cards per Pokémon kept up to date |
