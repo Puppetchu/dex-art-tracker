@@ -3,13 +3,11 @@ services:
     build: .
     ports:
       - "8080:8080"
-      # View-only copy for friends (the link is shown under the Share button).
-      - "8081:8081"
     environment:
       # Most requests the server may send to TCGdex per day. 0 = no limit (default).
       # DAILY_REQUESTS: "0"
-      # Pause between two requests, in milliseconds (default 10000 = 10 seconds).
-      # REQUEST_DELAY_MS: "10000"
+      # Pause between two requests, in milliseconds (default 4000 = 4 seconds).
+      # REQUEST_DELAY_MS: "4000"
       # Prices of the cheapest art cards are re-checked when older than this many days.
       PRICE_MAX_AGE_DAYS: "30"
       # The set list is checked for new sets when the container starts and then this often (days).
@@ -24,12 +22,13 @@ services:
       # PROMO_AS_ART: "1"
       # Which rarities count as art cards (compared without upper/lower case).
       # RARITIES: "Illustration Rare,Special Illustration Rare,Promo"
-      # View-only page: the port inside the container (0 = switch sharing off).
-      # SHARE_PORT: "8081"
-      # Fixed link instead of a random one (4-64 letters, numbers, - or _).
-      # SHARE_KEY: "my-friends-link"
-      # Set to "1" so friends also see the "worth" and "left to spend" totals.
-      # SHARE_SHOW_VALUE: "1"
+      # Owner password. Without it a random one is generated and printed in the container log
+      # (also saved as admin.json in the data folder). Only the owner can change anything.
+      # ADMIN_PASSWORD: "choose-a-long-password"
+      # Set to "1" so visitors who are not logged in also see "worth" and "left to spend".
+      # SHOW_VALUE_PUBLIC: "1"
+      # Set to "1" when the page sits behind a reverse proxy (https), so logins use the visitor's real address.
+      # TRUST_PROXY: "1"
     volumes:
       - dex-data:/data
     restart: unless-stopped

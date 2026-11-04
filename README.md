@@ -52,7 +52,7 @@ Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokea
 1. **Sets.** The set list is checked when the container starts and then once a day. Each new set is fetched once. A set request lists all its cards by name and image, so regular cards are stored from that alone, with no price and no further requests. They are matched to Pokémon by name. Pokémon TCG Pocket sets are ignored.
 2. **Art candidates.** Cards numbered above the official set size (for example 199/198) and every card in a promo set get a request of their own, to read rarity, dex number and price. Candidates whose name contains no Pokémon name (trainers, energy) are skipped. The result is stored for good. Newest sets are done first.
 3. **Prices.** The cheapest 2 art cards per Pokémon are re-priced when older than 30 days, oldest first. Cards you checked as owned, and Pokémon whose art card you own, are never re-priced.
-4. **Pace.** No daily limit, one request every 10 seconds (`REQUEST_DELAY_MS`), so the server never hammers TCGdex. The full database takes days to complete, and cards appear as they are fetched. The first build of the database runs in one go unless you set `STAGGER_INITIAL`. Cards that are still waiting for their details are shown on the status line and appear as the server works through them.
+4. **Pace.** No daily limit, one request every 4 seconds (`REQUEST_DELAY_MS`), so the server never hammers TCGdex. The full database takes days to complete, and cards appear as they are fetched. The first build of the database runs in one go unless you set `STAGGER_INITIAL`. Cards that are still waiting for their details are shown on the status line and appear as the server works through them.
 
 "Refresh prices" in the page fetches at most 25 cards (missing ones first, then the oldest prices), once per 10 minutes.
 
@@ -73,15 +73,15 @@ Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokea
 
 Trainer cards with an art rarity (for example Illustration rare or Special illustration rare trainers, English and Japanese) are listed on their own **Trainers** tab, newest set first, with a picture, price, Cardmarket and TCGplayer links and a "Have it" tick. They show owned count, worth and left to spend, and have no effect on the Pokémon counts at the top. They are found through the same rarity search as the other art cards, so the first update re-checks cards that were skipped before.
 
-## Share a view-only copy
+## Login and the view-only page
 
-A second, read-only copy of the page runs on port 8081 (`SHARE_PORT`). Press **Share** on the main page to see the link, for example `http://yourserver:8081/Xk3p9Qa2Lw1z/`.
+One port, one page. Everyone who opens it sees a **view-only** version: they can browse Pokémon, sets, trainers and cards and see what you own, but cannot change anything. The server refuses every change without a login.
 
-- Only the exact link works. Any other address gives "Not found". "Make a new link" kills the old one.
-- Friends can browse Pokémon, sets and cards, but cannot tick, pick, mark or refresh anything. The server also refuses every write on that port.
-- The money totals are hidden unless `SHARE_SHOW_VALUE=1`.
-- To share outside your home network, publish **only** the share port (reverse proxy or tunnel, ideally with https). Never publish port 8080, which can change your ticks.
-- Unraid: add a second port to the container (container port 8081, any free host port).
+- **Owner login:** a small "Owner login" link at the bottom of the page. After logging in you get the full page with the tick buttons, Refresh and Log out. The login lasts 30 days on that device.
+- **Password:** set `ADMIN_PASSWORD`. If you do not, a random one is generated, printed in the container log (look for `OWNER PASSWORD`) and saved as `admin.json` in the data folder.
+- **No login link at all:** share `http://yourserver:8080/view/`. It is the same view-only page and it never shows a login option, even to you.
+- Eight wrong passwords from one address block further tries for 15 minutes. The money totals are hidden from visitors unless `SHOW_VALUE_PUBLIC=1`.
+- **Outside your home:** only publish the page through an https reverse proxy or tunnel (the password travels as plain text over http), and set `TRUST_PROXY=1` there. Put the proxy rule on port 8080 only. To keep the login unreachable from outside, publish only the `/view/` path.
 
 ## Your ticks
 
@@ -92,7 +92,7 @@ Saved on the server in `state.json`, so every device sees the same progress. "Sh
 | Variable | Default | Meaning |
 |---|---|---|
 | `DAILY_REQUESTS` | 0 | Most requests per day, 0 = no limit |
-| `REQUEST_DELAY_MS` | 10000 | Pause between requests in milliseconds |
+| `REQUEST_DELAY_MS` | 4000 | Pause between requests in milliseconds |
 | `PRICE_MAX_AGE_DAYS` | 30 | Re-price candidates older than this |
 | `SETS_CHECK_DAYS` | 1 | The set list is checked at start and then every this many days |
 | `PRICE_CANDIDATES` | 2 | Cheapest art cards per Pokémon kept up to date |
@@ -102,9 +102,9 @@ Saved on the server in `state.json`, so every device sees the same progress. "Sh
 | `DISABLE_REFRESH` | 0 | 1 = never contact the APIs |
 | `LANGUAGES` | en,ja | `en` = English only |
 | `REGULAR_PRICES_PER_DAY` | 0 | Most requests per day spent on regular-card prices, 0 = no limit |
-| `SHARE_PORT` | 8081 | Port of the view-only page, 0 = off |
-| `SHARE_KEY` | random | Fixed link text instead of a random one |
-| `SHARE_SHOW_VALUE` | 0 | 1 = friends also see the money totals |
+| `ADMIN_PASSWORD` | random | Owner password |
+| `SHOW_VALUE_PUBLIC` | 0 | 1 = visitors also see the money totals |
+| `TRUST_PROXY` | 0 | 1 = behind a reverse proxy |
 
 ## Limits
 

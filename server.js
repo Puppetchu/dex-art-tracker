@@ -31,7 +31,7 @@ const rawId = id => String(id).replace(/^ja:/, '');
 // How many of the daily requests may go to prices of regular cards (the rest is for art cards).
 const REGULAR_PRICES_PER_DAY = process.env.REGULAR_PRICES_PER_DAY !== undefined ? +process.env.REGULAR_PRICES_PER_DAY : 0; // 0 = no limit
 const DAILY_REQUESTS = process.env.DAILY_REQUESTS !== undefined ? (+process.env.DAILY_REQUESTS || 0) : 0; // 0 = no daily limit
-const REQUEST_DELAY_MS = process.env.REQUEST_DELAY_MS !== undefined ? +process.env.REQUEST_DELAY_MS : 10000; // pause between requests, 10 seconds by default
+const REQUEST_DELAY_MS = process.env.REQUEST_DELAY_MS !== undefined ? +process.env.REQUEST_DELAY_MS : 4000; // pause between requests, 4 seconds by default
 const PRICE_MAX_AGE_DAYS = +process.env.PRICE_MAX_AGE_DAYS || 30;
 const SETS_CHECK_DAYS = +process.env.SETS_CHECK_DAYS || 1; // the set list is checked at start and then this often
 const PRICE_CANDIDATES = +process.env.PRICE_CANDIDATES || 2;
@@ -46,10 +46,9 @@ const RAR = new Set(RARITIES);
 // 1 (default): every Pokémon card from a promo set counts as an art card, whatever its rarity label.
 const PROMO_AS_ART = process.env.PROMO_AS_ART !== '0';
 
-// View-only copy of the page for friends, on its own port. Only GET requests, and only under a private link.
-const SHARE_PORT = process.env.SHARE_PORT !== undefined ? +process.env.SHARE_PORT : 8081; // 0 = off
-const SHARE_SHOW_VALUE = process.env.SHARE_SHOW_VALUE === '1'; // 1 = friends also see "worth" and "left to spend"
-const SHARE_FILE = path.join(DATA_DIR, 'share.json');
+// Visitors who are not logged in see a view-only page. Set to 1 to let them see "worth" and "left to spend" too.
+const SHOW_VALUE_PUBLIC = process.env.SHOW_VALUE_PUBLIC === '1' || process.env.SHARE_SHOW_VALUE === '1';
+const TRUST_PROXY = process.env.TRUST_PROXY === '1'; // 1 = behind a reverse proxy: use X-Forwarded-For / -Proto
 
 const CARDS_FILE = path.join(DATA_DIR, 'cards.json');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -124,10 +123,20 @@ async function api(p, lang) {
 let unlimited = false;
 function rollBudget() { if (db.budget.date !== todayStr()) db.budget = { date: todayStr(), used: 0 }; }
 function canSpend() { rollBudget(); return unlimited || !DAILY_REQUESTS || db.budget.used < DAILY_REQUESTS; }
-async function paced(p, lang) {
+// Requests for the owner's own clicks (fast = true) go first: they are sent at once, and the background
+// work waits until none are running.
+let manualBusy = 0;
+async function paced(p, lang, fast) {
+  if (fast) {
+    manualBusy++;
+    try { rollBudget(); db.budget.used++; return await api(p, lang); }
+    finally { manualBusy--; }
+  }
+  while (manualBusy > 0) await sleep(200);
   rollBudget(); db.budget.used++;
   const r = await api(p, lang);
   await sleep(REQUEST_DELAY_MS);
+  while (manualBusy > 0) await sleep(200);
   return r;
 }
 
@@ -425,7 +434,7 @@ function planPriceRefresh(maxAge, limit) {
   });
   return [...picked.values()]
     .filter(c => ageDays(c.pt) >= maxAge)
-    .sort((a, b) => Date.parse(a.pt || 0) - Date.parse(b.pt || 0))
+    .sort((a, b) => (b.m ? 1 : 0) - (a.m ? 1 : 0) || Date.parse(a.pt || 0) - Date.parse(b.pt || 0)) // cards you picked by hand first
     .slice(0, limit);
 }
 
@@ -442,10 +451,10 @@ function regIndex() {
   for (const s of Object.values(db.sets)) if (s.scan) for (const c of s.cards) m.set(c.id, c);
   return m;
 }
-async function priceRegular(id, idx) {
+async function priceRegular(id, idx, fast) {
   const c = (idx || regIndex()).get(id);
   if (!c) return false;
-  const d = await paced('/cards/' + encodeURIComponent(rawId(id)), langOf(id));
+  const d = await paced('/cards/' + encodeURIComponent(rawId(id)), langOf(id), fast);
   c.pt = new Date().toISOString();
   if (d) { const pr = prices(d); c.eu = pr.eu; c.us = pr.us; c.cm = cmId(d); }
   persist(false);
@@ -574,18 +583,39 @@ function status() {
   };
 }
 
-// ---------- share link ----------
-const makeKey = () => crypto.randomBytes(9).toString('base64url');
-const envKey = String(process.env.SHARE_KEY || '').trim();
-const shareFixed = /^[A-Za-z0-9_-]{4,64}$/.test(envKey);
-if (envKey && !shareFixed) log('SHARE_KEY ignored: use 4 to 64 letters, numbers, - or _');
-let shareKey = shareFixed ? envKey : ((readJSON(SHARE_FILE) || {}).key || null);
-if (!shareKey) { shareKey = makeKey(); writeJSON(SHARE_FILE, { key: shareKey }); }
-const safeEq = (a, b) => { const A = Buffer.from(String(a)), B = Buffer.from(String(b)); return A.length === B.length && crypto.timingSafeEqual(A, B); };
-function indexHtml(readonly) {
+// ---------- owner login ----------
+const ADMIN_FILE = path.join(DATA_DIR, 'admin.json');
+const SESS_FILE = path.join(DATA_DIR, 'sessions.json');
+const sha = x => crypto.createHash('sha256').update(String(x)).digest();
+const sameText = (a, b) => crypto.timingSafeEqual(sha(a), sha(b));
+let adminPw = String(process.env.ADMIN_PASSWORD || '');
+if (adminPw) log('owner password: set by ADMIN_PASSWORD');
+else {
+  const a = readJSON(ADMIN_FILE);
+  adminPw = (a && a.password) || '';
+  if (!adminPw) { adminPw = crypto.randomBytes(9).toString('base64url'); writeJSON(ADMIN_FILE, { password: adminPw }); }
+  log('OWNER PASSWORD (generated; also saved in admin.json in the data folder; set ADMIN_PASSWORD to choose your own):', adminPw);
+}
+const sessions = readJSON(SESS_FILE) || {}; // sha256(token) -> expiry
+const SESSION_MS = 30 * 86400000;
+function saveSessions() { const n = Date.now(); Object.keys(sessions).forEach(k => { if (sessions[k] < n) delete sessions[k]; }); writeJSON(SESS_FILE, sessions); }
+const tokenOf = req => { const m = String(req.headers.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith('dex_session=')); return m ? m.slice(12) : ''; };
+const hashTok = t => crypto.createHash('sha256').update(t).digest('hex');
+function hasSession(req) { const t = tokenOf(req); if (!t) return false; const e = sessions[hashTok(t)]; return !!e && e > Date.now(); }
+function clientIp(req) { const f = TRUST_PROXY && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim(); return f || req.socket.remoteAddress || ''; }
+const isHttps = req => TRUST_PROXY && String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+const cookie = (req, v, age) => 'dex_session=' + v + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=' + age + (isHttps(req) ? '; Secure' : '');
+const fails = new Map(); // ip -> {n, t}: wrong passwords
+const blocked = ip => { const f = fails.get(ip); return !!f && Date.now() - f.t < 15 * 60000 && f.n >= 8; };
+const hits = new Map();
+const limited = ip => { const n = Date.now(), h = hits.get(ip); if (!h || n - h.t > 60000) { hits.set(ip, { t: n, n: 1 }); return false; } return ++h.n > 600; };
+
+// mode: 'full' (logged in), 'ro' (view only, with a login link), 'view' (view only, no login link at all)
+function indexHtml(mode) {
   let h = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
-  if (readonly) h = h.replace('<!--DEX_MODE-->', '<script>window.DEX_READONLY=true;window.DEX_HIDE_VALUE=' + (!SHARE_SHOW_VALUE) + ';</script>');
-  return h;
+  const hide = 'window.DEX_HIDE_VALUE=' + (!SHOW_VALUE_PUBLIC) + ';';
+  const inj = mode === 'full' ? 'window.DEX_AUTH=true;' : 'window.DEX_READONLY=true;' + hide + (mode === 'ro' ? 'window.DEX_LOGIN=true;' : '');
+  return h.replace('<!--DEX_MODE-->', '<script>' + inj + '</script>');
 }
 
 // ---------- HTTP ----------
@@ -622,19 +652,28 @@ function readBody(req, limit) {
 
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
-  const p = u.pathname;
+  let p = u.pathname, forceAnon = false;
   try {
-    if (req.method === 'GET' && (p === '/' || p === '/index.html')) return sendFile(res, path.join(PUBLIC_DIR, 'index.html'));
+    // /view/ is the same page without any login option, whoever opens it.
+    if (p === '/view') { res.writeHead(301, { Location: '/view/' }); return res.end(); }
+    if (p.startsWith('/view/')) { p = p.slice(5); forceAnon = true; }
+    const authed = !forceAnon && hasSession(req);
+    const ip = clientIp(req);
+    if (!authed && limited(ip)) { res.writeHead(429); return res.end('Slow down'); }
+    if (req.method === 'GET' && (p === '/' || p === '/index.html')) {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Vary': 'Cookie', 'X-Content-Type-Options': 'nosniff' });
+      return res.end(indexHtml(authed ? 'full' : (forceAnon ? 'view' : 'ro')));
+    }
     if (req.method === 'GET' && p === '/data/cards.json') return sendCompressed(req, res, CARDS_FILE);
     if (req.method === 'GET' && p === '/data/names.json') return sendFile(res, NAMES_FILE);
-    if (req.method === 'GET' && p === '/api/status') return sendJSON(res, 200, status());
+    if (req.method === 'GET' && p === '/api/status') return sendJSON(res, 200, authed ? status() : { count: lastExport.art, regular: lastExport.regular, running: false, backlog: 0, pricesDue: 0, sets: { scanned: lastExport.sets } });
     if (req.method === 'GET' && p === '/api/set') {
       const s = setPayload(u.searchParams.get('id') || '');
       return s ? sendJSON(res, 200, s) : sendJSON(res, 404, { error: 'unknown set' });
     }
     if (req.method === 'GET' && p === '/api/state') return sendJSON(res, 200, readJSON(STATE_FILE) || {});
-    if (req.method === 'GET' && p === '/api/share') return sendJSON(res, 200, { enabled: SHARE_PORT > 0, port: SHARE_PORT, key: shareKey, fixed: shareFixed, showValue: SHARE_SHOW_VALUE });
     if (req.method === 'GET' && p === '/api/lang-check') {
+      if (!authed) return sendJSON(res, 401, { error: 'login required' });
       if (DISABLE_REFRESH) return sendJSON(res, 409, { error: 'The server is set to not contact the card service' });
       if (Date.now() - lastLang < 20000) return sendJSON(res, 429, { error: 'wait 20 seconds between checks' });
       lastLang = Date.now();
@@ -645,11 +684,27 @@ const server = http.createServer(async (req, res) => {
     // Writing requests must be JSON: a web page on another site cannot send that without permission.
     if (req.method !== 'GET' && !(req.headers['content-type'] || '').includes('application/json')) return sendJSON(res, 415, { error: 'JSON required' });
 
-    if (req.method === 'POST' && p === '/api/share/reset') {
-      if (shareFixed) return sendJSON(res, 409, { error: 'The link is fixed by the SHARE_KEY setting' });
-      shareKey = makeKey(); writeJSON(SHARE_FILE, { key: shareKey });
-      return sendJSON(res, 200, { key: shareKey });
+    if (req.method === 'POST' && p === '/api/login') {
+      if (forceAnon) return sendJSON(res, 404, { error: 'not found' });
+      if (blocked(ip)) return sendJSON(res, 429, { error: 'Too many wrong passwords. Try again in 15 minutes.' });
+      const b = JSON.parse(await readBody(req, 1e4));
+      if (!sameText(String(b.password || ''), adminPw)) {
+        const f = fails.get(ip); fails.set(ip, f && Date.now() - f.t < 15 * 60000 ? { n: f.n + 1, t: Date.now() } : { n: 1, t: Date.now() });
+        await sleep(1000);
+        return sendJSON(res, 401, { error: 'Wrong password' });
+      }
+      fails.delete(ip);
+      const tok = crypto.randomBytes(24).toString('base64url');
+      sessions[hashTok(tok)] = Date.now() + SESSION_MS; saveSessions();
+      res.setHeader('Set-Cookie', cookie(req, tok, SESSION_MS / 1000));
+      return sendJSON(res, 200, { ok: true });
     }
+    if (req.method === 'POST' && p === '/api/logout') {
+      const t = tokenOf(req); if (t) { delete sessions[hashTok(t)]; saveSessions(); }
+      res.setHeader('Set-Cookie', cookie(req, '', 0));
+      return sendJSON(res, 200, { ok: true });
+    }
+    if (!authed) return sendJSON(res, 401, { error: 'login required' });
     if (req.method === 'PUT' && p === '/api/state') {
       const s = JSON.parse(await readBody(req, 5e6));
       if (!s || typeof s.own !== 'object' || Array.isArray(s.own)) return sendJSON(res, 400, { error: 'bad state' });
@@ -673,7 +728,7 @@ const server = http.createServer(async (req, res) => {
       const b = JSON.parse(await readBody(req, 1e5));
       const idx = regIndex(), ids = (Array.isArray(b.ids) ? b.ids : []).map(String).filter(i => idx.has(i) && !db.cards[i]).slice(0, 6);
       let n = 0;
-      for (const i of ids) { if (await priceRegular(i, idx)) n++; }
+      for (const i of ids) { if (await priceRegular(i, idx, true)) n++; }
       persist(true);
       return sendJSON(res, 200, { done: n });
     }
@@ -684,8 +739,10 @@ const server = http.createServer(async (req, res) => {
       if (b.art) {
         if (DISABLE_REFRESH) return sendJSON(res, 409, { error: 'The server is set to not contact the card service' });
         const mp = pfx(langOf(id));
-        const d = await paced('/cards/' + encodeURIComponent(rawId(id)), langOf(id));
-        if (!isPokemon(d)) return sendJSON(res, 400, { error: 'That is not a Pokémon card with a dex number' });
+        const d = await paced('/cards/' + encodeURIComponent(rawId(id)), langOf(id), true);
+        if (d && mp === '' && d.category === 'Pokemon' && !(Array.isArray(d.dexId) && d.dexId.length)) { const g = nameDex(d.name); if (g.length) d.dexId = g; }
+        if (!d) return sendJSON(res, 502, { error: 'The card service did not know that card' });
+        if (!isPokemon(d) && d.category !== 'Trainer') return sendJSON(res, 400, { error: 'That card has no dex number and its name matches no Pokémon' });
         const r = record(d, mp); r.m = 1;
         db.cards[id] = r;
       } else {
@@ -700,41 +757,9 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// Read-only server: GET only, everything lives under /<key>/ so the page's relative addresses just work.
-const hits = new Map();
-const limited = ip => { const n = Date.now(), h = hits.get(ip); if (!h || n - h.t > 60000) { hits.set(ip, { t: n, n: 1 }); return false; } return ++h.n > 600; };
-const shareServer = http.createServer((req, res) => {
-  const u = new URL(req.url, 'http://x');
-  const ip = req.socket.remoteAddress || '';
-  const hdr = { 'X-Robots-Tag': 'noindex', 'X-Content-Type-Options': 'nosniff' };
-  try {
-    if (limited(ip)) { res.writeHead(429, hdr); return res.end('Slow down'); }
-    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, Object.assign({ Allow: 'GET, HEAD' }, hdr)); return res.end(); }
-    const seg = u.pathname.split('/');
-    if (!seg[1] || !safeEq(seg[1], shareKey)) { res.writeHead(404, hdr); return res.end('Not found'); }
-    if (seg.length === 2) { res.writeHead(301, Object.assign({ Location: '/' + shareKey + '/' }, hdr)); return res.end(); }
-    const rest = '/' + seg.slice(2).join('/');
-    if (rest === '/') {
-      res.writeHead(200, Object.assign({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }, hdr));
-      return res.end(indexHtml(true));
-    }
-    if (rest === '/data/cards.json') return sendCompressed(req, res, CARDS_FILE);
-    if (rest === '/data/names.json') return sendFile(res, NAMES_FILE);
-    if (rest === '/api/state') return sendJSON(res, 200, readJSON(STATE_FILE) || {});
-    if (rest === '/api/status') return sendJSON(res, 200, { count: lastExport.art, regular: lastExport.regular, running: false, backlog: 0, pricesDue: 0, sets: { scanned: lastExport.sets } });
-    if (rest === '/api/set') {
-      const s = setPayload(u.searchParams.get('id') || '');
-      return s ? sendJSON(res, 200, s) : sendJSON(res, 404, { error: 'unknown set' });
-    }
-    res.writeHead(404, hdr); res.end('Not found');
-  } catch (e) { res.writeHead(500, hdr); res.end('Error'); }
-});
-shareServer.on('error', e => log('view-only server could not start:', e.message));
-
 server.listen(PORT, () => {
   log('listening on', PORT, '| data dir', DATA_DIR, '|', DAILY_REQUESTS ? 'up to ' + DAILY_REQUESTS + ' requests per day' : 'no daily limit', '|', REQUEST_DELAY_MS / 1000 + ' s between requests');
   try { exportCards(); } catch (e) { log('export failed:', e.message); }
   tick();
   setInterval(tick, 3600 * 1000);
-  if (SHARE_PORT > 0 && SHARE_PORT !== PORT) shareServer.listen(SHARE_PORT, () => log('view-only page on port', SHARE_PORT, '| link path: /' + shareKey + '/'));
 });

@@ -128,12 +128,14 @@ dialog::backdrop{background:#000b}
 @media (prefers-reduced-motion:reduce){.lens{animation:none}.bar i{transition:none}}
 @media (max-width:520px){h1{font-size:1.1rem}.legend{margin-left:0}}
 .ro-mode [data-do="any"],.ro-mode [data-do="art"],.ro-mode [data-do="have"]{pointer-events:none}
-.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #shareBtn{display:none!important}
+.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn{display:none!important}
 .ro-mode button:disabled{opacity:1}
 #roTag{display:none;margin-left:10px;padding:2px 9px;border-radius:99px;background:var(--screen);color:var(--lcd);font:700 .7rem var(--head);letter-spacing:.08em;text-transform:uppercase;vertical-align:middle}
 .ro-mode #roTag{display:inline-block}
-#shdlg input{width:100%;box-sizing:border-box;padding:8px;margin:8px 0;background:var(--screen);color:var(--lcd);border:1px solid var(--line);border-radius:6px;font:.85rem monospace}
-#shdlg p{margin:.5em 0;color:var(--muted);font-size:.85rem;line-height:1.4}
+#lgdlg input{width:100%;box-sizing:border-box;padding:8px;margin:8px 0;background:var(--screen);color:var(--lcd);border:1px solid var(--line);border-radius:6px;font:.85rem monospace}
+#ft{text-align:center;padding:30px 16px 40px;font-size:.8rem}
+#ft a{color:var(--muted);text-decoration:none;opacity:.6}
+#ft a:hover{opacity:1;text-decoration:underline}
 a{color:var(--lcd)}
 .links{font-size:.72rem;display:flex;gap:8px;flex-wrap:wrap;margin:2px 0}
 .links a{color:var(--muted);text-decoration:underline}
@@ -184,7 +186,7 @@ a{color:var(--lcd)}
     <option value="us">$ TCGplayer</option>
   </select>
   <button id="refresh" type="button" title="Checks up to 25 missing cards or the oldest prices">Refresh prices</button>
-  <button id="shareBtn" type="button" title="Get a view-only link for friends">Share</button>
+  <button id="logoutBtn" type="button" title="Log out of the owner account">Log out</button>
 </div>
 <div id="gens"></div>
 <div id="status">Loading…</div>
@@ -204,21 +206,27 @@ a{color:var(--lcd)}
   </div>
   <div id="opts"></div>
 </dialog>
-<dialog id="shdlg">
+<dialog id="lgdlg">
   <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
-    <strong style="font:800 1.05rem var(--head)">Share a view-only copy</strong>
-    <button id="shClose" type="button">Close</button>
+    <strong style="font:800 1.05rem var(--head)">Owner login</strong>
+    <button id="lgClose" type="button">Close</button>
   </div>
-  <div id="shBody"></div>
+  <form id="lgForm" style="margin-top:8px">
+    <input id="lgPw" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
+    <div style="display:flex;gap:8px;align-items:center"><button id="lgGo" type="submit">Log in</button><span id="lgMsg" style="color:var(--muted);font-size:.85rem"></span></div>
+  </form>
 </dialog>
 <dialog id="lb"><div id="lbBody"></div><button id="lbClose" type="button">Close</button></dialog>
 
+<footer id="ft" hidden><a href="#" id="lgLink">Owner login</a></footer>
+
 <script>
 (function(){
-var RO=!!window.DEX_READONLY, HIDEV=!!window.DEX_HIDE_VALUE;
+var RO=!!window.DEX_READONLY, HIDEV=!!window.DEX_HIDE_VALUE, LOGIN=!!window.DEX_LOGIN, AUTH=!!window.DEX_AUTH;
 if(RO){
   document.body.classList.add('ro-mode');
   document.title='Pokémon art card collection (view only)';
+  if(LOGIN) document.getElementById('ft').hidden=false;
   if(HIDEV){ ['roWorth','roCost'].forEach(function(i){ var e=document.getElementById(i); if(e) e.style.display='none'; }); }
 }
 'use strict';
@@ -247,7 +255,9 @@ function post(url,body){ return call(url,{method:'POST',headers:{'Content-Type':
 function ptcgId(sid){ return String(sid).replace(/^([a-z]+)0*(\d)/i,'$1$2').replace('.','pt'); }
 function isJa(id){ return /^ja:/.test(String(id||'')); }
 function numOf(k){ return /^\d+$/.test(String(k))?String(+k):String(k); }
+var PHONE=false; try{ PHONE=window.matchMedia('(max-width:700px)').matches; }catch(e){}
 function imgList(c,big){
+  big=big||PHONE; // phones get the full resolution picture everywhere
   var l=[];
   if(c.b) l.push(c.b+'/'+(big?'high':'low')+'.webp');
   if(c.sid&&c.k!=null&&c.k!==''&&!isJa(c.sid)){
@@ -326,7 +336,7 @@ function save(){
   if(RO) return;
   clearTimeout(saveTimer);
   saveTimer=setTimeout(function(){
-    fetch('api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(st)}).catch(function(){});
+    fetch('api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(st)}).then(function(r){ if(r.status===401) location.reload(); }).catch(function(){});
   },400);
 }
 
@@ -657,9 +667,16 @@ window.addEventListener('popstate',function(){
 });
 
 /* ---------- actions ---------- */
+function noteIn(t){ // the status line is behind the card list dialog, so show messages inside it too
+  var b=$('opts'); if(!dexOpen||!b) return;
+  var n=b.querySelector('.note'); if(!n){ b.insertAdjacentHTML('afterbegin','<div class="sec note"></div>'); n=b.querySelector('.note'); }
+  n.textContent=t;
+}
 async function markArt(id,art){
-  try{ setStatus(art?'Reading the card details…':'Updating…'); await post('api/card/mark',{id:id,art:art}); }
-  catch(e){ setStatus(e.message); return; }
+  var msg=art?'Reading the card details…':'Updating…';
+  setStatus(msg); noteIn(msg);
+  try{ await post('api/card/mark',{id:id,art:art}); }
+  catch(e){ if(e.status===401){ location.reload(); return; } setStatus(e.message); noteIn(e.message); return; }
   await loadData(); index();
   if(curSet) await openSet(curSet,true);
   refresh();
@@ -746,33 +763,14 @@ $('refresh').addEventListener('click',async function(){
   }
   pollRefresh();
 });
-var shArm=false;
-function shDraw(s){
-  var b=$('shBody');
-  if(!s.enabled){ b.innerHTML='<p>Sharing is switched off. Set <b>SHARE_PORT</b> to a port number (for example 8081) and restart the container.</p>'; return; }
-  var url=location.protocol+'//'+location.hostname+':'+s.port+'/'+s.key+'/';
-  b.innerHTML='<p>Friends who open this link can look around but cannot change anything'+(s.showValue?'.':' and cannot see the money totals.')+'</p>'+
-    '<input id="shUrl" readonly value="'+url+'" aria-label="Share link">'+
-    '<div style="display:flex;gap:8px;flex-wrap:wrap"><button id="shCopy" type="button">Copy link</button>'+
-    (s.fixed?'':'<button id="shNew" type="button">'+(shArm?'Really make a new link?':'Make a new link')+'</button>')+'</div>'+
-    '<p>This address works on your home network. To let friends outside your home reach it, publish only the share port ('+s.port+') through a reverse proxy or tunnel. Never publish the main page (8080).</p>';
-  $('shCopy').onclick=function(){
-    var i=$('shUrl'); i.select();
-    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).catch(function(){ document.execCommand('copy'); });
-    else document.execCommand('copy');
-    $('shCopy').textContent='Copied';
-  };
-  var nb=$('shNew');
-  if(nb) nb.onclick=async function(){
-    if(!shArm){ shArm=true; shDraw(s); return; }
-    try{ var r=await post('api/share/reset'); s.key=r.key; shArm=false; shDraw(s); }catch(e){ $('shBody').insertAdjacentHTML('beforeend','<p>Could not make a new link.</p>'); }
-  };
-}
-$('shareBtn').addEventListener('click',async function(){
-  shArm=false; $('shBody').innerHTML='<p>Loading…</p>'; $('shdlg').showModal();
-  try{ shDraw(await getJSON('api/share')); }catch(e){ $('shBody').innerHTML='<p>Could not reach the server.</p>'; }
+$('lgLink').addEventListener('click',function(e){ e.preventDefault(); $('lgMsg').textContent=''; $('lgPw').value=''; $('lgdlg').showModal(); $('lgPw').focus(); });
+$('lgClose').addEventListener('click',function(){ $('lgdlg').close(); });
+$('lgForm').addEventListener('submit',async function(e){
+  e.preventDefault(); $('lgMsg').textContent='…';
+  try{ await post('api/login',{password:$('lgPw').value}); location.reload(); }
+  catch(err){ $('lgMsg').textContent=err.status===429?'Too many tries. Wait 15 minutes.':'Wrong password.'; }
 });
-$('shClose').addEventListener('click',function(){ $('shdlg').close(); });
+$('logoutBtn').addEventListener('click',async function(){ try{ await post('api/logout'); }catch(e){} location.reload(); });
 $('exp').addEventListener('click',function(){
   var b=$('bk'); b.hidden=false; b.value=JSON.stringify(st); b.select();
 });
