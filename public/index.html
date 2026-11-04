@@ -340,9 +340,9 @@ function priceHTML(c){
   return '<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>';
 }
 function linkHTML(c){
-  var s=setsById[c.sid]||{}, q=[c.n,s.name||'',c.k||''].join(' ').trim();
-  var cm=c.cm?'https://www.cardmarket.com/en/Pokemon/Products?idProduct='+encodeURIComponent(c.cm):'https://www.cardmarket.com/en/Pokemon/Products/Search?searchString='+encodeURIComponent(q);
-  var tp='https://www.tcgplayer.com/search/pokemon/product?q='+encodeURIComponent(q);
+  var q=[c.n,c.k||''].filter(Boolean).join(' ').trim().split(/\s+/).map(encodeURIComponent).join('+');
+  var cm=c.cm?'https://www.cardmarket.com/en/Pokemon/Products?idProduct='+encodeURIComponent(c.cm):'https://www.cardmarket.com/en/Pokemon/Products/Search?searchString='+q;
+  var tp='https://www.tcgplayer.com/search/pokemon/product?q='+q;
   return '<div class="links"><a href="'+esc(cm)+'" target="_blank" rel="noopener noreferrer" title="'+(c.cm?'This exact card on Cardmarket':'Search Cardmarket for this card')+'">Cardmarket ↗</a> <a href="'+esc(tp)+'" target="_blank" rel="noopener noreferrer">TCGplayer ↗</a></div>';
 }
 var priceTried={};
