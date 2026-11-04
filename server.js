@@ -194,6 +194,21 @@ function dexByName(name, list) { // list: [[dex, [' token ', ...]], ...]
   if (/♂/.test(raw) && !out.includes(32)) out.push(32); // Nidoran♂
   return out;
 }
+// Japanese card names contain the Pokémon's katakana name (リザードンex, ナンジャモのピカチュウ ...).
+let jaCache = null;
+function jaList() {
+  const n = NM && NM.ja ? Object.keys(NM.ja).length : 0;
+  if (!jaCache || jaCache.n !== n) jaCache = { n, list: Object.entries(NM.ja || {}).map(([d, name]) => [+d, String(name).normalize('NFKC')]).filter(x => x[1].length >= 2) };
+  return jaCache.list;
+}
+function dexByNameJa(raw) {
+  if (!NM || !NM.ja) return [];
+  const t = String(raw || '').normalize('NFKC');
+  const hits = jaList().filter(([, name]) => t.includes(name));
+  // ミュウ is part of ミュウツー: a name that only appears inside a longer matching name does not count
+  const keep = hits.filter(([, a]) => !hits.some(([, b]) => b.length > a.length && b.includes(a)));
+  return [...new Set(keep.map(([n]) => n))];
+}
 const speciesList = () => Object.entries(NM.names).map(([n, name]) => [+n, [' ' + toks(name) + ' '].concat((ALIAS[n] || []).map(a => ' ' + a + ' '))]);
 function nameDex(name) {
   if (!NM || !NM.names) return [];
@@ -250,7 +265,7 @@ async function refreshNames() {
       names[id] = x.name.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
       if (id > max) max = id;
     });
-    NM = { t: Date.now(), max, names };
+    NM = { t: Date.now(), max, names, ja: NM && NM.ja, jaDone: NM && NM.jaDone };
     writeJSON(NAMES_FILE, NM);
     loadSpecies();
     log('names updated:', Object.keys(names).length);
@@ -259,13 +274,53 @@ async function refreshNames() {
 
 // Regular cards have no dex number in the set listing, so they are matched to Pokémon by name.
 function matchRegular() {
-  if (!NM || !NM.names || db.regMatched === NM.t) return;
+  const key = NM && NM.names ? NM.t + ':' + (NM.jaDone || 0) : null;
+  if (!key || db.regMatched === key) return;
   const sp = speciesList();
   for (const s of Object.values(db.sets)) {
-    if (!s.scan || s.lang === 'ja') continue;
-    for (const c of s.cards) c.d = dexByName(c.n, sp);
+    if (!s.scan) continue;
+    for (const c of s.cards) c.d = s.lang === 'ja' ? dexByNameJa(c.n) : dexByName(c.n, sp);
   }
-  db.regMatched = NM.t;
+  db.regMatched = key;
+}
+
+// Japanese species names from PokeAPI: one GraphQL request, or one request per Pokémon if that is not available.
+async function refreshJaNames() {
+  if (!LANGS.includes('ja') || !NM || !NM.names) return;
+  const want = Object.keys(NM.names).map(Number);
+  NM.ja = NM.ja || {};
+  if (NM.jaDone && Object.keys(NM.ja).length >= want.length * 0.9) return;
+  const have = () => Object.keys(NM.ja).length;
+  if (have() < want.length * 0.9) {
+    try {
+      const r = await fetch('https://beta.pokeapi.co/graphql/v1beta', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': 'dex-art-tracker' }, signal: AbortSignal.timeout(60000),
+        body: JSON.stringify({ query: '{ pokemon_v2_pokemonspeciesname(where: {pokemon_v2_language: {name: {_in: ["ja-Hrkt", "ja"]}}}) { pokemon_species_id name pokemon_v2_language { name } } }' }),
+      });
+      const j = r.ok ? await r.json() : null;
+      const rows = j && j.data && j.data.pokemon_v2_pokemonspeciesname;
+      if (Array.isArray(rows)) rows.forEach(x => { const id = x.pokemon_species_id; if (id && x.name && (x.pokemon_v2_language.name === 'ja-Hrkt' || !NM.ja[id])) NM.ja[id] = x.name; });
+    } catch (e) { log('japanese names (bulk) failed:', e.message); }
+  }
+  if (have() < want.length * 0.9) { // fall back to one request per Pokémon, up to 400 per start of a run
+    let n = 0;
+    for (const id of want) {
+      if (NM.ja[id]) continue;
+      if (n++ >= 400) break;
+      try {
+        const r = await fetch('https://pokeapi.co/api/v2/pokemon-species/' + id + '/', { signal: AbortSignal.timeout(30000), headers: { 'User-Agent': 'dex-art-tracker' } });
+        if (r.ok) {
+          const j = await r.json();
+          const nm = (j.names || []).find(x => x.language.name === 'ja-Hrkt') || (j.names || []).find(x => x.language.name === 'ja');
+          if (nm) NM.ja[id] = nm.name;
+        }
+      } catch (e) { /* try again in a later run */ }
+      await sleep(REQUEST_DELAY_MS);
+    }
+  }
+  if (have() >= want.length * 0.9) { NM.jaDone = Date.now(); log('japanese names loaded:', have()); }
+  writeJSON(NAMES_FILE, NM);
+  jaCache = null;
 }
 
 // ---------- export for the page ----------
@@ -429,7 +484,7 @@ async function fetchCard(id, fast) {
   if (db.cards[id] && db.cards[id].x && db.cards[id].m) return; // you took this card off the art list: leave it
   const d = await paced('/cards/' + encodeURIComponent(rawId(id)), lang, fast);
   const old = db.cards[id];
-  if (d && p === '' && d.category === 'Pokemon' && !(Array.isArray(d.dexId) && d.dexId.length)) { const g = nameDex(d.name); if (g.length) d.dexId = g; }
+  if (d && d.category === 'Pokemon' && !(Array.isArray(d.dexId) && d.dexId.length)) { const g = p === '' ? nameDex(d.name) : dexByNameJa(d.name); if (g.length) d.dexId = g; }
   if (d && qualifies(d, p)) {
     const r = record(d, p); if (old && old.m) r.m = 1;
     if (old && !old.x) { // never replace something known with nothing: keep the last picture, price and shop number
@@ -505,7 +560,7 @@ async function priceRegular(id, idx, fast) {
 // Regular cards of Pokémon (they have a dex match) that have no price yet, newest sets first.
 function regWithoutPrice(limit) {
   const out = [];
-  const sets = Object.values(db.sets).filter(s => s.scan && s.lang !== 'ja').sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const sets = Object.values(db.sets).filter(s => s.scan).sort((a, b) => String(b.date).localeCompare(String(a.date)));
   for (const s of sets) for (const c of s.cards) {
     if (!c.pt && c.d && c.d.length && !db.cards[c.id]) { out.push(c.id); if (out.length >= limit) return out; }
   }
@@ -556,6 +611,7 @@ async function tick() {
   await exclusive(async () => {
     unlimited = !db.initialDone && !STAGGER_INITIAL;
     await refreshNames();
+    await refreshJaNames();
     if (!db.logosDone && canSpend()) { // one request: fetch set pictures for sets stored by an older version
       const list = await paced('/sets');
       if (Array.isArray(list)) { applyLogos(list); db.logosDone = true; persist(true); }

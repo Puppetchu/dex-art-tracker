@@ -365,7 +365,12 @@ function priceHTML(c){
   return '<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>'+(price(c)==null?getBtn(c):'');
 }
 function linkHTML(c){
-  var q=[c.n,c.k||''].filter(Boolean).join(' ').trim().split(/\s+/).map(encodeURIComponent).join('+');
+  var nm=c.n;
+  if(/[^\x00-\x7F]/.test(nm||'')&&c.d&&c.d.length&&names[c.d[0]]){ // Japanese card name: search with the English Pokémon name, keeping ex / V / VMAX etc.
+    var rest=String(nm).replace(/[^\x00-\x7F]+/g,' ').replace(/\s+/g,' ').trim();
+    nm=names[c.d[0]]+(rest?' '+rest:'');
+  }
+  var q=[nm,c.k||''].filter(Boolean).join(' ').trim().split(/\s+/).map(encodeURIComponent).join('+');
   var cm=c.cm?'https://www.cardmarket.com/en/Pokemon/Products?idProduct='+encodeURIComponent(c.cm):'https://www.cardmarket.com/en/Pokemon/Products/Search?searchString='+q;
   var tp='https://www.tcgplayer.com/search/pokemon/product?q='+q;
   return '<div class="links"><a href="'+esc(cm)+'" target="_blank" rel="noopener noreferrer" title="'+(c.cm?'This exact card on Cardmarket':'Search Cardmarket for this card')+'">Cardmarket ↗</a> <a href="'+esc(tp)+'" target="_blank" rel="noopener noreferrer">TCGplayer ↗</a></div>';
