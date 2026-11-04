@@ -256,6 +256,12 @@ function imgList(c,big){
   big=big||PHONE; // phones get the full resolution picture everywhere
   var l=[];
   if(c.b) l.push(c.b+'/'+(big?'high':'low')+'.webp');
+  if(c.sid&&c.k!=null&&c.k!==''&&isJa(c.sid)){
+    // Japanese cards: Scrydex lists them as <set>_ja-<number>. The exact numbering style is a guess, so both are tried.
+    var js=String(c.sid).replace(/^ja:/,'').toLowerCase(), sz=big?'medium':'small', plain=numOf(c.k);
+    l.push('https://images.scrydex.com/pokemon/'+encodeURIComponent(js)+'_ja-'+encodeURIComponent(plain)+'/'+sz);
+    if(String(c.k)!==plain) l.push('https://images.scrydex.com/pokemon/'+encodeURIComponent(js)+'_ja-'+encodeURIComponent(c.k)+'/'+sz);
+  }
   if(c.sid&&c.k!=null&&c.k!==''&&!isJa(c.sid)){
     var pid=ptcgId(c.sid), nm=encodeURIComponent(numOf(c.k));
     l.push('https://images.pokemontcg.io/'+pid+'/'+nm+(big?'_hires':'')+'.png');
