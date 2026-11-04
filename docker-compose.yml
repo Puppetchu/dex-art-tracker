@@ -30,8 +30,8 @@ services:
       # On by default: logins use the visitor's real address from the reverse proxy (X-Forwarded-For).
       # Set to "0" if the page is reached directly, without a proxy in front.
       # TRUST_PROXY: "0"
-      # Extra rarities that count as art cards in Japanese sets (cards numbered above the set size always count there).
-      # JA_RARITIES: "Mega Hyper Rare"
+      # Extra rarities that count as art cards in every language (Japanese cards numbered above the set size always count too).
+      # EXTRA_RARITIES: "Mega Hyper Rare,Ultra Rare,Holo Rare"
     volumes:
       - dex-data:/data
     restart: unless-stopped
