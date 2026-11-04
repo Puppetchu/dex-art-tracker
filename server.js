@@ -43,6 +43,9 @@ const STAGGER_INITIAL = process.env.STAGGER_INITIAL === '4';
 const RARITIES = (process.env.RARITIES || 'Illustration Rare,Special Illustration Rare,Promo')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const RAR = new Set(RARITIES);
+// Japanese sets also count these rarities, and every Pokémon card numbered above the set size ("secret" cards).
+const JA_EXTRA = (process.env.JA_RARITIES !== undefined ? process.env.JA_RARITIES : 'Mega Hyper Rare').split(',').map(x => x.trim()).filter(Boolean);
+const RAR_JA = new Set(RARITIES.concat(JA_EXTRA.map(x => x.toLowerCase())));
 // 1 (default): every Pokémon card from a promo set counts as an art card, whatever its rarity label.
 const PROMO_AS_ART = process.env.PROMO_AS_ART !== '0';
 
@@ -154,6 +157,7 @@ const rarOk = lang => !!(db.rar[lang] && db.rar[lang].ok);
 // rarity search is unavailable) it is numbered above the official set size.
 function isCandidate(s, c) {
   if (PROMO_AS_ART && s.promo) return true;
+  if (s.lang === 'ja' && isSecret(s, c)) return true;
   if (foundIds().has(c.id)) return true;
   return !rarOk(s.lang || 'en') && isSecret(s, c);
 }
@@ -189,8 +193,9 @@ function isPokemon(d) { return d && d.category === 'Pokemon' && Array.isArray(d.
 function qualifies(d, p) {
   if (d && d.category === 'Trainer') return !!(d.rarity && RAR.has(String(d.rarity).toLowerCase()) && d.rarity.toLowerCase() !== 'promo');
   if (!isPokemon(d)) return false;
-  if (d.rarity && RAR.has(String(d.rarity).toLowerCase())) return true;
+  if (d.rarity && (p === 'ja:' ? RAR_JA : RAR).has(String(d.rarity).toLowerCase())) return true;
   const s = d.set && db.sets[(p || '') + d.set.id];
+  if (p === 'ja:' && s && isSecret(s, { l: String(d.localId) })) return true;
   return !!(PROMO_AS_ART && s && s.promo);
 }
 function record(d, p) {
@@ -360,7 +365,7 @@ const titleCase = x => x.replace(/\b\w/g, m => m.toUpperCase());
 const sentenceCase = x => x.charAt(0).toUpperCase() + x.slice(1);
 async function rarityScan(lang) {
   const names = new Set();
-  RARITIES.forEach(r => { names.add(titleCase(r)); names.add(sentenceCase(r)); });
+  RARITIES.concat(lang === 'ja' ? JA_EXTRA.map(x => x.toLowerCase()) : []).forEach(r => { names.add(titleCase(r)); names.add(sentenceCase(r)); });
   const ids = new Set(); let ok = true;
   outer: for (const nm of names) {
     let first = null;
@@ -377,7 +382,7 @@ async function rarityScan(lang) {
     }
   }
   if (!ids.size) ok = false;
-  db.rar[lang] = { t: new Date().toISOString(), ok, ids: ok ? [...ids] : [] };
+  db.rar[lang] = { v: 2, t: new Date().toISOString(), ok, ids: ok ? [...ids] : [] };
   foundCache = null;
   persist(true);
   log(lang + ' rarity search:', ok ? ids.size + ' art cards listed' : 'not available, using the number rule instead');
@@ -502,6 +507,10 @@ async function tick() {
     for (const [id, c] of Object.entries(db.cards)) if (c.x && !c.m && f.has(id)) delete db.cards[id];
     db.fix3 = true; persist(true);
   }
+  if (!db.fix4) { // Japanese secret cards are counted now: check Japanese cards rejected earlier again
+    for (const [id, c] of Object.entries(db.cards)) if (c.x && !c.m && id.startsWith('ja:')) delete db.cards[id];
+    db.fix4 = true; persist(true);
+  }
   await exclusive(async () => {
     unlimited = !db.initialDone && !STAGGER_INITIAL;
     await refreshNames();
@@ -511,7 +520,7 @@ async function tick() {
     }
     if ((bootCheck || !db.setsChecked || ageDays(db.setsChecked) >= SETS_CHECK_DAYS || LANGS.some(l => !db.langsDone[l])) && canSpend()) { bootCheck = false; await syncSets(); }
     for (const lang of LANGS) {
-      if (db.langsDone[lang] && (!db.rar[lang] || ageDays(db.rar[lang].t) >= SETS_CHECK_DAYS) && canSpend()) await rarityScan(lang);
+      if (db.langsDone[lang] && (!db.rar[lang] || db.rar[lang].v !== 2 || ageDays(db.rar[lang].t) >= SETS_CHECK_DAYS) && canSpend()) await rarityScan(lang);
     }
     await backfill();
     if (!db.initialDone && db.setsChecked && LANGS.every(l => db.rar[l]) && pendingCards().length === 0) {

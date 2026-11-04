@@ -61,6 +61,7 @@ Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokea
 - Art cards are found by rarity: the server asks TCGdex for the list of cards with an art rarity (about 40 list requests per language, repeated daily). Number no longer matters, so art cards inside the normal numbering are found too. If that search is not available, the old rule (number above the official set size) is used instead.
 - Japanese sets and their art cards (Special illustration rare, and so on) are added with a "JA" tag. They only have € prices, so they only compete for cheapest in € mode. Regular Japanese cards are not listed. Set `LANGUAGES=en` to switch Japanese off.
 - Promo sets and sets from the last 180 days are read again every day, because they keep getting new cards. A card with no dex number on TCGdex gets one from its name.
+- Japanese sets count two extra kinds as art cards: the **Mega Hyper Rare** rarity (`JA_RARITIES`) and every Pokémon card numbered above the set size (the "Secret card" label in the set view). English sets use the rarity search only.
 - Chinese cards are not included: TCGdex has no rarity, prices or dex numbers for them.
 - The first fill of the Japanese data takes a while because it follows your daily request limit.
 
@@ -100,6 +101,7 @@ Saved on the server in `state.json`, so every device sees the same progress. "Sh
 | `RARITIES` | Illustration Rare,Special Illustration Rare,Promo | Art card rarities, case-insensitive |
 | `PROMO_AS_ART` | 1 | 0 = promo cards only count when their rarity is listed above |
 | `DISABLE_REFRESH` | 0 | 1 = never contact the APIs |
+| `JA_RARITIES` | Mega Hyper Rare | Extra art rarities for Japanese sets (comma separated) |
 | `LANGUAGES` | en,ja | `en` = English only |
 | `REGULAR_PRICES_PER_DAY` | 0 | Most requests per day spent on regular-card prices, 0 = no limit |
 | `ADMIN_PASSWORD` | random | Owner password |
