@@ -19,17 +19,17 @@ const PORT = +process.env.PORT || 8080;
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const BASE = (process.env.TCGDEX_BASE || 'https://api.tcgdex.net/v2/en').replace(/\/$/, '');
-const DAILY_REQUESTS = +process.env.DAILY_REQUESTS || 300;
+const DAILY_REQUESTS = +process.env.DAILY_REQUESTS || 200;
 const REQUEST_DELAY_MS = process.env.REQUEST_DELAY_MS !== undefined ? +process.env.REQUEST_DELAY_MS : 1000;
 const PRICE_MAX_AGE_DAYS = +process.env.PRICE_MAX_AGE_DAYS || 30;
 const SETS_CHECK_DAYS = +process.env.SETS_CHECK_DAYS || 30;
 const PRICE_CANDIDATES = +process.env.PRICE_CANDIDATES || 2;
-const MIN_SET_DATE = process.env.MIN_SET_DATE || '2023-03-01'; // Scarlet & Violet, where Illustration Rares start
+const MIN_SET_DATE = process.env.MIN_SET_DATE || '2000-01-01'; // Scarlet & Violet, where Illustration Rares start
 const DISABLE_REFRESH = process.env.DISABLE_REFRESH === '1';
 // 0 (default): the first build of the database runs in one go (about 20 to 30 minutes, 1 request per second).
 // 1: even the first build is limited to DAILY_REQUESTS per day.
-const STAGGER_INITIAL = process.env.STAGGER_INITIAL === '1';
-const RARITIES = (process.env.RARITIES || 'Illustration Rare,Special Illustration Rare')
+const STAGGER_INITIAL = process.env.STAGGER_INITIAL === '4';
+const RARITIES = (process.env.RARITIES || 'Illustration Rare,Special Illustration Rare,Promo')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const RAR = new Set(RARITIES);
 
