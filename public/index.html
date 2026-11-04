@@ -59,7 +59,7 @@ h1{margin:0;font:800 1.45rem/1 var(--head);letter-spacing:.14em;text-transform:u
 #gens{font-family:var(--mono);font-size:.76rem}
 
 /* grids and tiles */
-#grid,#setsView{padding:14px max(16px,env(safe-area-inset-left)) 50px}
+#grid,#setsView,#trainersView{padding:14px max(16px,env(safe-area-inset-left)) 50px}
 .cgrid,#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(172px,1fr));gap:14px}
 .setlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
 .tile{position:relative;background:linear-gradient(var(--panel2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:7px;min-width:0}
@@ -134,6 +134,9 @@ dialog::backdrop{background:#000b}
 .ro-mode #roTag{display:inline-block}
 #shdlg input{width:100%;box-sizing:border-box;padding:8px;margin:8px 0;background:var(--screen);color:var(--lcd);border:1px solid var(--line);border-radius:6px;font:.85rem monospace}
 #shdlg p{margin:.5em 0;color:var(--muted);font-size:.85rem;line-height:1.4}
+a{color:var(--lcd)}
+.links{font-size:.72rem;display:flex;gap:8px;flex-wrap:wrap;margin:2px 0}
+.links a{color:var(--muted);text-decoration:underline}
 </style>
 </head>
 <body>
@@ -160,6 +163,7 @@ dialog::backdrop{background:#000b}
 <div class="deck">
   <button id="tabDex" type="button" class="tab on">Pokémon</button>
   <button id="tabSets" type="button" class="tab">Sets</button>
+  <button id="tabTrainers" type="button" class="tab">Trainers</button>
   <input id="q" type="search" placeholder="Search name or number">
   <select id="filter" aria-label="Filter">
     <option value="all">All Pokémon</option>
@@ -186,6 +190,7 @@ dialog::backdrop{background:#000b}
 <div id="status">Loading…</div>
 <main id="grid"></main>
 <main id="setsView" hidden></main>
+<main id="trainersView" hidden></main>
 <section class="tools">
   <button id="exp" type="button">Show backup text</button>
   <button id="imp" type="button">Restore from backup text</button>
@@ -217,10 +222,10 @@ if(RO){
   if(HIDEV){ ['roWorth','roCost'].forEach(function(i){ var e=document.getElementById(i); if(e) e.style.display='none'; }); }
 }
 'use strict';
-var cards=[], regular=[], sets=[], setsById={}, names={}, maxDex=1025;
+var cards=[], trainers=[], regular=[], sets=[], setsById={}, names={}, maxDex=1025;
 var byDex={}, byReg={}, byId={};
 var st={own:{},cards:{},pick:{},cur:'eu'};
-var view='dex', curSet=null, setData=null, setFilter='all', setCache={}, dexOpen=null, regShown=60, armed=null;
+var trFilter='all', view='dex', curSet=null, setData=null, setFilter='all', setCache={}, dexOpen=null, regShown=60, armed=null;
 
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -296,7 +301,7 @@ function showGens(s){
 }
 async function loadData(){
   for(;;){
-    try{ var c=await getJSON('data/cards.json'); cards=c.cards||[]; regular=c.regular||[]; sets=c.sets||[]; break; }
+    try{ var c=await getJSON('data/cards.json'); cards=c.cards||[]; trainers=c.trainers||[]; regular=c.regular||[]; sets=c.sets||[]; break; }
     catch(e){
       if(e.status!==404) throw e;
       var s=await getJSON('api/status').catch(function(){return null;});
@@ -327,12 +332,36 @@ function save(){
 
 function price(c){ var v=c&&c[st.cur]; return typeof v==='number'?v:null; }
 function fmt(v){ return v==null?'no price':(st.cur==='eu'?'€':'$')+v.toFixed(2); }
+function ageOk(c){ return c&&c.pt&&(Date.now()-Date.parse(c.pt))<30*864e5; }
+function priceHTML(c){
+  if(!c) return '';
+  var isArt=c.a||c.t==='a';
+  if(!isArt&&!c.pt) return c.t==='p'?'':'<div class="price" title="Prices of regular cards are fetched slowly in the background">price not loaded yet</div>';
+  return '<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>';
+}
+function linkHTML(c){
+  var s=setsById[c.sid]||{}, q=[c.n,s.name||'',c.k||''].join(' ').trim();
+  var cm=c.cm?'https://www.cardmarket.com/en/Pokemon/Products?idProduct='+encodeURIComponent(c.cm):'https://www.cardmarket.com/en/Pokemon/Products/Search?searchString='+encodeURIComponent(q);
+  var tp='https://www.tcgplayer.com/search/pokemon/product?q='+encodeURIComponent(q);
+  return '<div class="links"><a href="'+esc(cm)+'" target="_blank" rel="noopener noreferrer" title="'+(c.cm?'This exact card on Cardmarket':'Search Cardmarket for this card')+'">Cardmarket ↗</a> <a href="'+esc(tp)+'" target="_blank" rel="noopener noreferrer">TCGplayer ↗</a></div>';
+}
+var priceTried={};
+async function loadPrices(list){
+  if(RO) return;
+  var ids=list.filter(function(c){ return c&&!c.a&&c.t!=='a'&&c.t!=='p'&&!ageOk(c)&&!priceTried[c.id]; }).slice(0,6).map(function(c){ priceTried[c.id]=1; return c.id; });
+  if(!ids.length) return;
+  try{ await post('api/prices',{ids:ids}); }catch(e){ return; }
+  await loadData(); index();
+  if(curSet){ delete setCache[curSet]; await openSet(curSet,true); }
+  if(dexOpen) fillDex(false);
+}
 function setName(c){ var s=setsById[c.sid]; return s?s.name:(c.sid||''); }
 function setDate(c){ var s=setsById[c.sid]; return s?s.date:''; }
 
 function index(){
   byDex={}; byReg={}; byId={};
   cards.forEach(function(c){ c.a=1; byId[c.id]=c; (c.d||[]).forEach(function(n){ (byDex[n]=byDex[n]||[]).push(c); }); });
+  trainers.forEach(function(c){ c.a=1; c.tr=1; byId[c.id]=c; });
   regular.forEach(function(c){ byId[c.id]=c; (c.d||[]).forEach(function(n){ (byReg[n]=byReg[n]||[]).push(c); }); });
   Object.keys(byDex).forEach(function(n){
     byDex[n].sort(function(a,b){
@@ -411,7 +440,7 @@ function render(){
       '<div class="pic">'+(c?picHTML(c,false).replace('data-do="zoom"','data-do="zoom"'):phHTML(nm,'No card found yet'))+(c?'<span class="badge'+(c.a?'':' reg')+'">'+(c.a?'ART':'REGULAR')+'</span>':'')+'</div>'+
       '<div class="name" title="'+esc(nm)+'">'+esc(nm)+'</div>'+
       '<div class="meta">'+(c?esc(c.a?(c.r||'Art card'):'Regular card')+'<br>'+esc(setName(c)):'&nbsp;')+'</div>'+
-      (c&&c.a?'<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>':'')+
+      (c&&(c.a||c.pt)?'<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>':'')+(c?linkHTML(c):'')+
       '<div class="row"><button type="button" data-do="any" data-n="'+n+'" class="yel'+(yo?' on':'')+(isArmed('any:'+n)?' arm':'')+'"'+(ao?' title="Counted because you have an art card"':'')+'>'+anyTxt+'</button>'+
       '<button type="button" data-do="art" data-n="'+n+'" class="'+(ao?'on':'')+(isArmed('art:'+n)?' arm':'')+'"'+(hasArt?'':' disabled')+'>'+artTxt+'</button></div>'+
       ((cnt||rcnt)?'<button type="button" class="alt" data-do="view" data-n="'+n+'">'+cnt+' art · '+rcnt+' regular · view</button>':'')+
@@ -431,7 +460,7 @@ function render(){
 }
 
 /* ---------- Pokémon card list ---------- */
-function openDex(n){ dexOpen=+n; regShown=60; fillDex(true); if(!$('dlg').open) $('dlg').showModal(); }
+function openDex(n){ dexOpen=+n; regShown=60; fillDex(true); if(!$('dlg').open) $('dlg').showModal(); loadPrices((byReg[dexOpen]||[]).slice(0,regShown)); }
 function fillDex(reset){
   var n=dexOpen; if(!n) return;
   var list=byDex[n]||[], reg=byReg[n]||[], cur=chosen(n);
@@ -443,7 +472,7 @@ function fillDex(reset){
     var mk=c.a?'<button type="button" class="mini'+(isArmed('unart:'+c.id)?' arm':'')+'" data-do="mark" data-id="'+esc(c.id)+'" data-v="0">'+(isArmed('unart:'+c.id)?'Really?':'Not an art card')+'</button>'
       :'<button type="button" class="mini" data-do="mark" data-id="'+esc(c.id)+'" data-v="1">Count as art card</button>';
     return '<div class="opt'+(sel?' sel':'')+(isOwn?' own':'')+'"><div class="pic">'+picHTML(c,false)+'</div>'+
-      '<div><b>'+esc(c.n)+'</b></div><div>'+esc(subOf(c))+'</div>'+(c.a?'<div>'+esc(c.r||'Art card')+'</div><div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>':'')+
+      '<div><b>'+esc(c.n)+'</b></div><div>'+esc(subOf(c))+'</div>'+(c.a?'<div>'+esc(c.r||'Art card')+'</div>':'')+priceHTML(c)+linkHTML(c)+
       '<div class="row"><button type="button" class="'+(isOwn?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(isOwn?'✓ Have it':'Have it')+'</button></div>'+
       '<button type="button" data-do="main" data-n="'+n+'" data-id="'+esc(c.id)+'"'+(sel?' disabled':'')+'>'+(sel?'✓ Main picture':'Use as main')+'</button>'+mk+'</div>';
   }
@@ -461,7 +490,7 @@ function lookup(id){ return byId[id]||(setData&&setData.map[id])||null; }
 function openLb(id){
   var c=lookup(id); if(!c) return;
   $('lbBody').innerHTML=picHTML(c,true).replace('data-do="zoom"','')+
-    '<div style="margin-bottom:8px"><b>'+esc(c.n)+'</b><br><span style="color:var(--muted)">'+esc(subOf(c))+(c.r?' · '+esc(c.r):'')+'</span>'+(c.a||c.t==='a'?'<br><span class="price">'+fmt(price(c))+'</span>':'')+'</div>';
+    '<div style="margin-bottom:8px"><b>'+esc(c.n)+'</b><br><span style="color:var(--muted)">'+esc(subOf(c))+(c.r?' · '+esc(c.r):'')+'</span>'+(c.a||c.t==='a'||c.pt?'<br><span class="price">'+fmt(price(c))+'</span>':'')+'</div>'+linkHTML(c);
   history.pushState({app:1,lb:1},'',location.href);
   $('lb').showModal();
 }
@@ -477,10 +506,39 @@ function ownedPerSet(){
   var m={}; Object.keys(st.cards).forEach(function(id){ var s=sidOf(id); if(s) m[s]=(m[s]||0)+1; });
   return m;
 }
+function renderTrainers(){
+  var q=$('q').value.trim().toLowerCase(), list=trainers.slice();
+  var own=list.filter(function(c){return owned(c.id);}).length, worth=0, left=0;
+  list.forEach(function(c){ var v=price(c); if(v==null) return; if(owned(c.id)) worth+=v; else left+=v; });
+  list=list.filter(function(c){
+    if(trFilter==='miss'&&owned(c.id)) return false;
+    if(trFilter==='own'&&!owned(c.id)) return false;
+    return !q||(c.n||'').toLowerCase().indexOf(q)>=0||setName(c).toLowerCase().indexOf(q)>=0;
+  });
+  list.sort(function(a,b){ return String(setDate(b)).localeCompare(String(setDate(a)))||String(a.k).localeCompare(String(b.k),undefined,{numeric:true}); });
+  var S=st.cur==='eu'?'€':'$', h=[];
+  h.push('<div class="sethead"><h2>Trainer art cards</h2><span>'+own+' / '+trainers.length+' owned'+(HIDEV?'':' · worth '+S+worth.toFixed(2)+' · left to spend '+S+left.toFixed(2))+'</span><span class="sp"></span>'+
+    [['all','All'],['miss','Missing'],['own','Owned']].map(function(x){return '<button type="button" class="chip'+(trFilter===x[0]?' on':'')+'" data-do="tf" data-v="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>');
+  if(!trainers.length) h.push('<p>No trainer art cards stored yet. They are added as the server works through the art rarity list.</p>');
+  h.push('<div class="cgrid">');
+  list.forEach(function(c){
+    var o=owned(c.id);
+    h.push('<div class="tile '+(o?'s-g':'s-r')+'"><div class="no"><span>'+esc(c.k||'')+'</span><i class="led"></i></div>'+
+      '<div class="pic">'+picHTML(c,false)+'<span class="badge">ART</span></div>'+
+      '<div class="name" title="'+esc(c.n)+'">'+esc(c.n)+'</div>'+
+      '<div class="meta">'+esc(c.r||'Art card')+' · '+esc(setName(c))+(isJa(c.sid)?' · JA':'')+'</div>'+
+      priceHTML(c)+linkHTML(c)+
+      '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div></div>');
+  });
+  h.push('</div>');
+  $('trainersView').innerHTML=h.join('');
+  setStatus(list.length+' of '+trainers.length+' trainer art cards shown.');
+}
 function renderSets(){
-  $('grid').hidden=view!=='dex'; $('setsView').hidden=view!=='sets';
-  $('tabDex').classList.toggle('on',view==='dex'); $('tabSets').classList.toggle('on',view==='sets');
+  $('grid').hidden=view!=='dex'; $('setsView').hidden=view!=='sets'; $('trainersView').hidden=view!=='trainers';
+  $('tabDex').classList.toggle('on',view==='dex'); $('tabSets').classList.toggle('on',view==='sets'); $('tabTrainers').classList.toggle('on',view==='trainers');
   $('filter').hidden=view!=='dex'; $('setSort').hidden=view!=='sets'||!!curSet;
+  if(view==='trainers') renderTrainers();
   if(view!=='sets') return;
   var q=$('q').value.trim().toLowerCase(), h=[];
   if(!curSet){
@@ -535,7 +593,7 @@ function renderSets(){
       '<div class="pic">'+picHTML(c,false)+(isA?'<span class="badge">ART</span>':'')+'</div>'+
       '<div class="name" title="'+esc(c.n)+'">'+esc(c.n)+'</div>'+
       '<div class="meta">'+(isA?esc(c.r||'Art card'):(c.t==='p'?'Not checked yet':(c.sec?'Secret card':'Regular card')))+'</div>'+
-      (isA?'<div class="price">'+fmt(price(c))+'</div>':'')+
+      priceHTML(c)+linkHTML(c)+
       '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div>'+mk+'</div>');
   });
   h.push('</div>');
@@ -551,7 +609,7 @@ async function openSet(id,keepScroll){
     d.map={}; d.cards.forEach(function(c){ c.sid=id; c.a=c.t==='a'?1:0; d.map[c.id]=c; });
     setData=d;
   }catch(e){ setStatus('Could not load that set ('+e.message+').'); curSet=null; }
-  var y=window.scrollY; renderSets(); if(keepScroll) window.scrollTo(0,y); else window.scrollTo(0,0);
+  var y=window.scrollY; renderSets(); if(keepScroll) window.scrollTo(0,y); else { window.scrollTo(0,0); if(setData) loadPrices(setData.cards); }
 }
 
 /* ---------- navigation: the browser's back and forward buttons stay inside the app ---------- */
@@ -578,6 +636,10 @@ async function applyRoute(){
     var id=parts.length>1&&parts[1]?decodeURIComponent(parts.slice(1).join('/')):null;
     if(id){ if(curSet!==id) setFilter='all'; await openSet(id,true); }
     else { curSet=null; setData=null; renderSets(); }
+  } else if(parts[0]==='trainers'){
+    view='trainers'; curSet=null; setData=null;
+    if($('dlg').open){ closingByRoute=true; $('dlg').close(); }
+    render();
   } else {
     view='dex'; curSet=null; setData=null;
     var n=parts[1]?+parts[1]:0;
@@ -639,9 +701,11 @@ document.addEventListener('click',function(e){
   else if(a==='set'){ go('#/sets/'+encodeURIComponent(id)); }
   else if(a==='back'){ goBack('#/sets'); }
   else if(a==='sf'){ setFilter=t.dataset.v; renderSets(); }
+  else if(a==='tf'){ trFilter=t.dataset.v; renderTrainers(); }
 });
 $('tabDex').addEventListener('click',function(){go('#/dex');});
 $('tabSets').addEventListener('click',function(){go('#/sets');});
+$('tabTrainers').addEventListener('click',function(){go('#/trainers');});
 $('dlgClose').addEventListener('click',function(){$('dlg').close();});
 $('dlg').addEventListener('close',function(){
   dexOpen=null;

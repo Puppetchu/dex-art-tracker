@@ -31,13 +31,14 @@ Then open this address in your browser:
    http://localhost:8080
 
 
-THE FIRST 20 TO 30 MINUTES
---------------------------
+THE FIRST DAYS
+--------------
 The first time, the page says it is building its card database. That is
-normal: it asks the card service for sets and art cards slowly (one request
-per second) so it does not overload it. You can leave the page open or come
-back later. Cards appear as they are fetched.
-After that, new sets are checked once a month and prices of the cheapest art
+normal: it asks the card service for sets and art cards very slowly (one request
+every 10 seconds, no daily limit) so it never overloads it. This takes a few
+days to complete. You can close the page and come back later. Cards appear as
+they are fetched, newest sets first.
+After that, new sets are checked at start and once a day, and prices of the cheapest art
 cards are refreshed slowly, a little each day.
 
 

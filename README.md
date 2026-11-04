@@ -49,20 +49,29 @@ Each check reads the newest set of that language and reports, for four of its ne
 
 Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokeapi.co. Everything is stored in the `dex-data` volume.
 
-1. **Sets.** The set list is checked every 30 days. Each new set is fetched once. A set request lists all its cards by name and image, so regular cards are stored from that alone, with no price and no further requests. They are matched to Pokémon by name. Pokémon TCG Pocket sets are ignored.
+1. **Sets.** The set list is checked when the container starts and then once a day. Each new set is fetched once. A set request lists all its cards by name and image, so regular cards are stored from that alone, with no price and no further requests. They are matched to Pokémon by name. Pokémon TCG Pocket sets are ignored.
 2. **Art candidates.** Cards numbered above the official set size (for example 199/198) and every card in a promo set get a request of their own, to read rarity, dex number and price. Candidates whose name contains no Pokémon name (trainers, energy) are skipped. The result is stored for good. Newest sets are done first.
 3. **Prices.** The cheapest 2 art cards per Pokémon are re-priced when older than 30 days, oldest first. Cards you checked as owned, and Pokémon whose art card you own, are never re-priced.
-4. **Pace.** At most 200 requests per day, one per second. The first build of the database runs in one go unless you set `STAGGER_INITIAL`. Cards that are still waiting for their details are shown on the status line and appear as the server works through them.
+4. **Pace.** No daily limit, one request every 10 seconds (`REQUEST_DELAY_MS`), so the server never hammers TCGdex. The full database takes days to complete, and cards appear as they are fetched. The first build of the database runs in one go unless you set `STAGGER_INITIAL`. Cards that are still waiting for their details are shown on the status line and appear as the server works through them.
 
 "Refresh prices" in the page fetches at most 25 cards (missing ones first, then the oldest prices), once per 10 minutes.
 
 ## Art cards without the number rule, and Japanese cards
 
-- Art cards are found by rarity: the server asks TCGdex for the list of cards with an art rarity (about 40 list requests per language, repeated monthly). Number no longer matters, so art cards inside the normal numbering are found too. If that search is not available, the old rule (number above the official set size) is used instead.
+- Art cards are found by rarity: the server asks TCGdex for the list of cards with an art rarity (about 40 list requests per language, repeated daily). Number no longer matters, so art cards inside the normal numbering are found too. If that search is not available, the old rule (number above the official set size) is used instead.
 - Japanese sets and their art cards (Special illustration rare, and so on) are added with a "JA" tag. They only have € prices, so they only compete for cheapest in € mode. Regular Japanese cards are not listed. Set `LANGUAGES=en` to switch Japanese off.
-- Promo sets and sets from the last 180 days are read again every month, because they keep getting new cards. A card with no dex number on TCGdex gets one from its name.
+- Promo sets and sets from the last 180 days are read again every day, because they keep getting new cards. A card with no dex number on TCGdex gets one from its name.
 - Chinese cards are not included: TCGdex has no rarity, prices or dex numbers for them.
 - The first fill of the Japanese data takes a while because it follows your daily request limit.
+
+## Prices for every card, and shop links
+
+- Art cards are priced as before. Regular cards get their price too: the server fills them in slowly in the background (newest sets first), and opening a Pokémon or a set fetches up to 6 missing prices straight away. Prices are stored locally and shown as "price not loaded yet" until then.
+- Every card has a **Cardmarket** and a **TCGplayer** link. If TCGdex supplies Cardmarket's product number the Cardmarket link opens that exact card, otherwise it opens a search for the card name, set and number.
+
+## Trainers tab
+
+Trainer cards with an art rarity (for example Illustration rare or Special illustration rare trainers, English and Japanese) are listed on their own **Trainers** tab, newest set first, with a picture, price, Cardmarket and TCGplayer links and a "Have it" tick. They show owned count, worth and left to spend, and have no effect on the Pokémon counts at the top. They are found through the same rarity search as the other art cards, so the first update re-checks cards that were skipped before.
 
 ## Share a view-only copy
 
@@ -82,15 +91,17 @@ Saved on the server in `state.json`, so every device sees the same progress. "Sh
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DAILY_REQUESTS` | 200 | Most requests per day |
+| `DAILY_REQUESTS` | 0 | Most requests per day, 0 = no limit |
+| `REQUEST_DELAY_MS` | 10000 | Pause between requests in milliseconds |
 | `PRICE_MAX_AGE_DAYS` | 30 | Re-price candidates older than this |
-| `SETS_CHECK_DAYS` | 30 | How often the set list is checked for new sets |
+| `SETS_CHECK_DAYS` | 1 | The set list is checked at start and then every this many days |
 | `PRICE_CANDIDATES` | 2 | Cheapest art cards per Pokémon kept up to date |
 | `MIN_SET_DATE` | 2000-01-01 | Only sets released on or after this are scanned |
 | `RARITIES` | Illustration Rare,Special Illustration Rare,Promo | Art card rarities, case-insensitive |
 | `PROMO_AS_ART` | 1 | 0 = promo cards only count when their rarity is listed above |
 | `DISABLE_REFRESH` | 0 | 1 = never contact the APIs |
 | `LANGUAGES` | en,ja | `en` = English only |
+| `REGULAR_PRICES_PER_DAY` | 0 | Most requests per day spent on regular-card prices, 0 = no limit |
 | `SHARE_PORT` | 8081 | Port of the view-only page, 0 = off |
 | `SHARE_KEY` | random | Fixed link text instead of a random one |
 | `SHARE_SHOW_VALUE` | 0 | 1 = friends also see the money totals |

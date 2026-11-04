@@ -28,10 +28,12 @@ const baseFor = lang => BASE.replace(/\/en$/, '/' + lang);
 const langOf = id => String(id).startsWith('ja:') ? 'ja' : 'en';
 const pfx = lang => lang === 'en' ? '' : lang + ':';
 const rawId = id => String(id).replace(/^ja:/, '');
-const DAILY_REQUESTS = +process.env.DAILY_REQUESTS || 200;
-const REQUEST_DELAY_MS = process.env.REQUEST_DELAY_MS !== undefined ? +process.env.REQUEST_DELAY_MS : 1000;
+// How many of the daily requests may go to prices of regular cards (the rest is for art cards).
+const REGULAR_PRICES_PER_DAY = process.env.REGULAR_PRICES_PER_DAY !== undefined ? +process.env.REGULAR_PRICES_PER_DAY : 0; // 0 = no limit
+const DAILY_REQUESTS = process.env.DAILY_REQUESTS !== undefined ? (+process.env.DAILY_REQUESTS || 0) : 0; // 0 = no daily limit
+const REQUEST_DELAY_MS = process.env.REQUEST_DELAY_MS !== undefined ? +process.env.REQUEST_DELAY_MS : 10000; // pause between requests, 10 seconds by default
 const PRICE_MAX_AGE_DAYS = +process.env.PRICE_MAX_AGE_DAYS || 30;
-const SETS_CHECK_DAYS = +process.env.SETS_CHECK_DAYS || 30;
+const SETS_CHECK_DAYS = +process.env.SETS_CHECK_DAYS || 1; // the set list is checked at start and then this often
 const PRICE_CANDIDATES = +process.env.PRICE_CANDIDATES || 2;
 const MIN_SET_DATE = process.env.MIN_SET_DATE || '2000-01-01'; // only sets released on or after this date are read
 const DISABLE_REFRESH = process.env.DISABLE_REFRESH === '1';
@@ -121,7 +123,7 @@ async function api(p, lang) {
 
 let unlimited = false;
 function rollBudget() { if (db.budget.date !== todayStr()) db.budget = { date: todayStr(), used: 0 }; }
-function canSpend() { rollBudget(); return unlimited || db.budget.used < DAILY_REQUESTS; }
+function canSpend() { rollBudget(); return unlimited || !DAILY_REQUESTS || db.budget.used < DAILY_REQUESTS; }
 async function paced(p, lang) {
   rollBudget(); db.budget.used++;
   const r = await api(p, lang);
@@ -169,8 +171,14 @@ function nameDex(name) {
   const t = ' ' + toks(name || '') + ' ';
   return Object.entries(NM.names).filter(([, nm]) => t.includes(' ' + toks(nm) + ' ')).map(([n]) => +n);
 }
+function cmId(d) {
+  const c = d && d.pricing && d.pricing.cardmarket;
+  const v = c && (c.idProduct !== undefined ? c.idProduct : c.productId);
+  return v ? String(v) : null;
+}
 function isPokemon(d) { return d && d.category === 'Pokemon' && Array.isArray(d.dexId) && d.dexId.length; }
 function qualifies(d, p) {
+  if (d && d.category === 'Trainer') return !!(d.rarity && RAR.has(String(d.rarity).toLowerCase()) && d.rarity.toLowerCase() !== 'promo');
   if (!isPokemon(d)) return false;
   if (d.rarity && RAR.has(String(d.rarity).toLowerCase())) return true;
   const s = d.set && db.sets[(p || '') + d.set.id];
@@ -179,8 +187,8 @@ function qualifies(d, p) {
 function record(d, p) {
   const pr = prices(d); p = p || '';
   return {
-    id: p + d.id, n: d.name, r: d.rarity || null, s: d.set && d.set.name, sid: d.set && (p + d.set.id), d: d.dexId,
-    b: cleanBase(d.image), eu: pr.eu, us: pr.us, pt: new Date().toISOString(),
+    id: p + d.id, n: d.name, r: d.rarity || null, s: d.set && d.set.name, sid: d.set && (p + d.set.id), d: d.dexId || [], tr: d.category === 'Trainer' ? 1 : undefined,
+    b: cleanBase(d.image), eu: pr.eu, us: pr.us, cm: cmId(d), pt: new Date().toISOString(),
   };
 }
 
@@ -238,10 +246,10 @@ function matchRegular() {
 let lastExport = { art: 0, regular: 0, sets: 0 };
 function exportCards() {
   matchRegular();
-  const art = [], regular = [], sets = [];
+  const art = [], trainers = [], regular = [], sets = [];
   Object.values(db.cards).forEach(c => {
     if (c.x) return;
-    art.push({ id: c.id, n: c.n, r: c.r, sid: c.sid, k: localOf(c.id, c.sid), b: c.b || null, d: c.d, eu: c.eu, us: c.us, pt: c.pt, m: c.m ? 1 : undefined });
+    (c.tr ? trainers : art).push({ id: c.id, n: c.n, r: c.r, sid: c.sid, k: localOf(c.id, c.sid), b: c.b || null, d: c.d, eu: c.eu, us: c.us, cm: c.cm || undefined, pt: c.pt, m: c.m ? 1 : undefined });
   });
   for (const [sid, s] of Object.entries(db.sets)) {
     if (!s.scan) continue;
@@ -250,14 +258,14 @@ function exportCards() {
       const rec = db.cards[c.id];
       if (rec && !rec.x) { a++; continue; }
       if (!rec && worth(s, c)) continue; // not looked at yet
-      if (c.d && c.d.length) regular.push({ id: c.id, n: c.n, sid, k: c.l, b: c.i || null, d: c.d });
+      if (c.d && c.d.length) regular.push({ id: c.id, n: c.n, sid, k: c.l, b: c.i || null, d: c.d, eu: c.eu, us: c.us, cm: c.cm || undefined, pt: c.pt });
     }
     sets.push({ id: sid, name: s.name, date: s.date || '', official: s.official, total: s.total, n: s.cards.length, art: a, promo: s.promo ? 1 : 0,
       lg: noExt(s.lg), sy: noExt(s.sy) });
   }
-  lastExport = { art: art.length, regular: regular.length, sets: sets.length };
+  lastExport = { art: art.length, trainers: trainers.length, regular: regular.length, sets: sets.length };
   if (!art.length && !regular.length && !sets.length) return;
-  writeJSON(CARDS_FILE, { updated: new Date().toISOString(), count: art.length, cards: art, regular, sets });
+  writeJSON(CARDS_FILE, { updated: new Date().toISOString(), count: art.length, cards: art, trainers, regular, sets });
 }
 
 function setPayload(sid) {
@@ -268,9 +276,9 @@ function setPayload(sid) {
     cards: s.cards.map(c => {
       const rec = db.cards[c.id];
       const o = { id: c.id, k: c.l, n: c.n, b: c.i || null };
-      if (rec && !rec.x) { o.t = 'a'; o.r = rec.r; o.eu = rec.eu; o.us = rec.us; o.d = rec.d; if (rec.m) o.m = 1; }
+      if (rec && !rec.x) { o.t = 'a'; o.r = rec.r; o.eu = rec.eu; o.us = rec.us; o.cm = rec.cm; o.pt = rec.pt; o.d = rec.d; if (rec.m) o.m = 1; }
       else if (!rec && worth(s, c)) o.t = 'p';
-      else o.t = 'r';
+      else { o.t = 'r'; o.eu = c.eu; o.us = c.us; o.cm = c.cm; o.pt = c.pt; }
       if (isSecret(s, c)) o.sec = 1;
       return o;
     }),
@@ -312,8 +320,8 @@ async function syncLang(lang) {
   for (const s of list) {
     const key = p + s.id, have = db.sets[key];
     if (!have && isPocket(s.id)) { db.sets[key] = { name: s.name, date: '', official: 0, total: 0, scan: false, pocket: true, promo: false, lang, cards: [] }; continue; }
-    // Sets that can still grow (promo sets, sets released in the last 180 days) are read again on every check.
-    const grows = have && have.scan && (have.promo || ageDays(have.date) < 180) && !(db.reread && db.reread[key] === todayStr().slice(0, 7));
+    // Sets that can still grow (promo sets, sets released in the last 180 days) are read again once a day.
+    const grows = have && have.scan && (have.promo || ageDays(have.date) < 180) && !(db.reread && db.reread[key] === todayStr());
     if (have && !grows && (have.scan || have.pocket || String(have.date || '') < MIN_SET_DATE)) continue;
     if (!canSpend()) { persist(true); return false; }
     const d = await paced('/sets/' + encodeURIComponent(s.id), lang);
@@ -328,7 +336,7 @@ async function syncLang(lang) {
       total: (d.cardCount && d.cardCount.total) || 0,
       cards: scan ? (d.cards || []).map(c => ({ id: p + c.id, l: String(c.localId), n: c.name, i: c.image || null })) : [],
     };
-    if (scan) { added++; db.regMatched = null; (db.reread = db.reread || {})[key] = todayStr().slice(0, 7); }
+    if (scan) { added++; db.regMatched = null; (db.reread = db.reread || {})[key] = todayStr(); }
     persist(false);
   }
   db.langsDone[lang] = true;
@@ -400,8 +408,9 @@ function planPriceRefresh(maxAge, limit) {
   const stt = readJSON(STATE_FILE) || {};
   const own = stt.own || {}, owned = stt.cards || {};
   const byDex = {};
-  Object.values(db.cards).forEach(c => { if (!c.x) c.d.forEach(n => { (byDex[n] = byDex[n] || []).push(c); }); });
+  Object.values(db.cards).forEach(c => { if (!c.x && !c.tr) c.d.forEach(n => { (byDex[n] = byDex[n] || []).push(c); }); });
   const picked = new Map();
+  Object.values(db.cards).forEach(c => { if (!c.x && c.tr && !owned[c.id]) picked.set(c.id, c); });
   Object.keys(byDex).forEach(n => {
     if (own[n] && own[n].art) return;
     if (byDex[n].some(c => owned[c.id])) return;
@@ -427,6 +436,43 @@ async function refreshPrices(maxAge) {
   }
 }
 
+// ---------- prices of regular cards ----------
+function regIndex() {
+  const m = new Map();
+  for (const s of Object.values(db.sets)) if (s.scan) for (const c of s.cards) m.set(c.id, c);
+  return m;
+}
+async function priceRegular(id, idx) {
+  const c = (idx || regIndex()).get(id);
+  if (!c) return false;
+  const d = await paced('/cards/' + encodeURIComponent(rawId(id)), langOf(id));
+  c.pt = new Date().toISOString();
+  if (d) { const pr = prices(d); c.eu = pr.eu; c.us = pr.us; c.cm = cmId(d); }
+  persist(false);
+  return true;
+}
+// Regular cards of Pokémon (they have a dex match) that have no price yet, newest sets first.
+function regWithoutPrice(limit) {
+  const out = [];
+  const sets = Object.values(db.sets).filter(s => s.scan && s.lang !== 'ja').sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  for (const s of sets) for (const c of s.cards) {
+    if (!c.pt && c.d && c.d.length && !db.cards[c.id]) { out.push(c.id); if (out.length >= limit) return out; }
+  }
+  return out;
+}
+async function fillRegularPrices() {
+  rollBudget();
+  db.budget.reg = db.budget.reg || 0;
+  const idx = regIndex();
+  const t0 = Date.now();
+  while (canSpend() && (!REGULAR_PRICES_PER_DAY || db.budget.reg < REGULAR_PRICES_PER_DAY) && Date.now() - t0 < 50 * 60000) {
+    const ids = regWithoutPrice(1);
+    if (!ids.length) return;
+    db.budget.reg++;
+    await priceRegular(ids[0], idx);
+  }
+}
+
 let running = false, lastError = null, lastManual = 0;
 async function exclusive(fn) {
   if (running) return false;
@@ -437,8 +483,14 @@ async function exclusive(fn) {
   return true;
 }
 
+let bootCheck = true;
 async function tick() {
   if (DISABLE_REFRESH || running) return;
+  if (!db.fix3) { // trainer art cards were rejected before: check those cards again once
+    const f = foundIds();
+    for (const [id, c] of Object.entries(db.cards)) if (c.x && !c.m && f.has(id)) delete db.cards[id];
+    db.fix3 = true; persist(true);
+  }
   await exclusive(async () => {
     unlimited = !db.initialDone && !STAGGER_INITIAL;
     await refreshNames();
@@ -446,7 +498,7 @@ async function tick() {
       const list = await paced('/sets');
       if (Array.isArray(list)) { applyLogos(list); db.logosDone = true; persist(true); }
     }
-    if ((!db.setsChecked || ageDays(db.setsChecked) >= SETS_CHECK_DAYS || LANGS.some(l => !db.langsDone[l])) && canSpend()) await syncSets();
+    if ((bootCheck || !db.setsChecked || ageDays(db.setsChecked) >= SETS_CHECK_DAYS || LANGS.some(l => !db.langsDone[l])) && canSpend()) { bootCheck = false; await syncSets(); }
     for (const lang of LANGS) {
       if (db.langsDone[lang] && (!db.rar[lang] || ageDays(db.rar[lang].t) >= SETS_CHECK_DAYS) && canSpend()) await rarityScan(lang);
     }
@@ -456,6 +508,7 @@ async function tick() {
       log('first build of the database finished');
     }
     if (db.initialDone) await refreshPrices(PRICE_MAX_AGE_DAYS);
+    if (db.initialDone && !unlimited) await fillRegularPrices();
   });
 }
 
@@ -468,7 +521,7 @@ async function manualRun() {
 }
 
 // Diagnostic: asks TCGdex about one language and reports whether its newest cards carry rarity, dex numbers and prices.
-let lastLang = 0;
+let lastLang = 0, lastPrices = 0;
 async function langCheck(lang) {
   if (!/^[a-z]{2}(?:-[a-z]{2})?$/i.test(lang)) throw new Error('Use a language code such as ja, zh-tw, zh-cn, ko, fr, de');
   const base = 'https://api.tcgdex.net/v2/' + lang.toLowerCase();
@@ -502,7 +555,7 @@ async function langCheck(lang) {
     const pr = prices(d);
     out.rarities[d.rarity] = (out.rarities[d.rarity] || 0) + 1;
     out.samples.push({ id: d.id, name: d.name, rarity: d.rarity, category: d.category, dexId: d.dexId || null, hasImage: !!d.image,
-      hasPricing: !!d.pricing, pricingFrom: d.pricing ? Object.keys(d.pricing) : [], eur: pr.eu, usd: pr.us });
+      hasPricing: !!d.pricing, cardmarketKeys: d.pricing && d.pricing.cardmarket ? Object.keys(d.pricing.cardmarket) : [], pricingFrom: d.pricing ? Object.keys(d.pricing) : [], eur: pr.eu, usd: pr.us });
   }
   const priced = out.samples.filter(x => x.eur != null || x.usd != null).length;
   out.summary = out.samples.length + ' newest cards checked, ' + priced + ' with a price, ' + out.samples.filter(x => x.dexId).length + ' with a dex number.';
@@ -613,6 +666,17 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 202, { started: true });
     }
     // Count a card as an art card (one request to read its details) or take it off the art list.
+    if (req.method === 'POST' && p === '/api/prices') {
+      if (DISABLE_REFRESH) return sendJSON(res, 409, { error: 'The server is set to not contact the card service' });
+      if (Date.now() - lastPrices < 3000) return sendJSON(res, 429, { error: 'Too soon' });
+      lastPrices = Date.now();
+      const b = JSON.parse(await readBody(req, 1e5));
+      const idx = regIndex(), ids = (Array.isArray(b.ids) ? b.ids : []).map(String).filter(i => idx.has(i) && !db.cards[i]).slice(0, 6);
+      let n = 0;
+      for (const i of ids) { if (await priceRegular(i, idx)) n++; }
+      persist(true);
+      return sendJSON(res, 200, { done: n });
+    }
     if (req.method === 'POST' && p === '/api/card/mark') {
       const b = JSON.parse(await readBody(req, 1e5));
       const id = String(b.id || '');
@@ -668,7 +732,7 @@ const shareServer = http.createServer((req, res) => {
 shareServer.on('error', e => log('view-only server could not start:', e.message));
 
 server.listen(PORT, () => {
-  log('listening on', PORT, '| data dir', DATA_DIR, '| up to', DAILY_REQUESTS, 'requests per day');
+  log('listening on', PORT, '| data dir', DATA_DIR, '|', DAILY_REQUESTS ? 'up to ' + DAILY_REQUESTS + ' requests per day' : 'no daily limit', '|', REQUEST_DELAY_MS / 1000 + ' s between requests');
   try { exportCards(); } catch (e) { log('export failed:', e.message); }
   tick();
   setInterval(tick, 3600 * 1000);
