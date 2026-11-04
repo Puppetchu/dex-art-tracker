@@ -43,12 +43,20 @@ cards are refreshed slowly, a little each day.
 
 USING IT
 --------
+- Each Pokémon has a light: red = nothing yet, yellow = you have a card,
+  green = you have the art card.
 - "Any card" and "Art card" buttons: tick what you own. Ticks are saved on
-  your computer, not in the browser.
-- "view" button on a Pokémon: see all its art cards (pick your favourite)
-  and its regular cards.
+  the server, so every device sees them.
+- "view" on a Pokémon: see all its art cards and regular cards, tick the ones
+  you have, and pick which card is the main picture.
+- "Sets" tab: every set with your progress. Open one to see all its cards and
+  tick the ones you own.
+- Click any picture to see it large.
+- A picture that is missing everywhere shows a Poké Ball with the card's name.
+- If a card is wrongly counted (or not counted) as an art card, use
+  "Count as art card" / "Not an art card" on that card.
 - Prices: switch between euro (Cardmarket) and dollar (TCGplayer) at the top.
-- Once you tick "Art card" for a Pokémon, its price is no longer updated.
+- Once you own the art card of a Pokémon, its price is no longer updated.
 
 
 STOPPING AND STARTING AGAIN
