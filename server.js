@@ -363,7 +363,7 @@ function setPayload(sid) {
       const o = { id: c.id, k: c.l, n: c.n, b: c.i || null };
       if (rec && !rec.x) { o.t = 'a'; o.r = rec.r; o.eu = rec.eu; o.us = rec.us; o.cm = rec.cm; o.pt = rec.pt; o.d = rec.d; if (rec.m) o.m = 1; }
       else if (!rec && worth(s, c)) { o.t = 'a'; o.pv = 1; o.r = provRarity(c.id); o.d = c.d || []; o.eu = null; o.us = null; }
-      else { o.t = 'r'; o.eu = c.eu; o.us = c.us; o.cm = c.cm; o.pt = c.pt; }
+      else { o.t = 'r'; o.eu = c.eu; o.us = c.us; o.cm = c.cm; o.pt = c.pt; o.d = c.d || []; }
       if (isSecret(s, c)) o.sec = 1;
       return o;
     }),

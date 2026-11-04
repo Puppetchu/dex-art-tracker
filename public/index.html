@@ -641,6 +641,7 @@ function renderSets(){
     h.push('<div class="tile '+stc+'"><div class="no"><span>'+esc(c.k)+(s.official&&/^\d+$/.test(c.k)?' / '+s.official:'')+'</span><i class="led"></i></div>'+
       '<div class="pic">'+picHTML(c,false)+(isA?'<span class="badge">ART</span>':'')+'</div>'+
       '<div class="name" title="'+esc(c.n)+'">'+esc(c.n)+'</div>'+
+      (c.d&&c.d.length?'<div class="row">'+c.d.slice(0,3).map(function(d){ return '<button type="button" class="mini" data-do="view" data-n="'+d+'" title="Open this Pokémon">#'+d+' '+esc(names[d]||'')+' →</button>'; }).join('')+'</div>':'')+
       '<div class="meta">'+(isA?esc(c.r||'Art card'):(c.t==='p'?'Not checked yet':(c.sec?'Secret card':'Regular card')))+'</div>'+
       priceHTML(c)+linkHTML(c)+
       '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div>'+mk+'</div>');
