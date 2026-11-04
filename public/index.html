@@ -348,6 +348,7 @@ function ageOk(c){ return c&&c.pt&&(Date.now()-Date.parse(c.pt))<30*864e5; }
 function priceHTML(c){
   if(!c) return '';
   var isArt=c.a||c.t==='a';
+  if(c.pv) return '<div class="price" title="Known art card, price not fetched yet">price pending</div>';
   if(!isArt&&!c.pt) return c.t==='p'?'':'<div class="price" title="Prices of regular cards are fetched slowly in the background">price not loaded yet</div>';
   return '<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>';
 }

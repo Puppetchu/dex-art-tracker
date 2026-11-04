@@ -162,6 +162,11 @@ function isCandidate(s, c) {
   if (foundIds().has(c.id)) return true;
   return !rarOk(s.lang || 'en') && isSecret(s, c);
 }
+// Rarity a not-yet-fetched art card was listed under (kept from the rarity search).
+function provRarity(id) {
+  const r = db.rar[langOf(id)];
+  return (r && r.m && r.m[rawId(id)]) || (String(id).startsWith('ja:') ? 'Secret card' : null);
+}
 function worth(s, c) { return isCandidate(s, c) && (foundIds().has(c.id) || spOf(c) !== 0); }
 const localOf = (id, sid) => String(id).slice(String(sid || '').length + 1);
 
@@ -273,7 +278,10 @@ function exportCards() {
     for (const c of s.cards) {
       const rec = db.cards[c.id];
       if (rec && !rec.x) { a++; continue; }
-      if (!rec && worth(s, c)) continue; // not looked at yet
+      if (!rec && worth(s, c)) { // known to be an art card, details still to be fetched: show it already
+        if (c.d && c.d.length) art.push({ id: c.id, n: c.n, r: provRarity(c.id), sid, k: c.l, b: c.i ? cleanBase(c.i) : null, d: c.d, eu: null, us: null, pv: 1 });
+        a++; continue;
+      }
       if (c.d && c.d.length) regular.push({ id: c.id, n: c.n, sid, k: c.l, b: c.i || null, d: c.d, eu: c.eu, us: c.us, cm: c.cm || undefined, pt: c.pt });
     }
     sets.push({ id: sid, name: s.name, date: s.date || '', official: s.official, total: s.total, n: s.cards.length, art: a, promo: s.promo ? 1 : 0,
@@ -293,7 +301,7 @@ function setPayload(sid) {
       const rec = db.cards[c.id];
       const o = { id: c.id, k: c.l, n: c.n, b: c.i || null };
       if (rec && !rec.x) { o.t = 'a'; o.r = rec.r; o.eu = rec.eu; o.us = rec.us; o.cm = rec.cm; o.pt = rec.pt; o.d = rec.d; if (rec.m) o.m = 1; }
-      else if (!rec && worth(s, c)) o.t = 'p';
+      else if (!rec && worth(s, c)) { o.t = 'a'; o.pv = 1; o.r = provRarity(c.id); o.d = c.d || []; o.eu = null; o.us = null; }
       else { o.t = 'r'; o.eu = c.eu; o.us = c.us; o.cm = c.cm; o.pt = c.pt; }
       if (isSecret(s, c)) o.sec = 1;
       return o;
@@ -367,7 +375,7 @@ const sentenceCase = x => x.charAt(0).toUpperCase() + x.slice(1);
 async function rarityScan(lang) {
   const names = new Set();
   RARITIES.concat(EXTRA.map(x => x.toLowerCase())).forEach(r => { names.add(titleCase(r)); names.add(sentenceCase(r)); });
-  const ids = new Set(), sigs = new Map(); let ok = true;
+  const ids = new Set(), sigs = new Map(), rmap = {}; let ok = true;
   outer: for (const nm of names) {
     let first = null;
     for (let page = 1; page <= 250; page++) {
@@ -382,13 +390,13 @@ async function rarityScan(lang) {
         for (const [k, v] of sigs) if (k !== key && v === sig && r.length >= 10) { ok = false; break outer; } // same list for different rarities: the filter is ignored
         sigs.set(key, sig);
       }
-      r.forEach(x => { if (x && x.id) ids.add(String(x.id)); });
+      r.forEach(x => { if (x && x.id) { ids.add(String(x.id)); if (!rmap[x.id]) rmap[x.id] = nm; } });
       if (ids.size > 60000) { ok = false; break outer; }
       if (r.length < 100) break;
     }
   }
   if (!ids.size) ok = false;
-  db.rar[lang] = { v: 4, t: new Date().toISOString(), ok, ids: ok ? [...ids] : [] };
+  db.rar[lang] = { v: 5, t: new Date().toISOString(), ok, ids: ok ? [...ids] : [], m: ok ? rmap : {} };
   foundCache = null;
   persist(true);
   log(lang + ' rarity search:', ok ? ids.size + ' art cards listed' : 'not available, using the number rule instead');
@@ -532,7 +540,7 @@ async function tick() {
     }
     if ((bootCheck || !db.setsChecked || ageDays(db.setsChecked) >= SETS_CHECK_DAYS || LANGS.some(l => !db.langsDone[l])) && canSpend()) { bootCheck = false; await syncSets(); }
     for (const lang of LANGS) {
-      if (db.langsDone[lang] && (!db.rar[lang] || db.rar[lang].v !== 4 || ageDays(db.rar[lang].t) >= SETS_CHECK_DAYS) && canSpend()) await rarityScan(lang);
+      if (db.langsDone[lang] && (!db.rar[lang] || db.rar[lang].v !== 5 || ageDays(db.rar[lang].t) >= SETS_CHECK_DAYS) && canSpend()) await rarityScan(lang);
     }
     await backfill();
     if (!db.initialDone && db.setsChecked && LANGS.every(l => db.rar[l]) && pendingCards().length === 0) {
