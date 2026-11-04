@@ -5,7 +5,7 @@ services:
       - "8080:8080"
     environment:
       # Most requests the server may send to TCGdex per day (it paces them at 1 per second).
-      DAILY_REQUESTS: "300"
+      DAILY_REQUESTS: "200"
       # Prices of the cheapest art cards are re-checked when older than this many days.
       PRICE_MAX_AGE_DAYS: "30"
       # The set list is checked for new sets this often.
@@ -13,11 +13,11 @@ services:
       # How many of the cheapest art cards per Pokémon are kept up to date.
       PRICE_CANDIDATES: "2"
       # Only sets released on or after this date are scanned (Scarlet & Violet started art cards).
-      MIN_SET_DATE: "2023-03-01"
+      MIN_SET_DATE: "2000-01-01"
       # Set to "1" so even the first build of the database is limited to DAILY_REQUESTS per day.
-      # STAGGER_INITIAL: "1"
+      # STAGGER_INITIAL: "4"
       # Which rarities count as art cards (compared without upper/lower case).
-      # RARITIES: "Illustration Rare,Special Illustration Rare"
+      # RARITIES: "Illustration Rare,Special Illustration Rare,Promo"
     volumes:
       - dex-data:/data
     restart: unless-stopped
