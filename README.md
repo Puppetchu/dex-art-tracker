@@ -86,6 +86,10 @@ One port, one page. Everyone who opens it sees a **view-only** version: they can
 - Eight wrong passwords from one address block further tries for 15 minutes. The money totals are hidden from visitors unless `SHOW_VALUE_PUBLIC=1`.
 - **Outside your home:** only publish the page through an https reverse proxy or tunnel (the password travels as plain text over http), (`TRUST_PROXY` is on by default, so the proxy's forwarded address and https are used; set `TRUST_PROXY=0` if there is no proxy). Put the proxy rule on port 8080 only. To keep the login unreachable from outside, publish only the `/view/` path.
 
+## Generations
+
+The Pokémon tab is split into the nine generations, each with a header showing its range and how many Pokémon you have a card and an art card for. The "Jump to generation" menu next to the filter scrolls straight to the one you pick.
+
 ## Your ticks
 
 Saved on the server in `state.json`, so every device sees the same progress. "Show backup text" copies them out as text.

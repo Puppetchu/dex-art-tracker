@@ -137,6 +137,11 @@ dialog::backdrop{background:#000b}
 a{color:var(--lcd)}
 .links{font-size:.72rem;display:flex;gap:8px;flex-wrap:wrap;margin:2px 0}
 .links a{color:var(--muted);text-decoration:underline}
+.gen{scroll-margin-top:12px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin-top:14px;padding:8px 12px;border-radius:10px;background:var(--panel);border:1px solid var(--line);color:var(--ink)}
+.gen b{font:800 1rem var(--head);letter-spacing:.04em}
+.gen span{color:var(--muted);font:.78rem var(--mono)}
+.gen .gbar{flex:1 1 120px;height:6px;border-radius:3px;background:var(--screen);overflow:hidden;min-width:80px}
+.gen .gbar i{display:block;height:100%;background:#2ecc71}
 </style>
 </head>
 <body>
@@ -171,6 +176,12 @@ a{color:var(--lcd)}
     <option value="noart">Missing art card (one exists)</option>
     <option value="haveart">Have art card</option>
     <option value="noexist">No art card exists yet</option>
+  </select>
+  <select id="genSel" aria-label="Generation">
+    <option value="0">Jump to generation…</option>
+    <option value="1">Gen I · Kanto</option><option value="2">Gen II · Johto</option><option value="3">Gen III · Hoenn</option>
+    <option value="4">Gen IV · Sinnoh</option><option value="5">Gen V · Unova</option><option value="6">Gen VI · Kalos</option>
+    <option value="7">Gen VII · Alola</option><option value="8">Gen VIII · Galar &amp; Hisui</option><option value="9">Gen IX · Paldea</option>
   </select>
   <select id="setSort" aria-label="Sort sets" hidden>
     <option value="new">Newest first</option>
@@ -429,8 +440,12 @@ function arm(key){ armed={key:key,t:Date.now()}; setTimeout(function(){ if(armed
 
 /* ---------- Pokémon view ---------- */
 function refresh(){ render(); if(dexOpen) fillDex(); }
+var GENS=[null,[1,151,'I','Kanto'],[152,251,'II','Johto'],[252,386,'III','Hoenn'],[387,493,'IV','Sinnoh'],[494,649,'V','Unova'],[650,721,'VI','Kalos'],[722,809,'VII','Alola'],[810,905,'VIII','Galar & Hisui'],[906,1025,'IX','Paldea']];
+function genOf(n){ for(var g=1;g<GENS.length;g++) if(n<=GENS[g][1]) return g; return GENS.length-1; }
 function render(){
-  var q=$('q').value.trim().toLowerCase(), f=$('filter').value;
+  var q=$('q').value.trim().toLowerCase(), f=$('filter').value, gsel=0, lastGen=0;
+  var gs={}; // per generation: Pokémon, with any card, with an art card, with an art card that exists
+  for(var n0=1;n0<=maxDex;n0++){ var g0=genOf(n0), s0=gs[g0]=gs[g0]||{t:0,a:0,r:0,e:0}; s0.t++; if(anyOwned(n0)) s0.a++; if(artOwned(n0)) s0.r++; if(byDex[n0]&&byDex[n0].length) s0.e++; }
   var html=[], shown=0, any=0, art=0, avail=0, cost=0, costMissing=0, worth=0;
   for(var n=1;n<=maxDex;n++){
     var c=chosen(n), nm=names[n]||('#'+n), hasArt=!!(byDex[n]&&byDex[n].length);
@@ -451,7 +466,13 @@ function render(){
     if(f==='noart'&&(ao||!hasArt)) continue;
     if(f==='haveart'&&!ao) continue;
     if(f==='noexist'&&hasArt) continue;
+    var gn=genOf(n);
+    if(gsel&&gsel!==gn) continue;
     shown++;
+    if(gn!==lastGen){
+      lastGen=gn; var gi=GENS[gn], gx=gs[gn];
+      html.push('<div class="sec gen" data-gen="'+gn+'"><b>Generation '+gi[2]+'</b><span>'+esc(gi[3])+' · No.'+gi[0]+'–'+Math.min(gi[1],maxDex)+'</span><span>any card '+gx.a+'/'+gx.t+' · art card '+gx.r+'/'+gx.e+'</span><div class="gbar" title="Art cards: '+gx.r+' of '+gx.e+'"><i style="width:'+(gx.e?Math.round(gx.r/gx.e*100):0)+'%"></i></div></div>');
+    }
     var cnt=(byDex[n]||[]).length, rcnt=(byReg[n]||[]).length;
     var stc=ao?'s-g':(yo?'s-y':'s-r');
     var kA=artOwnedList(n).length, kR=regOwnedList(n).length;
@@ -559,7 +580,7 @@ function renderTrainers(){
 function renderSets(){
   $('grid').hidden=view!=='dex'; $('setsView').hidden=view!=='sets'; $('trainersView').hidden=view!=='trainers';
   $('tabDex').classList.toggle('on',view==='dex'); $('tabSets').classList.toggle('on',view==='sets'); $('tabTrainers').classList.toggle('on',view==='trainers');
-  $('filter').hidden=view!=='dex'; $('setSort').hidden=view!=='sets'||!!curSet;
+  $('filter').hidden=view!=='dex'; $('genSel').hidden=view!=='dex'; $('setSort').hidden=view!=='sets'||!!curSet;
   if(view==='trainers') renderTrainers();
   if(view!=='sets') return;
   var q=$('q').value.trim().toLowerCase(), h=[];
@@ -752,6 +773,13 @@ $('lb').addEventListener('close',function(){
 $('lb').addEventListener('click',function(e){ if(e.target===$('lb')) $('lb').close(); });
 $('q').addEventListener('input',render);
 $('filter').addEventListener('change',render);
+$('genSel').addEventListener('change',function(){
+  var g=+$('genSel').value;
+  if(!g){ window.scrollTo({top:0,behavior:'smooth'}); return; }
+  var el=document.querySelector('#grid .gen[data-gen="'+g+'"]');
+  if(!el){ $('filter').value='all'; $('q').value=''; render(); el=document.querySelector('#grid .gen[data-gen="'+g+'"]'); }
+  if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+});
 $('setSort').addEventListener('change',render);
 $('cur').addEventListener('change',function(){st.cur=$('cur').value;save();index();render();});
 
