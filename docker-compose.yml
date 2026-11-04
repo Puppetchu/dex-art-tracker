@@ -15,7 +15,7 @@ services:
       # Only sets released on or after this date are scanned (Scarlet & Violet started art cards).
       MIN_SET_DATE: "2000-01-01"
       # Set to "1" so even the first build of the database is limited to DAILY_REQUESTS per day.
-      # STAGGER_INITIAL: "5"
+      # STAGGER_INITIAL: "4"
       # Which rarities count as art cards (compared without upper/lower case).
       # RARITIES: "Illustration Rare,Special Illustration Rare,Promo"
     volumes:
