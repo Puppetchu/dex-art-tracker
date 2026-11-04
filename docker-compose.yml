@@ -27,8 +27,9 @@ services:
       # ADMIN_PASSWORD: "choose-a-long-password"
       # Set to "1" so visitors who are not logged in also see "worth" and "left to spend".
       # SHOW_VALUE_PUBLIC: "1"
-      # Set to "1" when the page sits behind a reverse proxy (https), so logins use the visitor's real address.
-      # TRUST_PROXY: "1"
+      # On by default: logins use the visitor's real address from the reverse proxy (X-Forwarded-For).
+      # Set to "0" if the page is reached directly, without a proxy in front.
+      # TRUST_PROXY: "0"
     volumes:
       - dex-data:/data
     restart: unless-stopped

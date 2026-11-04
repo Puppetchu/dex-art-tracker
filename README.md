@@ -81,7 +81,7 @@ One port, one page. Everyone who opens it sees a **view-only** version: they can
 - **Password:** set `ADMIN_PASSWORD`. If you do not, a random one is generated, printed in the container log (look for `OWNER PASSWORD`) and saved as `admin.json` in the data folder.
 - **No login link at all:** share `http://yourserver:8080/view/`. It is the same view-only page and it never shows a login option, even to you.
 - Eight wrong passwords from one address block further tries for 15 minutes. The money totals are hidden from visitors unless `SHOW_VALUE_PUBLIC=1`.
-- **Outside your home:** only publish the page through an https reverse proxy or tunnel (the password travels as plain text over http), and set `TRUST_PROXY=1` there. Put the proxy rule on port 8080 only. To keep the login unreachable from outside, publish only the `/view/` path.
+- **Outside your home:** only publish the page through an https reverse proxy or tunnel (the password travels as plain text over http), (`TRUST_PROXY` is on by default, so the proxy's forwarded address and https are used; set `TRUST_PROXY=0` if there is no proxy). Put the proxy rule on port 8080 only. To keep the login unreachable from outside, publish only the `/view/` path.
 
 ## Your ticks
 
@@ -104,7 +104,7 @@ Saved on the server in `state.json`, so every device sees the same progress. "Sh
 | `REGULAR_PRICES_PER_DAY` | 0 | Most requests per day spent on regular-card prices, 0 = no limit |
 | `ADMIN_PASSWORD` | random | Owner password |
 | `SHOW_VALUE_PUBLIC` | 0 | 1 = visitors also see the money totals |
-| `TRUST_PROXY` | 0 | 1 = behind a reverse proxy |
+| `TRUST_PROXY` | 1 | Use the reverse proxy's forwarded address and https. 0 = off |
 
 ## Limits
 

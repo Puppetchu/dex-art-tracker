@@ -48,7 +48,7 @@ const PROMO_AS_ART = process.env.PROMO_AS_ART !== '0';
 
 // Visitors who are not logged in see a view-only page. Set to 1 to let them see "worth" and "left to spend" too.
 const SHOW_VALUE_PUBLIC = process.env.SHOW_VALUE_PUBLIC === '1' || process.env.SHARE_SHOW_VALUE === '1';
-const TRUST_PROXY = process.env.TRUST_PROXY === '1'; // 1 = behind a reverse proxy: use X-Forwarded-For / -Proto
+const TRUST_PROXY = process.env.TRUST_PROXY !== '0'; // on by default (reverse proxy: use X-Forwarded-For / -Proto). 0 = off
 
 const CARDS_FILE = path.join(DATA_DIR, 'cards.json');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
