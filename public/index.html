@@ -240,18 +240,19 @@ function post(url,body){ return call(url,{method:'POST',headers:{'Content-Type':
 
 /* ---------- pictures: TCGdex first, then two other image hosts, then a placeholder ---------- */
 function ptcgId(sid){ return String(sid).replace(/^([a-z]+)0*(\d)/i,'$1$2').replace('.','pt'); }
+function isJa(id){ return /^ja:/.test(String(id||'')); }
 function numOf(k){ return /^\d+$/.test(String(k))?String(+k):String(k); }
 function imgList(c,big){
   var l=[];
   if(c.b) l.push(c.b+'/'+(big?'high':'low')+'.webp');
-  if(c.sid&&c.k!=null&&c.k!==''){
+  if(c.sid&&c.k!=null&&c.k!==''&&!isJa(c.sid)){
     var pid=ptcgId(c.sid), nm=encodeURIComponent(numOf(c.k));
     l.push('https://images.pokemontcg.io/'+pid+'/'+nm+(big?'_hires':'')+'.png');
     l.push('https://images.scrydex.com/pokemon/'+pid+'-'+nm+'/'+(big?'medium':'small'));
   }
   return l;
 }
-function subOf(c){ var s=setsById[c.sid]; return (s?s.name:(c.sid||''))+(c.k?' · '+c.k:''); }
+function subOf(c){ var s=setsById[c.sid]; return (s?s.name:(c.sid||''))+(c.k?' · '+c.k:'')+(isJa(c.sid)?' · JA':''); }
 function phHTML(name,sub){ return '<div class="ph"><i class="ball"></i><b>'+esc(name)+'</b><span>No picture available yet</span><span>'+esc(sub)+'</span></div>'; }
 function picHTML(c,big){
   var l=imgList(c,big);
@@ -262,14 +263,17 @@ function logoList(s){
   var l=[];
   if(s.lg){ l.push(s.lg+'.webp'); l.push(s.lg+'.png'); }
   if(s.sy){ l.push(s.sy+'.webp'); }
-  var pid=ptcgId(s.id);
-  l.push('https://images.pokemontcg.io/'+pid+'/logo.png');
-  l.push('https://images.scrydex.com/pokemon/'+pid+'-logo/logo');
-  l.push('https://images.pokemontcg.io/'+pid+'/symbol.png');
+  if(!isJa(s.id)){
+    var pid=ptcgId(s.id);
+    l.push('https://images.pokemontcg.io/'+pid+'/logo.png');
+    l.push('https://images.scrydex.com/pokemon/'+pid+'-logo/logo');
+    l.push('https://images.pokemontcg.io/'+pid+'/symbol.png');
+  }
   return l;
 }
 function logoHTML(s){
   var l=logoList(s);
+  if(!l.length) return '';
   return '<img class="slogo" loading="lazy" src="'+esc(l[0])+'" data-srcs="'+esc(l.slice(1).map(encodeURIComponent).join('|'))+'" data-hide="1" data-fb="'+esc(s.id)+'" alt="'+esc(s.name)+'">';
 }
 document.addEventListener('error',function(e){
@@ -494,7 +498,7 @@ function renderSets(){
     list.forEach(function(s){
       var o=per[s.id]||0, p=s.n?Math.round(o/s.n*100):0;
       h.push('<button type="button" class="settile'+(o&&o>=s.n?' full':'')+'" data-do="set" data-id="'+esc(s.id)+'">'+
-        '<div class="slbox">'+logoHTML(s)+'</div><b>'+esc(s.name)+'</b><span>'+esc(s.date)+' · '+s.n+' cards · '+s.art+' art'+(s.promo?' · promo':'')+'</span>'+
+        '<div class="slbox">'+logoHTML(s)+'</div><b>'+esc(s.name)+'</b><span>'+esc(s.date)+' · '+s.n+' cards · '+s.art+' art'+(s.promo?' · promo':'')+(isJa(s.id)?' · JA':'')+'</span>'+
         '<div class="mbar"><i style="width:'+p+'%"></i></div><span class="pct">'+o+' / '+s.n+' · '+p+'%</span></button>');
     });
     h.push('</div>');

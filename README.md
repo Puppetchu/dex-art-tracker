@@ -56,6 +56,14 @@ Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokea
 
 "Refresh prices" in the page fetches at most 25 cards (missing ones first, then the oldest prices), once per 10 minutes.
 
+## Art cards without the number rule, and Japanese cards
+
+- Art cards are found by rarity: the server asks TCGdex for the list of cards with an art rarity (about 40 list requests per language, repeated monthly). Number no longer matters, so art cards inside the normal numbering are found too. If that search is not available, the old rule (number above the official set size) is used instead.
+- Japanese sets and their art cards (Special illustration rare, and so on) are added with a "JA" tag. They only have € prices, so they only compete for cheapest in € mode. Regular Japanese cards are not listed. Set `LANGUAGES=en` to switch Japanese off.
+- Promo sets and sets from the last 180 days are read again every month, because they keep getting new cards. A card with no dex number on TCGdex gets one from its name.
+- Chinese cards are not included: TCGdex has no rarity, prices or dex numbers for them.
+- The first fill of the Japanese data takes a while because it follows your daily request limit.
+
 ## Share a view-only copy
 
 A second, read-only copy of the page runs on port 8081 (`SHARE_PORT`). Press **Share** on the main page to see the link, for example `http://yourserver:8081/Xk3p9Qa2Lw1z/`.
@@ -82,6 +90,7 @@ Saved on the server in `state.json`, so every device sees the same progress. "Sh
 | `RARITIES` | Illustration Rare,Special Illustration Rare,Promo | Art card rarities, case-insensitive |
 | `PROMO_AS_ART` | 1 | 0 = promo cards only count when their rarity is listed above |
 | `DISABLE_REFRESH` | 0 | 1 = never contact the APIs |
+| `LANGUAGES` | en,ja | `en` = English only |
 | `SHARE_PORT` | 8081 | Port of the view-only page, 0 = off |
 | `SHARE_KEY` | random | Fixed link text instead of a random one |
 | `SHARE_SHOW_VALUE` | 0 | 1 = friends also see the money totals |

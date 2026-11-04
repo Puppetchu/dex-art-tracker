@@ -5,9 +5,10 @@
 //  1. Sets: the set list is checked monthly; every new set is fetched once (one request per set).
 //     A set request returns all its cards by name and image, so every card is stored from that
 //     alone. Regular cards need no further requests.
-//  2. Art candidates: cards numbered above the official set size (e.g. 199/198) and every card in a
-//     promo set get a request of their own, to read rarity, dex number and price. Candidates whose
-//     name contains no Pokémon name (trainers, energy) are skipped. Card data never changes, so it
+//  2. Art candidates: TCGdex is asked which cards have an art rarity (a few dozen list requests), and
+//     every card in a promo set counts too. Those cards get a request of their own, to read rarity,
+//     dex number and price. (If the rarity search is not available, cards numbered above the official
+//     set size are used instead.) Japanese sets are read the same way. Card data never changes, so it
 //     is stored forever.
 //  3. Prices: the cheapest few art cards per Pokémon are re-priced slowly, oldest first, within a
 //     daily request budget. Cards you own and Pokémon whose art card you own are never re-priced.
@@ -21,6 +22,12 @@ const PORT = +process.env.PORT || 8080;
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const BASE = (process.env.TCGDEX_BASE || 'https://api.tcgdex.net/v2/en').replace(/\/$/, '');
+// Languages whose sets are read: en (always) and ja. Japanese ids are stored as "ja:<id>" so they never clash.
+const LANGS = ['en'].concat((process.env.LANGUAGES || 'en,ja').split(',').map(x => x.trim().toLowerCase()).filter(x => x === 'ja'));
+const baseFor = lang => BASE.replace(/\/en$/, '/' + lang);
+const langOf = id => String(id).startsWith('ja:') ? 'ja' : 'en';
+const pfx = lang => lang === 'en' ? '' : lang + ':';
+const rawId = id => String(id).replace(/^ja:/, '');
 const DAILY_REQUESTS = +process.env.DAILY_REQUESTS || 200;
 const REQUEST_DELAY_MS = process.env.REQUEST_DELAY_MS !== undefined ? +process.env.REQUEST_DELAY_MS : 1000;
 const PRICE_MAX_AGE_DAYS = +process.env.PRICE_MAX_AGE_DAYS || 30;
@@ -64,6 +71,9 @@ db.setsChecked = db.setsChecked || null;
 db.initialDone = !!db.initialDone;
 db.budget = db.budget || { date: '', used: 0 };
 db.regMatched = db.regMatched || null;
+db.rar = db.rar || {};            // lang -> {t, ok, ids:[card ids that have an art rarity]}
+db.langsDone = db.langsDone || {};
+if (db.setsChecked && !db.langsDone.en) db.langsDone.en = true;
 
 // Pokémon TCG Pocket sets (A1, A2a, B1, P-A ...) are not physical cards.
 const isPocket = id => /^(?:[AB]\d+[a-z]?|P-[AB])$/i.test(String(id));
@@ -83,12 +93,23 @@ const cleanBase = u => u ? String(u).replace(/\/(?:low|high)\.(?:webp|png|jpg)$/
   }
 })();
 
+// One-time: promo cards rejected earlier (for example for a missing dex number) are checked again.
+if (!db.fix2) {
+  for (const [id, c] of Object.entries(db.cards)) {
+    if (!c.x || c.m) continue;
+    const sid = id.slice(0, id.lastIndexOf('-')), st = db.sets[sid];
+    if (st && st.promo) delete db.cards[id];
+  }
+  db.setsChecked = null; // read the set list once now, so promo sets pick up cards added since
+  db.fix2 = true;
+}
+
 // ---------- TCGdex access ----------
-async function api(p) {
+async function api(p, lang) {
   let last;
   for (let i = 0; i < 4; i++) {
     try {
-      const r = await fetch(BASE + p, { signal: AbortSignal.timeout(30000), headers: { 'User-Agent': 'dex-art-tracker' } });
+      const r = await fetch(baseFor(lang || 'en') + p, { signal: AbortSignal.timeout(30000), headers: { 'User-Agent': 'dex-art-tracker' } });
       if (r.status === 404) return null;
       if (r.ok) return await r.json();
       last = new Error('HTTP ' + r.status + ' for ' + p);
@@ -101,9 +122,9 @@ async function api(p) {
 let unlimited = false;
 function rollBudget() { if (db.budget.date !== todayStr()) db.budget = { date: todayStr(), used: 0 }; }
 function canSpend() { rollBudget(); return unlimited || db.budget.used < DAILY_REQUESTS; }
-async function paced(p) {
+async function paced(p, lang) {
   rollBudget(); db.budget.used++;
-  const r = await api(p);
+  const r = await api(p, lang);
   await sleep(REQUEST_DELAY_MS);
   return r;
 }
@@ -112,7 +133,20 @@ async function paced(p) {
 const isNum = l => /^\d+$/.test(String(l));
 // Art candidates: numbered above the official set size, or anything in a promo set.
 function isSecret(s, c) { return isNum(c.l) && (!(s.official > 0) || +c.l > s.official); }
-function isCandidate(s, c) { return (PROMO_AS_ART && s.promo) || isSecret(s, c); }
+let foundCache = null;
+function foundIds() {
+  if (!foundCache) { foundCache = new Set(); for (const [l, r] of Object.entries(db.rar)) if (r && r.ok) r.ids.forEach(i => foundCache.add(pfx(l) + i)); }
+  return foundCache;
+}
+const rarOk = lang => !!(db.rar[lang] && db.rar[lang].ok);
+// A card is looked at when TCGdex lists it under an art rarity, it is in a promo set, or (only while the
+// rarity search is unavailable) it is numbered above the official set size.
+function isCandidate(s, c) {
+  if (PROMO_AS_ART && s.promo) return true;
+  if (foundIds().has(c.id)) return true;
+  return !rarOk(s.lang || 'en') && isSecret(s, c);
+}
+function worth(s, c) { return isCandidate(s, c) && (foundIds().has(c.id) || spOf(c) !== 0); }
 const localOf = (id, sid) => String(id).slice(String(sid || '').length + 1);
 
 function prices(d) {
@@ -130,17 +164,22 @@ function prices(d) {
   });
   return { us, eu };
 }
+function nameDex(name) {
+  if (!NM || !NM.names) return [];
+  const t = ' ' + toks(name || '') + ' ';
+  return Object.entries(NM.names).filter(([, nm]) => t.includes(' ' + toks(nm) + ' ')).map(([n]) => +n);
+}
 function isPokemon(d) { return d && d.category === 'Pokemon' && Array.isArray(d.dexId) && d.dexId.length; }
-function qualifies(d) {
+function qualifies(d, p) {
   if (!isPokemon(d)) return false;
   if (d.rarity && RAR.has(String(d.rarity).toLowerCase())) return true;
-  const s = d.set && db.sets[d.set.id];
+  const s = d.set && db.sets[(p || '') + d.set.id];
   return !!(PROMO_AS_ART && s && s.promo);
 }
-function record(d) {
-  const pr = prices(d);
+function record(d, p) {
+  const pr = prices(d); p = p || '';
   return {
-    id: d.id, n: d.name, r: d.rarity || null, s: d.set && d.set.name, sid: d.set && d.set.id, d: d.dexId,
+    id: p + d.id, n: d.name, r: d.rarity || null, s: d.set && d.set.name, sid: d.set && (p + d.set.id), d: d.dexId,
     b: cleanBase(d.image), eu: pr.eu, us: pr.us, pt: new Date().toISOString(),
   };
 }
@@ -156,7 +195,7 @@ function loadSpecies() {
 loadSpecies();
 // 1 if the card name contains a Pokémon name, 0 if not (trainers, energy), undefined if names are not loaded yet.
 function spOf(c) {
-  if (!SP) return undefined;
+  if (!SP || String(c.id).startsWith('ja:')) return undefined;
   if (c.sp === undefined) { const k = cmp(c.n || ''); c.sp = SP.some(s => k.includes(s)) ? 1 : 0; }
   return c.sp;
 }
@@ -186,7 +225,7 @@ function matchRegular() {
   if (!NM || !NM.names || db.regMatched === NM.t) return;
   const sp = Object.entries(NM.names).map(([n, name]) => [+n, ' ' + toks(name) + ' ']);
   for (const s of Object.values(db.sets)) {
-    if (!s.scan) continue;
+    if (!s.scan || s.lang === 'ja') continue;
     for (const c of s.cards) {
       const t = ' ' + toks(c.n || '') + ' ';
       c.d = sp.filter(([, k]) => t.includes(k)).map(([n]) => n);
@@ -210,7 +249,7 @@ function exportCards() {
     for (const c of s.cards) {
       const rec = db.cards[c.id];
       if (rec && !rec.x) { a++; continue; }
-      if (!rec && isCandidate(s, c) && spOf(c) !== 0) continue; // not looked at yet
+      if (!rec && worth(s, c)) continue; // not looked at yet
       if (c.d && c.d.length) regular.push({ id: c.id, n: c.n, sid, k: c.l, b: c.i || null, d: c.d });
     }
     sets.push({ id: sid, name: s.name, date: s.date || '', official: s.official, total: s.total, n: s.cards.length, art: a, promo: s.promo ? 1 : 0,
@@ -230,7 +269,7 @@ function setPayload(sid) {
       const rec = db.cards[c.id];
       const o = { id: c.id, k: c.l, n: c.n, b: c.i || null };
       if (rec && !rec.x) { o.t = 'a'; o.r = rec.r; o.eu = rec.eu; o.us = rec.us; o.d = rec.d; if (rec.m) o.m = 1; }
-      else if (!rec && isCandidate(s, c) && spOf(c) !== 0) o.t = 'p';
+      else if (!rec && worth(s, c)) o.t = 'p';
       else o.t = 'r';
       if (isSecret(s, c)) o.sec = 1;
       return o;
@@ -249,42 +288,81 @@ function persist(force) {
 
 // ---------- building and updating the database ----------
 // Set logo and symbol pictures come with the set list (addresses without a file extension).
-function applyLogos(list) {
+function applyLogos(list, p) {
   for (const s of list) {
-    const t = db.sets[s.id];
+    const t = db.sets[(p || '') + s.id];
     if (!t) continue;
     if (s.logo) t.lg = s.logo;
     if (s.symbol) t.sy = s.symbol;
   }
 }
 async function syncSets() {
-  const list = await paced('/sets');
-  if (!Array.isArray(list)) throw new Error('Unexpected answer for the set list');
-  applyLogos(list); db.logosDone = true;
+  for (const lang of LANGS) { if (!(await syncLang(lang))) return false; }
+  db.setsChecked = new Date().toISOString();
+  persist(true);
+  return true;
+}
+async function syncLang(lang) {
+  const p = pfx(lang);
+  const list = await paced('/sets', lang);
+  if (!Array.isArray(list)) throw new Error('Unexpected answer for the ' + lang + ' set list');
+  applyLogos(list, p);
+  if (lang === 'en') db.logosDone = true;
   let added = 0;
   for (const s of list) {
-    const have = db.sets[s.id];
-    if (!have && isPocket(s.id)) { db.sets[s.id] = { name: s.name, date: '', official: 0, total: 0, scan: false, pocket: true, promo: false, cards: [] }; continue; }
-    if (have && (have.scan || have.pocket || String(have.date || '') < MIN_SET_DATE)) continue;
+    const key = p + s.id, have = db.sets[key];
+    if (!have && isPocket(s.id)) { db.sets[key] = { name: s.name, date: '', official: 0, total: 0, scan: false, pocket: true, promo: false, lang, cards: [] }; continue; }
+    // Sets that can still grow (promo sets, sets released in the last 180 days) are read again on every check.
+    const grows = have && have.scan && (have.promo || ageDays(have.date) < 180) && !(db.reread && db.reread[key] === todayStr().slice(0, 7));
+    if (have && !grows && (have.scan || have.pocket || String(have.date || '') < MIN_SET_DATE)) continue;
     if (!canSpend()) { persist(true); return false; }
-    const d = await paced('/sets/' + encodeURIComponent(s.id));
-    if (!d) { db.sets[s.id] = { name: s.name, date: '', official: 0, total: 0, scan: false, promo: false, cards: [] }; continue; }
+    const d = await paced('/sets/' + encodeURIComponent(s.id), lang);
+    if (!d) { db.sets[key] = { name: s.name, date: '', official: 0, total: 0, scan: false, promo: false, lang, cards: [] }; continue; }
     const date = d.releaseDate || '';
     const pocket = isPocket(s.id) || (d.serie && d.serie.id === 'tcgp');
     const scan = !pocket && date >= MIN_SET_DATE;
-    db.sets[s.id] = {
-      name: d.name, date, scan, pocket: !!pocket, promo: /promo/i.test(d.name || ''),
+    db.sets[key] = {
+      name: d.name, date, scan, pocket: !!pocket, promo: lang === 'en' && /promo/i.test(d.name || ''), lang,
       lg: s.logo || d.logo || null, sy: s.symbol || d.symbol || null,
       official: (d.cardCount && d.cardCount.official) || 0,
       total: (d.cardCount && d.cardCount.total) || 0,
-      cards: scan ? (d.cards || []).map(c => ({ id: c.id, l: String(c.localId), n: c.name, i: c.image || null })) : [],
+      cards: scan ? (d.cards || []).map(c => ({ id: p + c.id, l: String(c.localId), n: c.name, i: c.image || null })) : [],
     };
-    if (scan) { added++; db.regMatched = null; }
+    if (scan) { added++; db.regMatched = null; (db.reread = db.reread || {})[key] = todayStr().slice(0, 7); }
     persist(false);
   }
-  db.setsChecked = new Date().toISOString();
+  db.langsDone[lang] = true;
   persist(true);
-  log('set check done, sets read this time:', added);
+  log(lang + ' set check done, sets read this time:', added);
+  return true;
+}
+
+// Asks TCGdex for every card with an art rarity (list requests of 100 cards). The result is stored as ids only.
+const titleCase = x => x.replace(/\b\w/g, m => m.toUpperCase());
+const sentenceCase = x => x.charAt(0).toUpperCase() + x.slice(1);
+async function rarityScan(lang) {
+  const names = new Set();
+  RARITIES.forEach(r => { names.add(titleCase(r)); names.add(sentenceCase(r)); });
+  const ids = new Set(); let ok = true;
+  outer: for (const nm of names) {
+    let first = null;
+    for (let page = 1; page <= 80; page++) {
+      if (!canSpend()) return false;
+      const r = await paced('/cards?rarity=' + encodeURIComponent(nm) + '&pagination:page=' + page + '&pagination:itemsPerPage=100', lang);
+      if (!Array.isArray(r)) { ok = false; break outer; }
+      if (!r.length) break;
+      if (page > 1 && r[0] && r[0].id === first) break; // the server ignored the page number
+      if (page === 1) first = r[0] && r[0].id;
+      r.forEach(x => { if (x && x.id) ids.add(String(x.id)); });
+      if (ids.size > 8000) { ok = false; break outer; } // looks like the filter was ignored
+      if (r.length < 100) break;
+    }
+  }
+  if (!ids.size) ok = false;
+  db.rar[lang] = { t: new Date().toISOString(), ok, ids: ok ? [...ids] : [] };
+  foundCache = null;
+  persist(true);
+  log(lang + ' rarity search:', ok ? ids.size + ' art cards listed' : 'not available, using the number rule instead');
   return true;
 }
 
@@ -293,15 +371,17 @@ function pendingCards() {
   const out = [];
   const sets = Object.values(db.sets).filter(s => s.scan).sort((a, b) => String(b.date).localeCompare(String(a.date)));
   for (const s of sets) {
-    for (const c of s.cards) if (isCandidate(s, c) && !db.cards[c.id] && spOf(c) !== 0) out.push(c.id);
+    for (const c of s.cards) if (worth(s, c) && !db.cards[c.id]) out.push(c.id);
   }
   return out;
 }
 
 async function fetchCard(id) {
-  const d = await paced('/cards/' + encodeURIComponent(id));
+  const lang = langOf(id), p = pfx(lang);
+  const d = await paced('/cards/' + encodeURIComponent(rawId(id)), lang);
   const old = db.cards[id];
-  if (d && qualifies(d)) { const r = record(d); if (old && old.m) r.m = 1; db.cards[id] = r; }
+  if (d && p === '' && d.category === 'Pokemon' && !(Array.isArray(d.dexId) && d.dexId.length)) { const g = nameDex(d.name); if (g.length) d.dexId = g; }
+  if (d && qualifies(d, p)) { const r = record(d, p); if (old && old.m) r.m = 1; db.cards[id] = r; }
   else if (old && !old.x) old.pt = new Date().toISOString();
   else db.cards[id] = { id, x: 1 };
   persist(false);
@@ -366,9 +446,12 @@ async function tick() {
       const list = await paced('/sets');
       if (Array.isArray(list)) { applyLogos(list); db.logosDone = true; persist(true); }
     }
-    if ((!db.setsChecked || ageDays(db.setsChecked) >= SETS_CHECK_DAYS) && canSpend()) await syncSets();
+    if ((!db.setsChecked || ageDays(db.setsChecked) >= SETS_CHECK_DAYS || LANGS.some(l => !db.langsDone[l])) && canSpend()) await syncSets();
+    for (const lang of LANGS) {
+      if (db.langsDone[lang] && (!db.rar[lang] || ageDays(db.rar[lang].t) >= SETS_CHECK_DAYS) && canSpend()) await rarityScan(lang);
+    }
     await backfill();
-    if (!db.initialDone && db.setsChecked && pendingCards().length === 0) {
+    if (!db.initialDone && db.setsChecked && LANGS.every(l => db.rar[l]) && pendingCards().length === 0) {
       db.initialDone = true; unlimited = false;
       log('first build of the database finished');
     }
@@ -536,9 +619,10 @@ const server = http.createServer(async (req, res) => {
       if (!id) return sendJSON(res, 400, { error: 'no card' });
       if (b.art) {
         if (DISABLE_REFRESH) return sendJSON(res, 409, { error: 'The server is set to not contact the card service' });
-        const d = await paced('/cards/' + encodeURIComponent(id));
+        const mp = pfx(langOf(id));
+        const d = await paced('/cards/' + encodeURIComponent(rawId(id)), langOf(id));
         if (!isPokemon(d)) return sendJSON(res, 400, { error: 'That is not a Pokémon card with a dex number' });
-        const r = record(d); r.m = 1;
+        const r = record(d, mp); r.m = 1;
         db.cards[id] = r;
       } else {
         db.cards[id] = { id, x: 1, m: 1 };
