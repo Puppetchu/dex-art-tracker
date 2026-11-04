@@ -77,7 +77,7 @@ Trainer cards with an art rarity (for example Illustration rare or Special illus
 
 One port, one page. Everyone who opens it sees a **view-only** version: they can browse Pokémon, sets, trainers and cards and see what you own, but cannot change anything. The server refuses every change without a login.
 
-- **Owner login:** a small "Owner login" link at the bottom of the page. After logging in you get the full page with the tick buttons, Refresh and Log out. The login lasts 30 days on that device.
+- **Owner login:** click the blue lens at the top left of the Pokédex. After logging in you get the full page with the tick buttons, Refresh and Log out. The login lasts 30 days on that device.
 - **Password:** set `ADMIN_PASSWORD`. If you do not, a random one is generated, printed in the container log (look for `OWNER PASSWORD`) and saved as `admin.json` in the data folder.
 - **No login link at all:** share `http://yourserver:8080/view/`. It is the same view-only page and it never shows a login option, even to you.
 - Eight wrong passwords from one address block further tries for 15 minutes. The money totals are hidden from visitors unless `SHOW_VALUE_PUBLIC=1`.

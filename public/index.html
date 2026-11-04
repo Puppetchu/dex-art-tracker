@@ -133,9 +133,7 @@ dialog::backdrop{background:#000b}
 #roTag{display:none;margin-left:10px;padding:2px 9px;border-radius:99px;background:var(--screen);color:var(--lcd);font:700 .7rem var(--head);letter-spacing:.08em;text-transform:uppercase;vertical-align:middle}
 .ro-mode #roTag{display:inline-block}
 #lgdlg input{width:100%;box-sizing:border-box;padding:8px;margin:8px 0;background:var(--screen);color:var(--lcd);border:1px solid var(--line);border-radius:6px;font:.85rem monospace}
-#ft{text-align:center;padding:30px 16px 40px;font-size:.8rem}
-#ft a{color:var(--muted);text-decoration:none;opacity:.6}
-#ft a:hover{opacity:1;text-decoration:underline}
+
 a{color:var(--lcd)}
 .links{font-size:.72rem;display:flex;gap:8px;flex-wrap:wrap;margin:2px 0}
 .links a{color:var(--muted);text-decoration:underline}
@@ -218,15 +216,13 @@ a{color:var(--lcd)}
 </dialog>
 <dialog id="lb"><div id="lbBody"></div><button id="lbClose" type="button">Close</button></dialog>
 
-<footer id="ft" hidden><a href="#" id="lgLink">Owner login</a></footer>
-
 <script>
 (function(){
 var RO=!!window.DEX_READONLY, HIDEV=!!window.DEX_HIDE_VALUE, LOGIN=!!window.DEX_LOGIN, AUTH=!!window.DEX_AUTH;
 if(RO){
   document.body.classList.add('ro-mode');
   document.title='Pokémon art card collection (view only)';
-  if(LOGIN) document.getElementById('ft').hidden=false;
+  if(LOGIN){ var lens=document.querySelector('.lens'); lens.removeAttribute('aria-hidden'); lens.setAttribute('role','button'); lens.setAttribute('tabindex','0'); lens.setAttribute('aria-label','Owner login'); lens.style.cursor='pointer'; }
   if(HIDEV){ ['roWorth','roCost'].forEach(function(i){ var e=document.getElementById(i); if(e) e.style.display='none'; }); }
 }
 'use strict';
@@ -763,7 +759,12 @@ $('refresh').addEventListener('click',async function(){
   }
   pollRefresh();
 });
-$('lgLink').addEventListener('click',function(e){ e.preventDefault(); $('lgMsg').textContent=''; $('lgPw').value=''; $('lgdlg').showModal(); $('lgPw').focus(); });
+function openLogin(){ $('lgMsg').textContent=''; $('lgPw').value=''; $('lgdlg').showModal(); $('lgPw').focus(); }
+if(LOGIN){
+  var lensEl=document.querySelector('.lens');
+  lensEl.addEventListener('click',openLogin);
+  lensEl.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openLogin(); } });
+}
 $('lgClose').addEventListener('click',function(){ $('lgdlg').close(); });
 $('lgForm').addEventListener('submit',async function(e){
   e.preventDefault(); $('lgMsg').textContent='…';

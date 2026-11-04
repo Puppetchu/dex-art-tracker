@@ -44,8 +44,8 @@ cards are refreshed slowly, a little each day.
 
 LOGGING IN
 ----------
-Everyone who opens the page sees a view-only version. To change anything, press
-"Owner login" at the very bottom of the page. The password is printed in the
+Everyone who opens the page sees a view-only version. To change anything, click
+the blue lens at the top left of the page. The password is printed in the
 container log (look for OWNER PASSWORD) and saved as admin.json in the data
 folder. Or choose your own with the ADMIN_PASSWORD setting in docker-compose.yml.
 Friends can use http://<address>:8080/view/ which has no login option at all.
