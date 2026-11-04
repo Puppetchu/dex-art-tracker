@@ -394,8 +394,17 @@ function artOwnedList(n){ return (byDex[n]||[]).filter(function(c){return owned(
 function regOwnedList(n){ return (byReg[n]||[]).filter(function(c){return owned(c.id);}); }
 function artOwned(n){ var o=st.own[n]; return !!(o&&o.art)||artOwnedList(n).length>0; }
 function anyOwned(n){ var o=st.own[n]; return !!(o&&o.any)||artOwned(n)||regOwnedList(n).length>0; }
-// Main picture: the card you picked, else the cheapest art card, else a regular card.
+// Main picture: the most expensive card you own, else the card you picked, else the cheapest art card, else a regular card.
+function priciest(list){
+  var best=null, bv=-2;
+  list.forEach(function(c){ var v=price(c); if(v==null) v=-1; if(v>bv){ bv=v; best=c; } });
+  return best;
+}
 function chosen(n){
+  // A Pokémon you own shows the most expensive card of it that you own (art cards first; a regular card only when no art card exists).
+  var ownedArt=artOwnedList(n);
+  if(ownedArt.length) return priciest(ownedArt);
+  if(!(byDex[n]&&byDex[n].length)){ var ownedReg=regOwnedList(n); if(ownedReg.length) return priciest(ownedReg); }
   var pid=st.pick[n];
   if(pid&&byId[pid]&&(byId[pid].d||[]).indexOf(+n)>=0) return byId[pid];
   var a=byDex[n]; if(a&&a.length) return a[0];
@@ -462,7 +471,7 @@ function render(){
   $('barAny').style.width=(maxDex?Math.min(100,any/maxDex*100):0)+'%';
   $('barArt').style.width=(maxDex?Math.min(100,art/maxDex*100):0)+'%';
   renderSets();
-  if(view==='dex') setStatus(shown+' shown. Main picture is the cheapest art card, or a regular card when no art card exists. Pick another one under "view".');
+  if(view==='dex') setStatus(shown+' shown. Main picture is the most expensive card you own, else the cheapest art card (or a regular card when no art card exists). Pick another one under "view".');
 }
 
 /* ---------- Pokémon card list ---------- */

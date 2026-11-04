@@ -255,10 +255,11 @@ function matchRegular() {
 let lastExport = { art: 0, regular: 0, sets: 0 };
 function exportCards() {
   matchRegular();
+  const setPics = regIndex();
   const art = [], trainers = [], regular = [], sets = [];
   Object.values(db.cards).forEach(c => {
     if (c.x) return;
-    (c.tr ? trainers : art).push({ id: c.id, n: c.n, r: c.r, sid: c.sid, k: localOf(c.id, c.sid), b: c.b || null, d: c.d, eu: c.eu, us: c.us, cm: c.cm || undefined, pt: c.pt, m: c.m ? 1 : undefined });
+    (c.tr ? trainers : art).push({ id: c.id, n: c.n, r: c.r, sid: c.sid, k: localOf(c.id, c.sid), b: c.b || (setPics.get(c.id) && setPics.get(c.id).i ? cleanBase(setPics.get(c.id).i) : null), d: c.d, eu: c.eu, us: c.us, cm: c.cm || undefined, pt: c.pt, m: c.m ? 1 : undefined });
   });
   for (const [sid, s] of Object.entries(db.sets)) {
     if (!s.scan) continue;
@@ -432,8 +433,9 @@ function planPriceRefresh(maxAge, limit) {
       }).slice(0, PRICE_CANDIDATES).forEach(c => picked.set(c.id, c));
     });
   });
-  return [...picked.values()]
-    .filter(c => ageDays(c.pt) >= maxAge)
+  // Art cards that have no picture yet are asked about again every 7 days (TCGdex adds pictures later).
+  const noPic = Object.values(db.cards).filter(c => !c.x && !c.b && !owned[c.id] && ageDays(c.pt) >= 7);
+  return [...new Set([...picked.values()].filter(c => ageDays(c.pt) >= maxAge).concat(noPic))]
     .sort((a, b) => (b.m ? 1 : 0) - (a.m ? 1 : 0) || Date.parse(a.pt || 0) - Date.parse(b.pt || 0)) // cards you picked by hand first
     .slice(0, limit);
 }
