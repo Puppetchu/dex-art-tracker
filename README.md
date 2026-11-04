@@ -94,6 +94,10 @@ One port, one page. Everyone who opens it sees a **view-only** version: they can
 - When a refresh finds no picture or no price, the last known picture and price are kept.
 - Your ticks, picks and currency are only ever changed by you.
 
+## Get price button
+
+A card without a price shows a **Get price** button (owner only, not on the view-only page). It asks the card service about that one card at once, ignoring the usual pause, stores the result and refreshes the page. If the card turns out not to be an art card, or the service has no price for it, the page says so.
+
 ## Generations
 
 The Pokémon tab is split into the nine generations, each with a header showing its range and how many Pokémon you have a card and an art card for. The "Jump to generation" menu next to the filter scrolls straight to the one you pick.
@@ -124,6 +128,6 @@ Saved on the server in `state.json`, so every device sees the same progress. "Sh
 
 ## Limits
 
-- Regular cards are matched to a Pokémon by name, so a few may be missing or wrong.
+- Regular cards are matched to a Pokémon by name (including Nidoran♀/♂, Farfetch’d and Sirfetch’d, which are spelled differently by the card service), so a few may still be missing or wrong.
 - Prices come from TCGdex (Cardmarket in €, TCGplayer in $). Some cards have none.
 - There is no login. Keep it on your home network or behind a VPN or an authenticated proxy.

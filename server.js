@@ -185,10 +185,19 @@ function prices(d) {
   });
   return { us, eu };
 }
+// Names that do not match PokeAPI's spelling once punctuation is removed.
+const ALIAS = { 83: ['farfetch d'], 865: ['sirfetch d'] };
+function dexByName(name, list) { // list: [[dex, [' token ', ...]], ...]
+  const raw = String(name || ''), t = ' ' + toks(raw) + ' ';
+  const out = list.filter(([, ks]) => ks.some(k => t.includes(k))).map(([n]) => n);
+  if (/♀/.test(raw) && !out.includes(29)) out.push(29); // Nidoran♀
+  if (/♂/.test(raw) && !out.includes(32)) out.push(32); // Nidoran♂
+  return out;
+}
+const speciesList = () => Object.entries(NM.names).map(([n, name]) => [+n, [' ' + toks(name) + ' '].concat((ALIAS[n] || []).map(a => ' ' + a + ' '))]);
 function nameDex(name) {
   if (!NM || !NM.names) return [];
-  const t = ' ' + toks(name || '') + ' ';
-  return Object.entries(NM.names).filter(([, nm]) => t.includes(' ' + toks(nm) + ' ')).map(([n]) => +n);
+  return dexByName(name, speciesList());
 }
 function cmId(d) {
   const c = d && d.pricing && d.pricing.cardmarket;
@@ -224,7 +233,7 @@ loadSpecies();
 // 1 if the card name contains a Pokémon name, 0 if not (trainers, energy), undefined if names are not loaded yet.
 function spOf(c) {
   if (!SP || String(c.id).startsWith('ja:')) return undefined;
-  if (c.sp === undefined) { const k = cmp(c.n || ''); c.sp = SP.some(s => k.includes(s)) ? 1 : 0; }
+  if (c.sp === undefined) { const k = cmp(c.n || ''); c.sp = (SP.some(s => k.includes(s)) || /[♀♂]/.test(c.n || '')) ? 1 : 0; }
   return c.sp;
 }
 
@@ -251,13 +260,10 @@ async function refreshNames() {
 // Regular cards have no dex number in the set listing, so they are matched to Pokémon by name.
 function matchRegular() {
   if (!NM || !NM.names || db.regMatched === NM.t) return;
-  const sp = Object.entries(NM.names).map(([n, name]) => [+n, ' ' + toks(name) + ' ']);
+  const sp = speciesList();
   for (const s of Object.values(db.sets)) {
     if (!s.scan || s.lang === 'ja') continue;
-    for (const c of s.cards) {
-      const t = ' ' + toks(c.n || '') + ' ';
-      c.d = sp.filter(([, k]) => t.includes(k)).map(([n]) => n);
-    }
+    for (const c of s.cards) c.d = dexByName(c.n, sp);
   }
   db.regMatched = NM.t;
 }
@@ -418,10 +424,10 @@ function pendingCards() {
   return out;
 }
 
-async function fetchCard(id) {
+async function fetchCard(id, fast) {
   const lang = langOf(id), p = pfx(lang);
   if (db.cards[id] && db.cards[id].x && db.cards[id].m) return; // you took this card off the art list: leave it
-  const d = await paced('/cards/' + encodeURIComponent(rawId(id)), lang);
+  const d = await paced('/cards/' + encodeURIComponent(rawId(id)), lang, fast);
   const old = db.cards[id];
   if (d && p === '' && d.category === 'Pokemon' && !(Array.isArray(d.dexId) && d.dexId.length)) { const g = nameDex(d.name); if (g.length) d.dexId = g; }
   if (d && qualifies(d, p)) {
@@ -531,6 +537,7 @@ async function exclusive(fn) {
 let bootCheck = true;
 async function tick() {
   if (DISABLE_REFRESH || running) return;
+  if (db.matchV !== 2) { db.regMatched = null; for (const st of Object.values(db.sets)) for (const c of st.cards || []) delete c.sp; db.matchV = 2; }
   if (!db.fix3) { // trainer art cards were rejected before: check those cards again once
     const f = foundIds();
     for (const [id, c] of Object.entries(db.cards)) if (c.x && !c.m && f.has(id)) delete db.cards[id];
@@ -777,6 +784,20 @@ const server = http.createServer(async (req, res) => {
       for (const i of ids) { if (await priceRegular(i, idx, true)) n++; }
       persist(true);
       return sendJSON(res, 200, { done: n });
+    }
+    // Fetch one card's details and price right now (the owner's button on a card without a price).
+    if (req.method === 'POST' && p === '/api/card/fetch') {
+      if (DISABLE_REFRESH) return sendJSON(res, 409, { error: 'The server is set to not contact the card service' });
+      const b = JSON.parse(await readBody(req, 1e4));
+      const id = String(b.id || '');
+      const idx = regIndex(), c = idx.get(id), rec = db.cards[id];
+      const s = db.sets[id.slice(0, id.lastIndexOf('-'))];
+      if (!c && !(rec && !rec.x)) return sendJSON(res, 404, { error: 'unknown card' });
+      const isArt = (rec && !rec.x) || (c && s && !rec && worth(s, c));
+      if (isArt) await fetchCard(id, true); else await priceRegular(id, idx, true);
+      persist(true);
+      const now = db.cards[id];
+      return sendJSON(res, 200, { ok: true, notArt: !!(isArt && !(now && !now.x)), art: !!(now && !now.x), price: now && !now.x ? { eu: now.eu, us: now.us } : (c ? { eu: c.eu, us: c.us } : null) });
     }
     if (req.method === 'POST' && p === '/api/card/mark') {
       const b = JSON.parse(await readBody(req, 1e5));

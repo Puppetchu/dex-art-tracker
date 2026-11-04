@@ -128,7 +128,7 @@ dialog::backdrop{background:#000b}
 @media (prefers-reduced-motion:reduce){.lens{animation:none}.bar i{transition:none}}
 @media (max-width:520px){h1{font-size:1.1rem}.legend{margin-left:0}}
 .ro-mode [data-do="any"],.ro-mode [data-do="art"],.ro-mode [data-do="have"]{pointer-events:none}
-.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn{display:none!important}
+.ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn{display:none!important}
 .ro-mode button:disabled{opacity:1}
 #roTag{display:none;margin-left:10px;padding:2px 9px;border-radius:99px;background:var(--screen);color:var(--lcd);font:700 .7rem var(--head);letter-spacing:.08em;text-transform:uppercase;vertical-align:middle}
 .ro-mode #roTag{display:inline-block}
@@ -356,12 +356,13 @@ function save(){
 function price(c){ var v=c&&c[st.cur]; return typeof v==='number'?v:null; }
 function fmt(v){ return v==null?'no price':(st.cur==='eu'?'€':'$')+v.toFixed(2); }
 function ageOk(c){ return c&&c.pt&&(Date.now()-Date.parse(c.pt))<30*864e5; }
+function getBtn(c){ return '<button type="button" class="mini" data-do="getp" data-id="'+esc(c.id)+'" title="Ask the card service for this card now">Get price</button>'; }
 function priceHTML(c){
   if(!c) return '';
   var isArt=c.a||c.t==='a';
-  if(c.pv) return '<div class="price" title="Known art card, price not fetched yet">price pending</div>';
-  if(!isArt&&!c.pt) return c.t==='p'?'':'<div class="price" title="Prices of regular cards are fetched slowly in the background">price not loaded yet</div>';
-  return '<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>';
+  if(c.pv) return '<div class="price" title="Known art card, price not fetched yet">price pending</div>'+getBtn(c);
+  if(!isArt&&!c.pt) return '<div class="price" title="Prices of regular cards are fetched slowly in the background">price not loaded yet</div>'+getBtn(c);
+  return '<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>'+(price(c)==null?getBtn(c):'');
 }
 function linkHTML(c){
   var q=[c.n,c.k||''].filter(Boolean).join(' ').trim().split(/\s+/).map(encodeURIComponent).join('+');
@@ -717,7 +718,7 @@ async function markArt(id,art){
 document.addEventListener('click',function(e){
   var t=e.target.closest('[data-do]'); if(!t) return;
   var a=t.dataset.do, n=+t.dataset.n, id=t.dataset.id;
-  if(RO&&/^(any|art|have|main|mark)$/.test(a)) return;
+  if(RO&&/^(any|art|have|main|mark|getp)$/.test(a)) return;
   if(a==='any'){
     if(artOwned(n)) return;
     if(anyOwned(n)){
@@ -750,6 +751,16 @@ document.addEventListener('click',function(e){
   }
   else if(a==='set'){ go('#/sets/'+encodeURIComponent(id)); }
   else if(a==='back'){ goBack('#/sets'); }
+  else if(a==='getp'){
+    t.disabled=true; t.textContent='Fetching…'; setStatus('Fetching the price…'); noteIn('Fetching the price…');
+    post('api/card/fetch',{id:id}).then(async function(r){
+      await loadData(); index();
+      if(curSet){ delete setCache[curSet]; await openSet(curSet,true); }
+      refresh();
+      var m=r.notArt?'That card turned out not to be an art card.':(r.price&&(r.price.eu!=null||r.price.us!=null)?'Price updated.':'The card service has no price for this card.');
+      setStatus(m); noteIn(m);
+    }).catch(function(e){ if(e.status===401){ location.reload(); return; } t.disabled=false; t.textContent='Get price'; setStatus(e.message); noteIn(e.message); });
+  }
   else if(a==='sf'){ setFilter=t.dataset.v; renderSets(); }
   else if(a==='tf'){ trFilter=t.dataset.v; renderTrainers(); }
 });
