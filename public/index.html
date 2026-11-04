@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dex Art Card Tracker</title>
+<meta name="robots" content="noindex">
+<!--DEX_MODE-->
 <style>
 /* Pokédex look: red shell, cyan lens, dark LCD panels. Red LED = nothing yet, yellow = have a card, green = have the art card. */
 :root{
@@ -94,6 +96,10 @@ h1{margin:0;font:800 1.45rem/1 var(--head);letter-spacing:.14em;text-transform:u
 .settile b{font:700 1rem var(--head)}
 .settile span{font-size:.78rem;color:var(--muted)}
 .settile .pct{font:600 .82rem var(--mono);color:var(--lcd)}
+.slbox{height:64px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#ffffff12;padding:6px;overflow:hidden}
+.slbox .slogo{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.slbox .sid{font:600 .8rem var(--mono);color:var(--muted)}
+.slbox.big{height:48px;min-width:96px;max-width:200px}
 .mbar{height:7px;border-radius:5px;background:#04121c;overflow:hidden}
 .mbar i{display:block;height:100%;background:var(--green)}
 .sethead{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
@@ -121,6 +127,13 @@ dialog::backdrop{background:#000b}
 #bk{width:100%;min-height:90px;font:12px var(--mono);background:var(--screen);border:1px solid var(--line);color:var(--lcd);border-radius:8px;padding:8px}
 @media (prefers-reduced-motion:reduce){.lens{animation:none}.bar i{transition:none}}
 @media (max-width:520px){h1{font-size:1.1rem}.legend{margin-left:0}}
+.ro-mode [data-do="any"],.ro-mode [data-do="art"],.ro-mode [data-do="have"]{pointer-events:none}
+.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #shareBtn{display:none!important}
+.ro-mode button:disabled{opacity:1}
+#roTag{display:none;margin-left:10px;padding:2px 9px;border-radius:99px;background:var(--screen);color:var(--lcd);font:700 .7rem var(--head);letter-spacing:.08em;text-transform:uppercase;vertical-align:middle}
+.ro-mode #roTag{display:inline-block}
+#shdlg input{width:100%;box-sizing:border-box;padding:8px;margin:8px 0;background:var(--screen);color:var(--lcd);border:1px solid var(--line);border-radius:6px;font:.85rem monospace}
+#shdlg p{margin:.5em 0;color:var(--muted);font-size:.85rem;line-height:1.4}
 </style>
 </head>
 <body>
@@ -129,7 +142,7 @@ dialog::backdrop{background:#000b}
   <div class="top">
     <div class="lens" aria-hidden="true"></div>
     <div class="leds" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
-    <h1>Dex Art Tracker</h1>
+    <h1>Dex Art Tracker<span id="roTag">View only</span></h1>
     <div class="legend" aria-label="Legend">
       <span><i class="dot r"></i>nothing yet</span><span><i class="dot y"></i>have a card</span><span><i class="dot g"></i>have the art card</span>
     </div>
@@ -138,8 +151,8 @@ dialog::backdrop{background:#000b}
     <div class="ro"><small>Any card</small><b id="sAny">0</b></div>
     <div class="ro"><small>Art card</small><b id="sArt">0</b></div>
     <div class="ro"><small>Pokémon with an art card</small><b id="sAvail">0</b></div>
-    <div class="ro" title="Price of the art cards you own. Owned cards are no longer re-priced."><small>Worth of owned art</small><b id="sWorth">-</b></div>
-    <div class="ro" title="Cheapest art card (or the one you picked) for every Pokémon you have no art card for yet"><small>Left to spend</small><b id="sCost">-</b></div>
+    <div class="ro" id="roWorth" title="Price of the art cards you own. Owned cards are no longer re-priced."><small>Worth of owned art</small><b id="sWorth">-</b></div>
+    <div class="ro" id="roCost" title="Cheapest art card (or the one you picked) for every Pokémon you have no art card for yet"><small>Left to spend</small><b id="sCost">-</b></div>
   </div>
   <div class="bar" title="Yellow: any card. Green: art card."><i class="any" id="barAny"></i><i class="art" id="barArt"></i></div>
 </header>
@@ -167,6 +180,7 @@ dialog::backdrop{background:#000b}
     <option value="us">$ TCGplayer</option>
   </select>
   <button id="refresh" type="button" title="Checks up to 25 missing cards or the oldest prices">Refresh prices</button>
+  <button id="shareBtn" type="button" title="Get a view-only link for friends">Share</button>
 </div>
 <div id="gens"></div>
 <div id="status">Loading…</div>
@@ -185,10 +199,23 @@ dialog::backdrop{background:#000b}
   </div>
   <div id="opts"></div>
 </dialog>
+<dialog id="shdlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong style="font:800 1.05rem var(--head)">Share a view-only copy</strong>
+    <button id="shClose" type="button">Close</button>
+  </div>
+  <div id="shBody"></div>
+</dialog>
 <dialog id="lb"><div id="lbBody"></div><button id="lbClose" type="button">Close</button></dialog>
 
 <script>
 (function(){
+var RO=!!window.DEX_READONLY, HIDEV=!!window.DEX_HIDE_VALUE;
+if(RO){
+  document.body.classList.add('ro-mode');
+  document.title='Pokémon art card collection (view only)';
+  if(HIDEV){ ['roWorth','roCost'].forEach(function(i){ var e=document.getElementById(i); if(e) e.style.display='none'; }); }
+}
 'use strict';
 var cards=[], regular=[], sets=[], setsById={}, names={}, maxDex=1025;
 var byDex={}, byReg={}, byId={};
@@ -198,7 +225,10 @@ var view='dex', curSet=null, setData=null, setFilter='all', setCache={}, dexOpen
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
-function setStatus(t){$('status').textContent=t;}
+function setStatus(t){
+  if(RO) t=String(t).replace(' Pick another one under "view".','').replace(' Open one to see every card and tick what you own.',' Open one to see every card.');
+  $('status').textContent=t;
+}
 async function call(url,opts){
   var r=await fetch(url,opts);
   var j=await r.json().catch(function(){return {};});
@@ -228,11 +258,26 @@ function picHTML(c,big){
   if(!l.length) return phHTML(c.n,subOf(c));
   return '<img loading="lazy" src="'+esc(l[0])+'" data-srcs="'+esc(l.slice(1).map(encodeURIComponent).join('|'))+'" data-n="'+esc(c.n)+'" data-sub="'+esc(subOf(c))+'" alt="'+esc(c.n)+'" data-do="zoom" data-id="'+esc(c.id)+'">';
 }
+function logoList(s){
+  var l=[];
+  if(s.lg){ l.push(s.lg+'.webp'); l.push(s.lg+'.png'); }
+  if(s.sy){ l.push(s.sy+'.webp'); }
+  var pid=ptcgId(s.id);
+  l.push('https://images.pokemontcg.io/'+pid+'/logo.png');
+  l.push('https://images.scrydex.com/pokemon/'+pid+'-logo/logo');
+  l.push('https://images.pokemontcg.io/'+pid+'/symbol.png');
+  return l;
+}
+function logoHTML(s){
+  var l=logoList(s);
+  return '<img class="slogo" loading="lazy" src="'+esc(l[0])+'" data-srcs="'+esc(l.slice(1).map(encodeURIComponent).join('|'))+'" data-hide="1" data-fb="'+esc(s.id)+'" alt="'+esc(s.name)+'">';
+}
 document.addEventListener('error',function(e){
   var t=e.target;
   if(!t||t.tagName!=='IMG'||t.dataset.srcs===undefined) return;
   var rest=t.dataset.srcs?t.dataset.srcs.split('|'):[];
   if(rest.length){ t.dataset.srcs=rest.slice(1).join('|'); t.src=decodeURIComponent(rest[0]); }
+  else if(t.dataset.hide){ var sp=document.createElement('span'); sp.className='sid'; sp.textContent=t.dataset.fb||''; t.replaceWith(sp); }
   else { var d=document.createElement('div'); d.innerHTML=phHTML(t.dataset.n,t.dataset.sub); t.replaceWith(d.firstChild); }
 },true);
 
@@ -269,6 +314,7 @@ async function loadState(){
 }
 var saveTimer=null;
 function save(){
+  if(RO) return;
   clearTimeout(saveTimer);
   saveTimer=setTimeout(function(){
     fetch('api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(st)}).catch(function(){});
@@ -412,6 +458,7 @@ function openLb(id){
   var c=lookup(id); if(!c) return;
   $('lbBody').innerHTML=picHTML(c,true).replace('data-do="zoom"','')+
     '<div style="margin-bottom:8px"><b>'+esc(c.n)+'</b><br><span style="color:var(--muted)">'+esc(subOf(c))+(c.r?' · '+esc(c.r):'')+'</span>'+(c.a||c.t==='a'?'<br><span class="price">'+fmt(price(c))+'</span>':'')+'</div>';
+  history.pushState({app:1,lb:1},'',location.href);
   $('lb').showModal();
 }
 
@@ -447,7 +494,7 @@ function renderSets(){
     list.forEach(function(s){
       var o=per[s.id]||0, p=s.n?Math.round(o/s.n*100):0;
       h.push('<button type="button" class="settile'+(o&&o>=s.n?' full':'')+'" data-do="set" data-id="'+esc(s.id)+'">'+
-        '<b>'+esc(s.name)+'</b><span>'+esc(s.date)+' · '+s.n+' cards · '+s.art+' art'+(s.promo?' · promo':'')+'</span>'+
+        '<div class="slbox">'+logoHTML(s)+'</div><b>'+esc(s.name)+'</b><span>'+esc(s.date)+' · '+s.n+' cards · '+s.art+' art'+(s.promo?' · promo':'')+'</span>'+
         '<div class="mbar"><i style="width:'+p+'%"></i></div><span class="pct">'+o+' / '+s.n+' · '+p+'%</span></button>');
     });
     h.push('</div>');
@@ -470,7 +517,7 @@ function renderSets(){
     return true;
   });
   var total=s.cards.length, p=total?Math.round(own/total*100):0;
-  h.push('<div class="sethead"><button type="button" data-do="back">← All sets</button><h2>'+esc(s.name)+'</h2><span>'+esc(s.date)+(s.promo?' · promo set':'')+'</span><span class="sp"></span>'+
+  h.push('<div class="sethead"><button type="button" data-do="back">← All sets</button>'+(setsById[s.id]?'<span class="slbox big">'+logoHTML(setsById[s.id])+'</span>':'')+'<h2>'+esc(s.name)+'</h2><span>'+esc(s.date)+(s.promo?' · promo set':'')+'</span><span class="sp"></span>'+
     [['all','All'],['miss','Missing'],['own','Owned'],['art','Art cards']].map(function(x){return '<button type="button" class="chip'+(setFilter===x[0]?' on':'')+'" data-do="sf" data-v="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>');
   h.push('<div class="setprog"><span>'+own+' / '+total+' ('+p+'%)</span><div class="mbar"><i style="width:'+p+'%"></i></div>'+
     (s.official?'<span>Main '+mainOwn+' / '+mainTot+'</span>':'')+(secTot?'<span>Secret '+secOwn+' / '+secTot+'</span>':'')+(artTot?'<span>Art '+artOwn+' / '+artTot+'</span>':'')+'</div>');
@@ -503,6 +550,46 @@ async function openSet(id,keepScroll){
   var y=window.scrollY; renderSets(); if(keepScroll) window.scrollTo(0,y); else window.scrollTo(0,0);
 }
 
+/* ---------- navigation: the browser's back and forward buttons stay inside the app ---------- */
+var scrollPos={}, curHash='', closingByRoute=false, skipPop=false, lbByPop=false;
+if('scrollRestoration' in history) history.scrollRestoration='manual';
+function hashNow(){ return location.hash||'#/dex'; }
+function go(h){
+  if(hashNow()===h) return;
+  scrollPos[hashNow()]=window.scrollY;
+  history.pushState({app:1},'',h);
+  applyRoute();
+}
+function goBack(fallback){
+  if(history.state&&history.state.app) history.back();
+  else { history.replaceState(null,'',fallback); applyRoute(); }
+}
+// Routes: #/dex   #/dex/25 (card list of one Pokémon)   #/sets   #/sets/<set id>
+async function applyRoute(){
+  var h=hashNow(), parts=h.replace(/^#\/?/,'').split('/'), keepTop=false;
+  curHash=h;
+  if(parts[0]==='sets'){
+    view='sets';
+    if($('dlg').open){ closingByRoute=true; $('dlg').close(); }
+    var id=parts.length>1&&parts[1]?decodeURIComponent(parts.slice(1).join('/')):null;
+    if(id){ if(curSet!==id) setFilter='all'; await openSet(id,true); }
+    else { curSet=null; setData=null; renderSets(); }
+  } else {
+    view='dex'; curSet=null; setData=null;
+    var n=parts[1]?+parts[1]:0;
+    render();
+    if(n>0){ openDex(n); keepTop=true; }
+    else if($('dlg').open){ closingByRoute=true; $('dlg').close(); }
+  }
+  if(!keepTop) requestAnimationFrame(function(){ window.scrollTo(0,scrollPos[h]||0); });
+}
+window.addEventListener('popstate',function(){
+  if($('lb').open){ lbByPop=true; $('lb').close(); return; }
+  if(skipPop){ skipPop=false; return; }
+  scrollPos[curHash]=window.scrollY;
+  applyRoute();
+});
+
 /* ---------- actions ---------- */
 async function markArt(id,art){
   try{ setStatus(art?'Reading the card details…':'Updating…'); await post('api/card/mark',{id:id,art:art}); }
@@ -514,6 +601,7 @@ async function markArt(id,art){
 document.addEventListener('click',function(e){
   var t=e.target.closest('[data-do]'); if(!t) return;
   var a=t.dataset.do, n=+t.dataset.n, id=t.dataset.id;
+  if(RO&&/^(any|art|have|main|mark)$/.test(a)) return;
   if(a==='any'){
     if(artOwned(n)) return;
     if(anyOwned(n)){
@@ -536,7 +624,7 @@ document.addEventListener('click',function(e){
     if(owned(id)) delete st.cards[id]; else st.cards[id]=1;
     save(); refresh();
   } else if(a==='main'){ st.pick[n]=id; save(); refresh(); }
-  else if(a==='view'){ openDex(n); }
+  else if(a==='view'){ go('#/dex/'+n); }
   else if(a==='more'){ regShown+=60; fillDex(); }
   else if(a==='zoom'){ openLb(id); }
   else if(a==='mark'){
@@ -544,15 +632,26 @@ document.addEventListener('click',function(e){
     if(!art&&!isArmed('unart:'+id)){ arm('unart:'+id); refresh(); return; }
     markArt(id,art);
   }
-  else if(a==='set'){ openSet(id); }
-  else if(a==='back'){ curSet=null; setData=null; renderSets(); window.scrollTo(0,0); }
+  else if(a==='set'){ go('#/sets/'+encodeURIComponent(id)); }
+  else if(a==='back'){ goBack('#/sets'); }
   else if(a==='sf'){ setFilter=t.dataset.v; renderSets(); }
 });
-$('tabDex').addEventListener('click',function(){view='dex';render();});
-$('tabSets').addEventListener('click',function(){view='sets';render();});
+$('tabDex').addEventListener('click',function(){go('#/dex');});
+$('tabSets').addEventListener('click',function(){go('#/sets');});
 $('dlgClose').addEventListener('click',function(){$('dlg').close();});
-$('dlg').addEventListener('close',function(){dexOpen=null;});
+$('dlg').addEventListener('close',function(){
+  dexOpen=null;
+  if(closingByRoute){ closingByRoute=false; return; }
+  if(/^#\/dex\/\d+/.test(location.hash)){
+    if(history.state&&history.state.app) history.back();
+    else { history.replaceState(null,'','#/dex'); curHash='#/dex'; }
+  }
+});
 $('lbClose').addEventListener('click',function(){$('lb').close();});
+$('lb').addEventListener('close',function(){
+  if(lbByPop){ lbByPop=false; return; }
+  if(history.state&&history.state.lb){ skipPop=true; history.back(); }
+});
 $('lb').addEventListener('click',function(e){ if(e.target===$('lb')) $('lb').close(); });
 $('q').addEventListener('input',render);
 $('filter').addEventListener('change',render);
@@ -560,6 +659,7 @@ $('setSort').addEventListener('change',render);
 $('cur').addEventListener('change',function(){st.cur=$('cur').value;save();index();render();});
 
 async function pollRefresh(){
+  if(RO) return;
   for(;;){
     var s=await getJSON('api/status').catch(function(){return null;});
     if(!s||!s.running) break;
@@ -578,6 +678,33 @@ $('refresh').addEventListener('click',async function(){
   }
   pollRefresh();
 });
+var shArm=false;
+function shDraw(s){
+  var b=$('shBody');
+  if(!s.enabled){ b.innerHTML='<p>Sharing is switched off. Set <b>SHARE_PORT</b> to a port number (for example 8081) and restart the container.</p>'; return; }
+  var url=location.protocol+'//'+location.hostname+':'+s.port+'/'+s.key+'/';
+  b.innerHTML='<p>Friends who open this link can look around but cannot change anything'+(s.showValue?'.':' and cannot see the money totals.')+'</p>'+
+    '<input id="shUrl" readonly value="'+url+'" aria-label="Share link">'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap"><button id="shCopy" type="button">Copy link</button>'+
+    (s.fixed?'':'<button id="shNew" type="button">'+(shArm?'Really make a new link?':'Make a new link')+'</button>')+'</div>'+
+    '<p>This address works on your home network. To let friends outside your home reach it, publish only the share port ('+s.port+') through a reverse proxy or tunnel. Never publish the main page (8080).</p>';
+  $('shCopy').onclick=function(){
+    var i=$('shUrl'); i.select();
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).catch(function(){ document.execCommand('copy'); });
+    else document.execCommand('copy');
+    $('shCopy').textContent='Copied';
+  };
+  var nb=$('shNew');
+  if(nb) nb.onclick=async function(){
+    if(!shArm){ shArm=true; shDraw(s); return; }
+    try{ var r=await post('api/share/reset'); s.key=r.key; shArm=false; shDraw(s); }catch(e){ $('shBody').insertAdjacentHTML('beforeend','<p>Could not make a new link.</p>'); }
+  };
+}
+$('shareBtn').addEventListener('click',async function(){
+  shArm=false; $('shBody').innerHTML='<p>Loading…</p>'; $('shdlg').showModal();
+  try{ shDraw(await getJSON('api/share')); }catch(e){ $('shBody').innerHTML='<p>Could not reach the server.</p>'; }
+});
+$('shClose').addEventListener('click',function(){ $('shdlg').close(); });
 $('exp').addEventListener('click',function(){
   var b=$('bk'); b.hidden=false; b.value=JSON.stringify(st); b.select();
 });
@@ -594,9 +721,9 @@ $('imp').addEventListener('click',function(){
   try{
     await loadState();
     await loadData();
-    index(); render();
+    index(); await applyRoute();
     var s=await getJSON('api/status').catch(function(){return null;});
-    if(s&&s.running) pollRefresh();
+    if(s&&s.running&&!RO) pollRefresh();
   }catch(e){
     setStatus('Could not load card data ('+(e&&e.message||e)+'). Reload the page to try again.');
   }

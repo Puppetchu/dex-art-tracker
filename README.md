@@ -18,6 +18,7 @@ Open http://localhost:8080 (or the server's address on your network).
 - **Sets tab.** Every scanned set, with progress (cards owned / cards in the set). Open a set to see all its cards, tick the ones you own, and filter by All / Missing / Owned / Art cards. The summary shows the main set, the secret cards and the art cards separately.
 - **Worth of owned art** is the price of the art cards you checked. **Left to spend** is the cheapest art card (or the one you picked) for every Pokémon you have no art card for yet.
 - **Click a picture** to see it large.
+- **Back and forward buttons** work inside the page: Pokémon, Sets, one set, a card list and the large picture each get their own step, and every view has its own link (for example `#/sets/sv03.5`).
 
 ## Art cards and promos
 
@@ -30,7 +31,19 @@ The data cannot tell every art card apart (for example an older alternate art su
 
 ## Pictures
 
+Sets show their logo (then their symbol) from TCGdex, with pokemontcg.io and Scrydex as backups and the set's id as text if nothing loads. For cards:
+
 Pictures come from TCGdex. Brand new cards and many promos have no picture there yet. In that case the page tries pokemontcg.io and then Scrydex, and finally shows a Poké Ball placeholder with the card's name and number.
+
+## Other languages (check first)
+
+Japanese and Chinese sets, and cheaper copies in other languages, are not part of the database yet. TCGdex lists them, but its documentation does not say whether those cards carry prices. To find out on your own server, open these in a browser (one at a time, 20 seconds apart):
+
+- `http://<server>:8080/api/lang-check?lang=ja`
+- `http://<server>:8080/api/lang-check?lang=zh-tw`
+- `http://<server>:8080/api/lang-check?lang=zh-cn`
+
+Each check reads the newest set of that language and reports, for four of its newest cards, the rarity name, the dex number and whether a price exists. It costs about 8 requests.
 
 ## How the local database works
 
@@ -42,6 +55,16 @@ Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokea
 4. **Pace.** At most 200 requests per day, one per second. The first build of the database runs in one go unless you set `STAGGER_INITIAL`. Cards that are still waiting for their details are shown on the status line and appear as the server works through them.
 
 "Refresh prices" in the page fetches at most 25 cards (missing ones first, then the oldest prices), once per 10 minutes.
+
+## Share a view-only copy
+
+A second, read-only copy of the page runs on port 8081 (`SHARE_PORT`). Press **Share** on the main page to see the link, for example `http://yourserver:8081/Xk3p9Qa2Lw1z/`.
+
+- Only the exact link works. Any other address gives "Not found". "Make a new link" kills the old one.
+- Friends can browse Pokémon, sets and cards, but cannot tick, pick, mark or refresh anything. The server also refuses every write on that port.
+- The money totals are hidden unless `SHARE_SHOW_VALUE=1`.
+- To share outside your home network, publish **only** the share port (reverse proxy or tunnel, ideally with https). Never publish port 8080, which can change your ticks.
+- Unraid: add a second port to the container (container port 8081, any free host port).
 
 ## Your ticks
 
@@ -59,6 +82,9 @@ Saved on the server in `state.json`, so every device sees the same progress. "Sh
 | `RARITIES` | Illustration Rare,Special Illustration Rare,Promo | Art card rarities, case-insensitive |
 | `PROMO_AS_ART` | 1 | 0 = promo cards only count when their rarity is listed above |
 | `DISABLE_REFRESH` | 0 | 1 = never contact the APIs |
+| `SHARE_PORT` | 8081 | Port of the view-only page, 0 = off |
+| `SHARE_KEY` | random | Fixed link text instead of a random one |
+| `SHARE_SHOW_VALUE` | 0 | 1 = friends also see the money totals |
 
 ## Limits
 

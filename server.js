@@ -15,6 +15,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const crypto = require('crypto');
 
 const PORT = +process.env.PORT || 8080;
 const DATA_DIR = process.env.DATA_DIR || '/data';
@@ -35,6 +36,11 @@ const RARITIES = (process.env.RARITIES || 'Illustration Rare,Special Illustratio
 const RAR = new Set(RARITIES);
 // 1 (default): every Pokémon card from a promo set counts as an art card, whatever its rarity label.
 const PROMO_AS_ART = process.env.PROMO_AS_ART !== '0';
+
+// View-only copy of the page for friends, on its own port. Only GET requests, and only under a private link.
+const SHARE_PORT = process.env.SHARE_PORT !== undefined ? +process.env.SHARE_PORT : 8081; // 0 = off
+const SHARE_SHOW_VALUE = process.env.SHARE_SHOW_VALUE === '1'; // 1 = friends also see "worth" and "left to spend"
+const SHARE_FILE = path.join(DATA_DIR, 'share.json');
 
 const CARDS_FILE = path.join(DATA_DIR, 'cards.json');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -61,6 +67,7 @@ db.regMatched = db.regMatched || null;
 
 // Pokémon TCG Pocket sets (A1, A2a, B1, P-A ...) are not physical cards.
 const isPocket = id => /^(?:[AB]\d+[a-z]?|P-[AB])$/i.test(String(id));
+const noExt = u => u ? String(u).replace(/\.(?:webp|png|jpg)$/, '') : null;
 const cleanBase = u => u ? String(u).replace(/\/(?:low|high)\.(?:webp|png|jpg)$/, '') : null;
 
 // Upgrade data written by earlier versions.
@@ -206,7 +213,8 @@ function exportCards() {
       if (!rec && isCandidate(s, c) && spOf(c) !== 0) continue; // not looked at yet
       if (c.d && c.d.length) regular.push({ id: c.id, n: c.n, sid, k: c.l, b: c.i || null, d: c.d });
     }
-    sets.push({ id: sid, name: s.name, date: s.date || '', official: s.official, total: s.total, n: s.cards.length, art: a, promo: s.promo ? 1 : 0 });
+    sets.push({ id: sid, name: s.name, date: s.date || '', official: s.official, total: s.total, n: s.cards.length, art: a, promo: s.promo ? 1 : 0,
+      lg: noExt(s.lg), sy: noExt(s.sy) });
   }
   lastExport = { art: art.length, regular: regular.length, sets: sets.length };
   if (!art.length && !regular.length && !sets.length) return;
@@ -240,9 +248,19 @@ function persist(force) {
 }
 
 // ---------- building and updating the database ----------
+// Set logo and symbol pictures come with the set list (addresses without a file extension).
+function applyLogos(list) {
+  for (const s of list) {
+    const t = db.sets[s.id];
+    if (!t) continue;
+    if (s.logo) t.lg = s.logo;
+    if (s.symbol) t.sy = s.symbol;
+  }
+}
 async function syncSets() {
   const list = await paced('/sets');
   if (!Array.isArray(list)) throw new Error('Unexpected answer for the set list');
+  applyLogos(list); db.logosDone = true;
   let added = 0;
   for (const s of list) {
     const have = db.sets[s.id];
@@ -256,6 +274,7 @@ async function syncSets() {
     const scan = !pocket && date >= MIN_SET_DATE;
     db.sets[s.id] = {
       name: d.name, date, scan, pocket: !!pocket, promo: /promo/i.test(d.name || ''),
+      lg: s.logo || d.logo || null, sy: s.symbol || d.symbol || null,
       official: (d.cardCount && d.cardCount.official) || 0,
       total: (d.cardCount && d.cardCount.total) || 0,
       cards: scan ? (d.cards || []).map(c => ({ id: c.id, l: String(c.localId), n: c.name, i: c.image || null })) : [],
@@ -343,6 +362,10 @@ async function tick() {
   await exclusive(async () => {
     unlimited = !db.initialDone && !STAGGER_INITIAL;
     await refreshNames();
+    if (!db.logosDone && canSpend()) { // one request: fetch set pictures for sets stored by an older version
+      const list = await paced('/sets');
+      if (Array.isArray(list)) { applyLogos(list); db.logosDone = true; persist(true); }
+    }
     if ((!db.setsChecked || ageDays(db.setsChecked) >= SETS_CHECK_DAYS) && canSpend()) await syncSets();
     await backfill();
     if (!db.initialDone && db.setsChecked && pendingCards().length === 0) {
@@ -361,6 +384,48 @@ async function manualRun() {
   if (n < 25) for (const c of planPriceRefresh(0, 25 - n)) await fetchCard(c.id);
 }
 
+// Diagnostic: asks TCGdex about one language and reports whether its newest cards carry rarity, dex numbers and prices.
+let lastLang = 0;
+async function langCheck(lang) {
+  if (!/^[a-z]{2}(?:-[a-z]{2})?$/i.test(lang)) throw new Error('Use a language code such as ja, zh-tw, zh-cn, ko, fr, de');
+  const base = 'https://api.tcgdex.net/v2/' + lang.toLowerCase();
+  const out = { language: lang, steps: [], rarities: {}, samples: [] };
+  async function get(p) {
+    rollBudget(); db.budget.used++;
+    let r;
+    try { r = await fetch(base + p, { signal: AbortSignal.timeout(30000), headers: { 'User-Agent': 'dex-art-tracker' } }); }
+    catch (e) { out.steps.push(p + ' -> ' + e.message); return null; }
+    out.steps.push(p + ' -> HTTP ' + r.status);
+    await sleep(REQUEST_DELAY_MS);
+    return r.ok ? r.json() : null;
+  }
+  const list = await get('/sets');
+  if (!Array.isArray(list)) { out.summary = 'Could not read the set list.'; return out; }
+  out.setCount = list.length;
+  out.setsWithLogo = list.filter(x => x.logo).length;
+  let best = null;
+  for (const x of list.slice(-4)) {
+    const d = await get('/sets/' + encodeURIComponent(x.id));
+    if (d && (!best || String(d.releaseDate) > String(best.releaseDate))) best = d;
+  }
+  if (!best) { out.summary = 'Could not read any set.'; return out; }
+  const off = (best.cardCount && best.cardCount.official) || 0;
+  out.newestSetChecked = { id: best.id, name: best.name, releaseDate: best.releaseDate, official: off, total: best.cardCount && best.cardCount.total, cardsListed: (best.cards || []).length };
+  let pick = (best.cards || []).filter(c => /^\d+$/.test(String(c.localId)) && +c.localId > off).slice(-4);
+  if (!pick.length) pick = (best.cards || []).slice(-4);
+  for (const c of pick) {
+    const d = await get('/cards/' + encodeURIComponent(c.id));
+    if (!d) continue;
+    const pr = prices(d);
+    out.rarities[d.rarity] = (out.rarities[d.rarity] || 0) + 1;
+    out.samples.push({ id: d.id, name: d.name, rarity: d.rarity, category: d.category, dexId: d.dexId || null, hasImage: !!d.image,
+      hasPricing: !!d.pricing, pricingFrom: d.pricing ? Object.keys(d.pricing) : [], eur: pr.eu, usd: pr.us });
+  }
+  const priced = out.samples.filter(x => x.eur != null || x.usd != null).length;
+  out.summary = out.samples.length + ' newest cards checked, ' + priced + ' with a price, ' + out.samples.filter(x => x.dexId).length + ' with a dex number.';
+  return out;
+}
+
 function status() {
   rollBudget();
   return {
@@ -371,6 +436,20 @@ function status() {
     setsChecked: db.setsChecked, initialDone: db.initialDone,
     requestsToday: db.budget.used, dailyRequests: DAILY_REQUESTS,
   };
+}
+
+// ---------- share link ----------
+const makeKey = () => crypto.randomBytes(9).toString('base64url');
+const envKey = String(process.env.SHARE_KEY || '').trim();
+const shareFixed = /^[A-Za-z0-9_-]{4,64}$/.test(envKey);
+if (envKey && !shareFixed) log('SHARE_KEY ignored: use 4 to 64 letters, numbers, - or _');
+let shareKey = shareFixed ? envKey : ((readJSON(SHARE_FILE) || {}).key || null);
+if (!shareKey) { shareKey = makeKey(); writeJSON(SHARE_FILE, { key: shareKey }); }
+const safeEq = (a, b) => { const A = Buffer.from(String(a)), B = Buffer.from(String(b)); return A.length === B.length && crypto.timingSafeEqual(A, B); };
+function indexHtml(readonly) {
+  let h = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
+  if (readonly) h = h.replace('<!--DEX_MODE-->', '<script>window.DEX_READONLY=true;window.DEX_HIDE_VALUE=' + (!SHARE_SHOW_VALUE) + ';</script>');
+  return h;
 }
 
 // ---------- HTTP ----------
@@ -418,9 +497,23 @@ const server = http.createServer(async (req, res) => {
       return s ? sendJSON(res, 200, s) : sendJSON(res, 404, { error: 'unknown set' });
     }
     if (req.method === 'GET' && p === '/api/state') return sendJSON(res, 200, readJSON(STATE_FILE) || {});
+    if (req.method === 'GET' && p === '/api/share') return sendJSON(res, 200, { enabled: SHARE_PORT > 0, port: SHARE_PORT, key: shareKey, fixed: shareFixed, showValue: SHARE_SHOW_VALUE });
+    if (req.method === 'GET' && p === '/api/lang-check') {
+      if (DISABLE_REFRESH) return sendJSON(res, 409, { error: 'The server is set to not contact the card service' });
+      if (Date.now() - lastLang < 20000) return sendJSON(res, 429, { error: 'wait 20 seconds between checks' });
+      lastLang = Date.now();
+      const out = await langCheck(u.searchParams.get('lang') || 'ja');
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' });
+      return res.end(JSON.stringify(out, null, 1));
+    }
     // Writing requests must be JSON: a web page on another site cannot send that without permission.
     if (req.method !== 'GET' && !(req.headers['content-type'] || '').includes('application/json')) return sendJSON(res, 415, { error: 'JSON required' });
 
+    if (req.method === 'POST' && p === '/api/share/reset') {
+      if (shareFixed) return sendJSON(res, 409, { error: 'The link is fixed by the SHARE_KEY setting' });
+      shareKey = makeKey(); writeJSON(SHARE_FILE, { key: shareKey });
+      return sendJSON(res, 200, { key: shareKey });
+    }
     if (req.method === 'PUT' && p === '/api/state') {
       const s = JSON.parse(await readBody(req, 5e6));
       if (!s || typeof s.own !== 'object' || Array.isArray(s.own)) return sendJSON(res, 400, { error: 'bad state' });
@@ -459,9 +552,41 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// Read-only server: GET only, everything lives under /<key>/ so the page's relative addresses just work.
+const hits = new Map();
+const limited = ip => { const n = Date.now(), h = hits.get(ip); if (!h || n - h.t > 60000) { hits.set(ip, { t: n, n: 1 }); return false; } return ++h.n > 600; };
+const shareServer = http.createServer((req, res) => {
+  const u = new URL(req.url, 'http://x');
+  const ip = req.socket.remoteAddress || '';
+  const hdr = { 'X-Robots-Tag': 'noindex', 'X-Content-Type-Options': 'nosniff' };
+  try {
+    if (limited(ip)) { res.writeHead(429, hdr); return res.end('Slow down'); }
+    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, Object.assign({ Allow: 'GET, HEAD' }, hdr)); return res.end(); }
+    const seg = u.pathname.split('/');
+    if (!seg[1] || !safeEq(seg[1], shareKey)) { res.writeHead(404, hdr); return res.end('Not found'); }
+    if (seg.length === 2) { res.writeHead(301, Object.assign({ Location: '/' + shareKey + '/' }, hdr)); return res.end(); }
+    const rest = '/' + seg.slice(2).join('/');
+    if (rest === '/') {
+      res.writeHead(200, Object.assign({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }, hdr));
+      return res.end(indexHtml(true));
+    }
+    if (rest === '/data/cards.json') return sendCompressed(req, res, CARDS_FILE);
+    if (rest === '/data/names.json') return sendFile(res, NAMES_FILE);
+    if (rest === '/api/state') return sendJSON(res, 200, readJSON(STATE_FILE) || {});
+    if (rest === '/api/status') return sendJSON(res, 200, { count: lastExport.art, regular: lastExport.regular, running: false, backlog: 0, pricesDue: 0, sets: { scanned: lastExport.sets } });
+    if (rest === '/api/set') {
+      const s = setPayload(u.searchParams.get('id') || '');
+      return s ? sendJSON(res, 200, s) : sendJSON(res, 404, { error: 'unknown set' });
+    }
+    res.writeHead(404, hdr); res.end('Not found');
+  } catch (e) { res.writeHead(500, hdr); res.end('Error'); }
+});
+shareServer.on('error', e => log('view-only server could not start:', e.message));
+
 server.listen(PORT, () => {
   log('listening on', PORT, '| data dir', DATA_DIR, '| up to', DAILY_REQUESTS, 'requests per day');
   try { exportCards(); } catch (e) { log('export failed:', e.message); }
   tick();
   setInterval(tick, 3600 * 1000);
+  if (SHARE_PORT > 0 && SHARE_PORT !== PORT) shareServer.listen(SHARE_PORT, () => log('view-only page on port', SHARE_PORT, '| link path: /' + shareKey + '/'));
 });
