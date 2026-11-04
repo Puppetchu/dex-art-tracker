@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dex Art Card Tracker</title>
+<style>
+:root{
+  --bg:#f3f4f7; --panel:#ffffff; --fg:#1b1f2a; --muted:#677087; --line:#dde1ea;
+  --accent:#d7263d; --ok:#1f9d63; --chip:#e8ebf2;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#12141b; --panel:#1c1f2a; --fg:#eceef5; --muted:#99a1b8; --line:#2c3040; --accent:#ff5468; --ok:#3ccf8e; --chip:#2a2e3d; color-scheme:dark; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:12px max(16px,env(safe-area-inset-left)) 10px}
+h1{margin:0 0 8px;font-size:1.15rem;letter-spacing:.01em}
+.stats{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.9rem;margin-bottom:10px}
+.stats b{font-variant-numeric:tabular-nums}
+.bar{height:6px;border-radius:3px;background:var(--chip);overflow:hidden;margin-bottom:10px}
+.bar>i{display:block;height:100%;background:var(--ok);width:0}
+.controls{display:flex;flex-wrap:wrap;gap:8px}
+input,select,button{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 10px;min-width:0}
+input[type=search]{flex:1 1 160px}
+button{cursor:pointer}
+button:hover{border-color:var(--muted)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+#status,#gens{padding:8px max(16px,env(safe-area-inset-left)) 0;color:var(--muted);font-size:.85rem}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:12px;padding:12px max(16px,env(safe-area-inset-left)) 40px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.tile.done{border-color:var(--ok)}
+.pic{aspect-ratio:5/7;background:var(--chip);border-radius:5px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem;text-align:center;padding:4px}
+.pic img{width:100%;height:100%;object-fit:contain;display:block;cursor:pointer}
+.name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.name span{color:var(--muted);font-weight:400;font-variant-numeric:tabular-nums;margin-right:4px}
+.meta{font-size:.78rem;color:var(--muted);min-height:2.3em}
+.price{font-weight:600;font-variant-numeric:tabular-nums}
+.row{display:flex;gap:6px}
+.row button{flex:1;padding:5px 4px;font-size:.8rem}
+.row button.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.alt{font-size:.78rem;padding:4px 6px;background:none;border-style:dashed;color:var(--muted)}
+dialog{max-width:min(900px,94vw);width:100%;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:14px}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+#opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:10px;max-height:70vh;overflow:auto}
+.opt{border:1px solid var(--line);border-radius:8px;padding:6px;font-size:.78rem;display:flex;flex-direction:column;gap:4px}
+.opt.sel{border-color:var(--accent)}
+.sec{grid-column:1/-1;font-weight:600;margin-top:6px}
+.opt img{width:100%;aspect-ratio:5/7;object-fit:contain;background:var(--chip);border-radius:4px}
+.opt a{color:var(--accent)}
+.tools{display:flex;flex-wrap:wrap;gap:8px;padding:0 max(16px,env(safe-area-inset-left)) 24px}
+textarea{width:100%;min-height:90px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px;font:12px monospace}
+</style>
+</head>
+<body>
+<header>
+  <h1>Dex Art Card Tracker</h1>
+  <div class="stats">
+    <span>Any card: <b id="sAny">0</b></span>
+    <span>Art card: <b id="sArt">0</b></span>
+    <span>Pokémon with an art card: <b id="sAvail">0</b></span>
+    <span title="Last known price of the art cards you own. Prices of owned cards are no longer updated.">Worth of owned art cards: <b id="sWorth">-</b></span>
+    <span title="Cheapest art card for every Pokémon you don't have an art card for yet">Left to spend to complete: <b id="sCost">-</b></span>
+  </div>
+  <div class="bar"><i id="barFill"></i></div>
+  <div class="controls">
+    <input id="q" type="search" placeholder="Search name or dex number">
+    <select id="filter" aria-label="Filter">
+      <option value="all">All Pokémon</option>
+      <option value="noany">Missing any card</option>
+      <option value="noart">Missing art card (one exists)</option>
+      <option value="haveart">Have art card</option>
+      <option value="noexist">No art card exists yet</option>
+    </select>
+    <select id="cur" aria-label="Currency">
+      <option value="eu">Prices in € (Cardmarket)</option>
+      <option value="us">Prices in $ (TCGplayer)</option>
+    </select>
+    <button id="refresh" type="button" title="Checks up to 25 missing cards or the oldest prices">Refresh prices</button>
+  </div>
+</header>
+<div id="gens"></div>
+<div id="status">Loading…</div>
+<main id="grid"></main>
+<section class="tools">
+  <button id="exp" type="button">Show backup text</button>
+  <button id="imp" type="button">Restore from backup text</button>
+  <textarea id="bk" hidden aria-label="Backup text"></textarea>
+</section>
+
+<dialog id="dlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong id="dlgTitle"></strong>
+    <button id="dlgClose" type="button">Close</button>
+  </div>
+  <div id="opts"></div>
+</dialog>
+
+<script>
+(function(){
+'use strict';
+var KS='dexArt.state.v1';
+var cards=[], regular=[], byReg={}, names={}, byDex={}, maxDex=1025;
+var st={own:{},pick:{},cur:'eu'};
+
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+function lsGet(k){try{var v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+function setStatus(t){$('status').textContent=t;}
+
+async function getJSON(url,opts){
+  var r=await fetch(url,opts);
+  if(!r.ok){ var e=new Error('HTTP '+r.status); e.status=r.status; throw e; }
+  return r.json();
+}
+
+function showGens(s){
+  if(!s||!s.sets) return;
+  var t=s.count+' art cards and '+s.regular+' regular cards stored from '+s.sets.scanned+' sets';
+  if(s.backlog) t+=' · '+s.backlog+' art cards still to fetch';
+  t+=' · '+s.pricesDue+' prices due for an update';
+  if(s.setsChecked) t+=' · new sets last checked '+new Date(s.setsChecked).toLocaleDateString(undefined,{day:'numeric',month:'short'});
+  $('gens').textContent=t;
+}
+
+async function loadData(){
+  for(;;){
+    try{ var c=await getJSON('data/cards.json'); cards=c.cards||[]; regular=c.regular||[]; break; }
+    catch(e){
+      if(e.status!==404) throw e;
+      var s=await getJSON('api/status').catch(function(){return null;});
+      showGens(s);
+      setStatus('The server is building its card database'+(s&&s.sets?' ('+s.count+' art cards stored, '+s.backlog+' still to fetch)':'')+'. This can take 20 to 30 minutes the first time. This page checks again in 15 seconds.');
+      await sleep(15000);
+    }
+  }
+  try{ showGens(await getJSON('api/status')); }catch(e){}
+  try{ var n=await getJSON('data/names.json'); names=n.names||{}; maxDex=n.max||maxDex; }catch(e){}
+}
+
+async function loadState(){
+  var s=null, fromLocal=false;
+  try{ s=await getJSON('api/state'); }catch(e){}
+  if(!s||!s.own){ s=lsGet(KS); fromLocal=!!(s&&s.own); }
+  if(s&&s.own) st={own:s.own,pick:s.pick||{},cur:s.cur||'eu'};
+  $('cur').value=st.cur;
+  if(fromLocal) save();
+}
+var saveTimer=null;
+function save(){
+  lsSet(KS,st);
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(function(){
+    fetch('api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(st)}).catch(function(){});
+  },400);
+}
+
+function price(c){ var v=c[st.cur]; return typeof v==='number'?v:null; }
+function fmt(v){ return v==null?'no price':(st.cur==='eu'?'€':'$')+v.toFixed(2); }
+
+function index(){
+  byDex={}; byReg={};
+  regular.forEach(function(c){ (c.d||[]).forEach(function(n){ (byReg[n]=byReg[n]||[]).push(c); }); });
+  cards.forEach(function(c){ (c.d||[]).forEach(function(n){ (byDex[n]=byDex[n]||[]).push(c); }); });
+  Object.keys(byDex).forEach(function(n){
+    byDex[n].sort(function(a,b){
+      var pa=price(a), pb=price(b);
+      if(pa===null&&pb===null) return 0;
+      if(pa===null) return 1; if(pb===null) return -1;
+      return pa-pb;
+    });
+    if(+n>maxDex) maxDex=+n;
+  });
+}
+function chosen(n){
+  var list=byDex[n]; if(!list||!list.length) return null;
+  var pid=st.pick[n];
+  if(pid){ for(var i=0;i<list.length;i++) if(list[i].id===pid) return list[i]; }
+  return list[0];
+}
+function own(n){ return st.own[n]||{any:false,art:false}; }
+
+function render(){
+  var q=$('q').value.trim().toLowerCase(), f=$('filter').value;
+  var html=[], shown=0, any=0, art=0, avail=0, cost=0, costMissing=0, worth=0;
+  for(var n=1;n<=maxDex;n++){
+    var o=own(n), c=chosen(n), nm=names[n]||('#'+n);
+    if(o.any) any++; if(o.art) art++;
+    if(c){ avail++; var p=price(c);
+      if(!o.art){ if(p==null) costMissing++; else cost+=p; }
+      else if(p!=null){ worth+=p; } }
+    if(q && nm.toLowerCase().indexOf(q)<0 && String(n)!==q) continue;
+    if(f==='noany'&&o.any) continue;
+    if(f==='noart'&&(o.art||!c)) continue;
+    if(f==='haveart'&&!o.art) continue;
+    if(f==='noexist'&&c) continue;
+    shown++;
+    var cnt=(byDex[n]||[]).length, rcnt=(byReg[n]||[]).length;
+    var parts=[]; if(cnt>1) parts.push(cnt+' art cards'); if(rcnt) parts.push(rcnt+' regular');
+    html.push('<div class="tile'+(o.art?' done':'')+'" data-n="'+n+'">'+
+      '<div class="pic">'+(c?'<img loading="lazy" src="'+esc(c.i)+'" alt="'+esc(c.n)+'" data-act="zoom">':'No art card yet')+'</div>'+
+      '<div class="name" title="'+esc(nm)+'"><span>'+String(n).padStart(4,'0')+'</span>'+esc(nm)+'</div>'+
+      '<div class="meta">'+(c?esc(c.r)+'<br>'+esc(c.s):'&nbsp;')+'</div>'+
+      (c?'<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>':'')+
+      '<div class="row"><button type="button" data-act="any" class="'+(o.any?'on':'')+'">'+(o.any?'✓ ':'')+'Any card</button>'+
+      '<button type="button" data-act="art" class="'+(o.art?'on':'')+'">'+(o.art?'✓ ':'')+'Art card</button></div>'+
+      (parts.length?'<button type="button" class="alt" data-act="opts">'+parts.join(', ')+' · view</button>':'')+
+      '</div>');
+  }
+  $('grid').innerHTML=html.join('');
+  $('sAny').textContent=any+' / '+maxDex;
+  $('sArt').textContent=art+' / '+avail;
+  $('sAvail').textContent=avail+' of '+maxDex;
+  $('sWorth').textContent=(st.cur==='eu'?'€':'$')+worth.toFixed(2);
+  $('sCost').textContent=(st.cur==='eu'?'€':'$')+cost.toFixed(2)+(costMissing?' (+'+costMissing+' unpriced)':'');
+  $('barFill').style.width=(avail?Math.round(art/avail*100):0)+'%';
+  setStatus(shown+' shown. Cheapest art card per Pokémon. Once you own a Pokémon\'s art card its price is no longer updated.');
+}
+
+function openOpts(n){
+  var list=byDex[n]||[], cur=chosen(n);
+  var reg=byReg[n]||[];
+  $('dlgTitle').textContent=(names[n]||('#'+n))+': '+list.length+' art cards, '+reg.length+' regular cards';
+  var h=[];
+  if(list.length) h.push('<div class="sec">Art cards (cheapest first)</div>');
+  list.forEach(function(c){
+    h.push('<div class="opt'+(cur&&cur.id===c.id?' sel':'')+'">'+
+      '<img loading="lazy" src="'+esc(c.i)+'" alt="'+esc(c.n)+'">'+
+      '<div>'+esc(c.s)+'</div><div>'+esc(c.r)+'</div>'+
+      '<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>'+
+      '<button type="button" data-pick="'+esc(c.id)+'" data-n="'+n+'">Use this one</button></div>');
+  });
+  if(reg.length) h.push('<div class="sec">Regular cards (no price)</div>');
+  reg.forEach(function(c){
+    h.push('<div class="opt"><img loading="lazy" src="'+esc(c.i)+'" alt="'+esc(c.n)+'"><div>'+esc(c.n)+'</div><div>'+esc(c.s)+'</div></div>');
+  });
+  $('opts').innerHTML=h.join('');
+  $('dlg').showModal();
+}
+
+$('grid').addEventListener('click',function(e){
+  var t=e.target.closest('[data-act]'); if(!t) return;
+  var tile=t.closest('.tile'); var n=+tile.dataset.n, a=t.dataset.act;
+  if(a==='any'||a==='art'){
+    var o=st.own[n]=st.own[n]||{any:false,art:false};
+    o[a]=!o[a];
+    if(a==='art'&&o.art) o.any=true;
+    if(!o.any&&!o.art) delete st.own[n];
+    save(); render();
+  } else if(a==='opts'){ openOpts(n); }
+  else if(a==='zoom'){ var c=chosen(n); if(c) window.open(c.l||c.i,'_blank','noopener'); }
+});
+$('opts').addEventListener('click',function(e){
+  var b=e.target.closest('[data-pick]'); if(!b) return;
+  st.pick[+b.dataset.n]=b.dataset.pick; save(); $('dlg').close(); render();
+});
+$('dlgClose').addEventListener('click',function(){$('dlg').close();});
+$('q').addEventListener('input',render);
+$('filter').addEventListener('change',render);
+$('cur').addEventListener('change',function(){st.cur=$('cur').value;save();index();render();});
+
+async function pollRefresh(){
+  for(;;){
+    var s=await getJSON('api/status').catch(function(){return null;});
+    if(!s||!s.running) break;
+    setStatus('The server is updating its card database'+(s.sets?' ('+s.count+' art cards stored, '+s.backlog+' still to fetch)':'')+'…');
+    await sleep(5000);
+  }
+  await loadData(); index(); render();
+}
+$('refresh').addEventListener('click',async function(){
+  try{
+    var r=await fetch('api/refresh',{method:'POST'});
+    if(r.status===429){ setStatus('Please wait a few minutes between manual refreshes.'); return; }
+    if(r.status===409){ setStatus('Refreshing is switched off on the server.'); return; }
+  }catch(e){ setStatus('Could not reach the server.'); return; }
+  pollRefresh();
+});
+
+$('exp').addEventListener('click',function(){
+  var b=$('bk'); b.hidden=false; b.value=JSON.stringify(st); b.select();
+});
+$('imp').addEventListener('click',function(){
+  var b=$('bk');
+  if(b.hidden){ b.hidden=false; b.value=''; b.placeholder='Paste backup text here, then press Restore again'; return; }
+  try{
+    var j=JSON.parse(b.value);
+    if(j&&j.own){ st={own:j.own||{},pick:j.pick||{},cur:j.cur||'eu'}; save(); $('cur').value=st.cur; index(); render(); b.value=''; b.hidden=true; }
+  }catch(e){ b.value='That text could not be read as a backup.'; }
+});
+
+(async function start(){
+  try{
+    await loadState();
+    await loadData();
+    index(); render();
+    var s=await getJSON('api/status').catch(function(){return null;});
+    if(s&&s.running) pollRefresh();
+  }catch(e){
+    setStatus('Could not load card data ('+(e&&e.message||e)+'). Reload the page to try again.');
+  }
+})();
+})();
+</script>
+</body>
+</html>

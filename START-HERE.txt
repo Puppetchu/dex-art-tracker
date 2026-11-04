@@ -1,0 +1,79 @@
+DEX ART CARD TRACKER - START HERE
+=================================
+
+What it is: a web page on your own computer that lists every Pokémon with its
+cheapest art card (picture + price), and lets you tick off what you own.
+It keeps its own card database and updates prices slowly in the background.
+
+
+ONE-TIME SETUP (about 10 minutes)
+---------------------------------
+1. Install Docker Desktop (free for personal use):
+   https://www.docker.com/products/docker-desktop/
+   Open it once after installing and wait until it says it is running.
+   (Windows may ask you to restart. That is normal.)
+
+2. Unzip this folder somewhere you will find it again, for example Documents.
+
+
+STARTING IT
+-----------
+Windows: double-click  start.bat
+Mac:     double-click  start.command
+         (if the Mac refuses: right-click it, choose Open, then Open again)
+
+Or, in any terminal opened inside this folder, type:
+   docker compose up -d --build
+
+The first start downloads some files and takes a few minutes.
+Then open this address in your browser:
+
+   http://localhost:8080
+
+
+THE FIRST 20 TO 30 MINUTES
+--------------------------
+The first time, the page says it is building its card database. That is
+normal: it asks the card service for sets and art cards slowly (one request
+per second) so it does not overload it. You can leave the page open or come
+back later. Cards appear as they are fetched.
+After that, new sets are checked once a month and prices of the cheapest art
+cards are refreshed slowly, a little each day.
+
+
+USING IT
+--------
+- "Any card" and "Art card" buttons: tick what you own. Ticks are saved on
+  your computer, not in the browser.
+- "view" button on a Pokémon: see all its art cards (pick your favourite)
+  and its regular cards.
+- Prices: switch between euro (Cardmarket) and dollar (TCGplayer) at the top.
+- Once you tick "Art card" for a Pokémon, its price is no longer updated.
+
+
+STOPPING AND STARTING AGAIN
+---------------------------
+Stop:   docker compose down      (your data and ticks are kept)
+Start:  double-click start.bat / start.command again
+
+Docker Desktop must be running whenever you want to use the page.
+
+
+IF SOMETHING GOES WRONG
+-----------------------
+- "docker is not recognized" / "command not found": Docker Desktop is not
+  installed or not running. Open Docker Desktop and wait for it to start.
+- The page does not open: check the address is exactly http://localhost:8080
+- Port 8080 already in use: open docker-compose.yml in a text editor and
+  change "8080:8080" to "8081:8080", then use http://localhost:8081
+- Page stays empty for a long time: see what the server is doing with
+     docker compose logs --tail 50
+  and send me those lines.
+- No art cards appear but the log shows cards were fetched: the rarity name
+  may differ. Send me the log and I will adjust the RARITIES setting.
+
+Other devices on your home network can use the page too:
+http://<this computer's address>:8080  (there is no password, so do not
+expose it to the internet).
+
+More settings are described in README.md.
