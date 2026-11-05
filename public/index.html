@@ -69,7 +69,7 @@ h1{margin:0;font:800 1.45rem/1 var(--head);letter-spacing:.14em;text-transform:u
 #gens{font-family:var(--mono);font-size:.76rem}
 
 /* grids and tiles */
-#grid,#setsView,#trainersView{padding:14px max(16px,env(safe-area-inset-left)) 50px}
+#grid,#setsView,#trainersView,#wishView,#histView{padding:14px max(16px,env(safe-area-inset-left)) 50px}
 .cgrid,#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(172px,1fr));gap:14px}
 .setlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
 .tile{position:relative;background:linear-gradient(var(--panel2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:7px;min-width:0}
@@ -84,6 +84,10 @@ h1{margin:0;font:800 1.45rem/1 var(--head);letter-spacing:.14em;text-transform:u
 .pic img{width:100%;height:100%;object-fit:contain;display:block;cursor:zoom-in}
 .badge{position:absolute;left:6px;top:6px;font:700 .62rem var(--head);letter-spacing:.1em;padding:2px 7px;border-radius:999px;background:#000b;color:var(--lcd);pointer-events:none}
 .badge.reg{color:var(--muted)}
+.badge.wish{left:auto;right:6px;color:var(--yellow)}
+.who{font-size:.76rem;color:var(--lcd)}
+.who.none{color:var(--muted)}
+.histday{grid-column:1/-1;font:700 .9rem var(--head);letter-spacing:.08em;text-transform:uppercase;color:var(--lcd);margin-top:8px}
 .ph{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:10px;color:var(--muted);font-size:.78rem;width:100%;height:100%}
 .ph b{color:var(--ink);font-size:.86rem}
 .ball{width:42px;height:42px;border-radius:50%;border:3px solid #0b0f16;position:relative;background:linear-gradient(#e63946 0 44%,#0b0f16 44% 56%,#f1f4f9 56%);opacity:.85}
@@ -138,7 +142,7 @@ dialog::backdrop{background:#000b}
 @media (prefers-reduced-motion:reduce){.lens{animation:none}.bar i{transition:none}}
 @media (max-width:520px){h1{font-size:1.1rem}.legend{margin-left:0}}
 .ro-mode [data-do="any"],.ro-mode [data-do="art"],.ro-mode [data-do="have"]{pointer-events:none}
-.ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn,.ro-mode #nameBtn{display:none!important}
+.ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode [data-do="unwish"],.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn,.ro-mode #nameBtn{display:none!important}
 .ro-mode button:disabled{opacity:1}
 #roTag{display:none;margin-left:10px;padding:2px 9px;border-radius:99px;background:var(--screen);color:var(--lcd);font:700 .7rem var(--head);letter-spacing:.08em;text-transform:uppercase;vertical-align:middle}
 .ro-mode #roTag{display:inline-block}
@@ -205,6 +209,8 @@ a{color:var(--lcd)}
     <option value="dex">Pokémon</option>
     <option value="sets">Sets</option>
     <option value="trainers">Trainers</option>
+    <option value="wish">Wish list &amp; trades</option>
+    <option value="history">History</option>
   </select>
   <select id="filter" aria-label="Filter">
     <option value="all">All Pokémon</option>
@@ -212,6 +218,11 @@ a{color:var(--lcd)}
     <option value="noart">Missing art card (one exists)</option>
     <option value="haveart">Have art card</option>
     <option value="noexist">No art card exists yet</option>
+  </select>
+  <select id="sortSel" aria-label="Sort">
+    <option value="">Dex order</option>
+    <option value="high">Owned: price high → low</option>
+    <option value="low">Owned: price low → high</option>
   </select>
   <select id="genSel" aria-label="Generation">
     <option value="0">Jump to generation…</option>
@@ -233,6 +244,8 @@ a{color:var(--lcd)}
 <main id="grid"></main>
 <main id="setsView" hidden></main>
 <main id="trainersView" hidden></main>
+<main id="wishView" hidden></main>
+<main id="histView" hidden></main>
 <section class="tools">
   <button id="exp" type="button">Show backup text</button>
   <button id="imp" type="button">Restore from backup text</button>
@@ -304,6 +317,7 @@ var byDex={}, byReg={}, byId={};
 // Prices: € Cardmarket or $ TCGplayer, chosen on the server with PRICE_SOURCE.
 var CUR=window.DEX_CUR==='us'?'us':'eu';
 var st={own:{},cards:{},pick:{},cur:CUR};
+var hist=[], trades=null;
 var trFilter='all', view='dex', curSet=null, setData=null, setFilter='all', setCache={}, dexOpen=null, regShown=60, armed=null;
 
 function $(id){return document.getElementById(id);}
@@ -405,14 +419,14 @@ async function loadData(){
 async function loadState(){
   var s=null;
   try{ s=await getJSON('api/state?dex='+encodeURIComponent(DEX)); }catch(e){}
-  if(s&&s.own) st={own:s.own,cards:s.cards||{},pick:s.pick||{},cur:CUR};
+  if(s&&s.own) st={own:s.own,cards:s.cards||{},pick:s.pick||{},cur:CUR}; hist=s.hist||[];
 }
 var saveTimer=null;
 function save(){
   if(RO) return;
   clearTimeout(saveTimer);
   saveTimer=setTimeout(function(){
-    fetch('api/state?dex='+encodeURIComponent(DEX),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(st)}).then(function(r){ if(r.status===401||r.status===403) location.reload(); }).catch(function(){});
+    fetch('api/state?dex='+encodeURIComponent(DEX),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(st)}).then(function(r){ if(r.status===401||r.status===403){ location.reload(); return; } return r.json(); }).then(function(j){ if(j&&j.hist){ hist=j.hist; if(view==='history') renderHist(); } }).catch(function(){});
   },400);
 }
 
@@ -512,7 +526,7 @@ function refresh(){ render(); if(dexOpen) fillDex(); }
 var GENS=[null,[1,151,'I','Kanto'],[152,251,'II','Johto'],[252,386,'III','Hoenn'],[387,493,'IV','Sinnoh'],[494,649,'V','Unova'],[650,721,'VI','Kalos'],[722,809,'VII','Alola'],[810,905,'VIII','Galar & Hisui'],[906,1025,'IX','Paldea']];
 function genOf(n){ for(var g=1;g<GENS.length;g++) if(n<=GENS[g][1]) return g; return GENS.length-1; }
 function render(){
-  var q=$('q').value.trim().toLowerCase(), f=$('filter').value, gsel=0, lastGen=0;
+  var q=$('q').value.trim().toLowerCase(), f=$('filter').value, gsel=0, lastGen=0, srt=$('sortSel').value, order=[];
   var gs={}; // per generation: Pokémon, with any card, with an art card, with an art card that exists
   for(var n0=1;n0<=maxDex;n0++){ var g0=genOf(n0), s0=gs[g0]=gs[g0]||{t:0,a:0,r:0,e:0}; s0.t++; if(anyOwned(n0)) s0.a++; if(artOwned(n0)) s0.r++; if(byDex[n0]&&byDex[n0].length) s0.e++; }
   var html=[], shown=0, any=0, art=0, avail=0, cost=0, costMissing=0, worth=0;
@@ -535,10 +549,12 @@ function render(){
     if(f==='noart'&&(ao||!hasArt)) continue;
     if(f==='haveart'&&!ao) continue;
     if(f==='noexist'&&hasArt) continue;
+    if(srt&&ownedPrice(n)===undefined) continue; // sorting by price: only Pokémon you own a card of
     var gn=genOf(n);
     if(gsel&&gsel!==gn) continue;
     shown++;
-    if(gn!==lastGen){
+    if(srt) order.push({n:n,p:ownedPrice(n),i:html.length});
+    else if(gn!==lastGen){
       lastGen=gn; var gi=GENS[gn], gx=gs[gn];
       html.push('<div class="sec gen" data-gen="'+gn+'"><b>Generation '+gi[2]+'</b><span>'+esc(gi[3])+' · No.'+gi[0]+'–'+Math.min(gi[1],maxDex)+'</span><span>any card '+gx.a+'/'+gx.t+' · art card '+gx.r+'/'+gx.e+'</span><div class="gbar" title="Art cards: '+gx.r+' of '+gx.e+'"><i style="width:'+(gx.e?Math.round(gx.r/gx.e*100):0)+'%"></i></div></div>');
     }
@@ -549,7 +565,7 @@ function render(){
     var anyTxt=yo?(isArmed('any:'+n)?'Clear '+kR+' checked?':'✓ Any card'):'Any card';
     html.push('<div class="tile '+stc+'" data-n="'+n+'">'+
       '<div class="no"><span>No.'+String(n).padStart(4,'0')+'</span><i class="led"></i></div>'+
-      '<div class="pic">'+(c?picHTML(c,false).replace('data-do="zoom"','data-do="zoom"'):phHTML(nm,'No card found yet'))+(c?'<span class="badge'+(c.a?'':' reg')+'">'+(c.a?'ART':'REGULAR')+'</span>':'')+'</div>'+
+      '<div class="pic">'+(c?picHTML(c,false).replace('data-do="zoom"','data-do="zoom"'):phHTML(nm,'No card found yet'))+(c?'<span class="badge'+(c.a?'':' reg')+'">'+(c.a?'ART':'REGULAR')+'</span>':'')+(c&&isWish(n,c.id)?'<span class="badge wish" title="On the wish list">★ WISH</span>':'')+'</div>'+
       '<div class="name" title="'+esc(nm)+'">'+esc(nm)+'</div>'+
       '<div class="meta">'+(c?esc(c.a?(c.r||'Art card'):'Regular card')+'<br>'+esc(setName(c)):'&nbsp;')+'</div>'+
       (c&&(c.a||c.pt)?'<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>':'')+(c?linkHTML(c):'')+
@@ -557,6 +573,13 @@ function render(){
       '<button type="button" data-do="art" data-n="'+n+'" class="'+(ao?'on':'')+(isArmed('art:'+n)?' arm':'')+'"'+(hasArt?'':' disabled')+'>'+artTxt+'</button></div>'+
       ((cnt||rcnt)?'<button type="button" class="alt" data-do="view" data-n="'+n+'">'+cnt+' art · '+rcnt+' regular · view</button>':'')+
       '</div>');
+  }
+  if(srt){ // highest (or lowest) owned price first; owned cards without a price last
+    order.sort(function(a,b){
+      if(a.p==null||b.p==null) return (a.p==null)-(b.p==null)||a.n-b.n;
+      return (srt==='high'?b.p-a.p:a.p-b.p)||a.n-b.n;
+    });
+    html=order.map(function(o){ return html[o.i]; });
   }
   $('grid').innerHTML=html.join('');
   var S=st.cur==='eu'?'€':'$';
@@ -568,7 +591,8 @@ function render(){
   $('barAny').style.width=(maxDex?Math.min(100,any/maxDex*100):0)+'%';
   $('barArt').style.width=(maxDex?Math.min(100,art/maxDex*100):0)+'%';
   renderSets();
-  if(view==='dex') setStatus(shown+' shown. Main picture is the most expensive card you own, else the cheapest art card (or a regular card when no art card exists). Pick another one under "view".');
+  if(view==='dex'&&srt) setStatus(shown+' Pokémon you own a card of, '+(srt==='high'?'most':'least')+' expensive first (by your most expensive card of each).');
+  else if(view==='dex') setStatus(shown+' shown. Main picture is the most expensive card you own, else the cheapest art card (or a regular card when no art card exists). Pick another one under "view" to put it on your wish list.');
 }
 
 /* ---------- Pokémon card list ---------- */
@@ -586,7 +610,8 @@ function fillDex(reset){
     return '<div class="opt'+(sel?' sel':'')+(isOwn?' own':'')+'"><div class="pic">'+picHTML(c,false)+'</div>'+
       '<div><b>'+esc(c.n)+'</b></div><div>'+esc(subOf(c))+'</div>'+(c.a?'<div>'+esc(c.r||'Art card')+'</div>':'')+priceHTML(c)+linkHTML(c)+
       '<div class="row"><button type="button" class="'+(isOwn?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(isOwn?'✓ Have it':'Have it')+'</button></div>'+
-      '<button type="button" data-do="main" data-n="'+n+'" data-id="'+esc(c.id)+'"'+(sel?' disabled':'')+'>'+(sel?'✓ Main picture':'Use as main')+'</button>'+mk+'</div>';
+      (isOwn?'<button type="button" data-do="main" data-n="'+n+'" data-id="'+esc(c.id)+'"'+(sel?' disabled':'')+'>'+(sel?'✓ Main picture':'Use as main')+'</button>':(st.pick[n]===c.id?'<button type="button" class="on" data-do="unwish" data-n="'+n+'" title="Main picture and on the wish list. Click to take it off.">★ On wish list</button>'
+        :'<button type="button" data-do="main" data-n="'+n+'" data-id="'+esc(c.id)+'" title="Show this card as the main picture and put it on the wish list">☆ Wish for this one</button>'))+mk+'</div>';
   }
   if(list.length) h.push('<div class="sec">Art cards (cheapest first)</div>');
   list.forEach(function(c){h.push(card(c));});
@@ -646,11 +671,89 @@ function renderTrainers(){
   $('trainersView').innerHTML=h.join('');
   setStatus(list.length+' of '+trainers.length+' trainer art cards shown.');
 }
+/* ---------- sorting by price: the most expensive card you own of a Pokémon ---------- */
+// undefined: you own no card of it; null: you own cards but none has a price.
+function ownedPrice(n){
+  var own=artOwnedList(n).concat(regOwnedList(n)), best=null;
+  if(!own.length) return undefined;
+  own.forEach(function(c){ var p=price(c); if(p!=null&&(best==null||p>best)) best=p; });
+  return best;
+}
+
+/* ---------- wish list: the main picture you picked yourself, for a card you do not own ---------- */
+function pl(n,w){ return n+' '+w+(n===1?'':'s'); }
+function isWish(n,id){ return st.pick[n]===id&&!owned(id); }
+function cardTile(c,stc,body){
+  return '<div class="tile '+stc+'"><div class="no"><span>'+esc(c.k||'')+'</span><i class="led"></i></div>'+
+    '<div class="pic">'+picHTML(c,false)+(c.a?'<span class="badge">ART</span>':'')+'</div>'+
+    '<div class="name" title="'+esc(c.n)+'">'+esc(c.n)+'</div>'+
+    '<div class="meta">'+esc(c.a?(c.r||'Art card'):'Regular card')+' · '+esc(setName(c))+'</div>'+body+'</div>';
+}
+function dexBtn(n){ return '<div class="row"><button type="button" class="mini" data-do="view" data-n="'+n+'">#'+n+' '+esc(names[n]||'')+' →</button></div>'; }
+async function loadTrades(){
+  try{ trades=await getJSON('api/trades'); }catch(e){ trades=[]; }
+  if(view==='wish') renderWish();
+}
+function renderWish(){
+  if(!trades){ $('wishView').innerHTML='<p>Loading…</p>'; loadTrades(); return; }
+  var others=trades.filter(function(t){ return t.id!==DEX; });
+  var holders={}; others.forEach(function(t){ t.cards.forEach(function(id){ (holders[id]=holders[id]||[]).push(t.name); }); });
+  var mine=Object.keys(st.pick).filter(function(n){ return st.pick[n]&&!owned(st.pick[n])&&byId[st.pick[n]]; }).map(Number).sort(function(a,b){return a-b;});
+  var wanted={}; others.forEach(function(t){ t.wish.forEach(function(w){ if(owned(w.id)&&byId[w.id]) (wanted[w.id]=wanted[w.id]||{dex:w.dex,by:[]}).by.push(t.name); }); });
+  var wantedIds=Object.keys(wanted), match=mine.filter(function(n){ return holders[st.pick[n]]; }).length;
+  var h=['<div class="sethead"><h2>'+esc(DEXNAME)+'\'s wish list</h2><span>'+pl(mine.length,'card')+' · '+match+' owned by another trainer</span></div>'];
+  if(!mine.length) h.push('<p>Nothing on the wish list yet. Open a Pokémon with "view" and choose "☆ Wish for this one" on a card: it becomes the main picture and goes on this list.</p>');
+  h.push('<div class="cgrid">');
+  mine.forEach(function(n){
+    var c=byId[st.pick[n]], who=holders[c.id];
+    h.push(cardTile(c,who?'s-y':'s-r',priceHTML(c)+linkHTML(c)+
+      '<div class="who'+(who?'':' none')+'">'+(who?'Owned by '+esc(who.join(', ')):'No other trainer has this one')+'</div>'+dexBtn(n)+
+      '<div class="row"><button type="button" data-do="unwish" data-n="'+n+'">Take off wish list</button></div>'));
+  });
+  h.push('</div>');
+  h.push('<div class="sethead" style="margin-top:22px"><h2>'+esc(DEXNAME)+' has, others want</h2><span>'+pl(wantedIds.length,'card')+'</span></div>');
+  if(!wantedIds.length) h.push('<p>'+(others.length?'None of the cards on the other trainers\' wish lists are in this dex.':'There are no other trainers yet.')+'</p>');
+  h.push('<div class="cgrid">');
+  wantedIds.forEach(function(id){
+    var c=byId[id], w=wanted[id];
+    h.push(cardTile(c,'s-g',priceHTML(c)+linkHTML(c)+'<div class="who">Wanted by '+esc(w.by.join(', '))+'</div>'+dexBtn(w.dex)));
+  });
+  h.push('</div>');
+  $('wishView').innerHTML=h.join('');
+  setStatus(mine.length+' on the wish list · '+wantedIds.length+' wanted by others.');
+}
+
+/* ---------- history: cards added most recently ---------- */
+function renderHist(){
+  var list=hist.filter(function(e){ return e.id?owned(e.id):!!(st.own[e.dex]&&st.own[e.dex].any); });
+  var h=['<div class="sethead"><h2>Recently added to '+esc(DEXNAME)+'\'s dex</h2><span>'+pl(list.length,'card')+'</span></div>'];
+  if(!list.length) h.push('<p>Nothing added yet. Cards appear here as soon as they are ticked.</p>');
+  h.push('<div class="cgrid">');
+  var day='';
+  list.forEach(function(e){
+    var d=new Date(e.t), ds=d.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'long',year:'numeric'}), tm=d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+    if(ds!==day){ day=ds; h.push('<div class="histday">'+esc(ds)+'</div>'); }
+    if(e.id){
+      var c=byId[e.id]||{id:e.id,n:e.n,sid:e.sid,k:e.k};
+      h.push(cardTile(c,c.a?'s-g':'s-y','<div class="who">Added '+esc(tm)+'</div>'+(byId[e.id]?priceHTML(c)+linkHTML(c):'')+((c.d&&c.d[0])?dexBtn(c.d[0]):'')));
+    } else {
+      var nm=names[e.dex]||('#'+e.dex);
+      h.push('<div class="tile s-y"><div class="no"><span>No.'+String(e.dex).padStart(4,'0')+'</span><i class="led"></i></div><div class="pic">'+phHTML(nm,'A card of this Pokémon')+'</div>'+
+        '<div class="name">'+esc(nm)+'</div><div class="meta">"Any card" ticked</div><div class="who">Added '+esc(tm)+'</div>'+dexBtn(e.dex)+'</div>');
+    }
+  });
+  h.push('</div>');
+  $('histView').innerHTML=h.join('');
+  setStatus(list.length+' recently added cards (the last '+300+' are kept).');
+}
 function renderSets(){
   $('grid').hidden=view!=='dex'; $('setsView').hidden=view!=='sets'; $('trainersView').hidden=view!=='trainers';
+  $('wishView').hidden=view!=='wish'; $('histView').hidden=view!=='history';
   $('viewSel').value=view;
-  $('filter').hidden=view!=='dex'; $('genSel').hidden=view!=='dex'; $('setSort').hidden=view!=='sets'||!!curSet;
+  $('filter').hidden=view!=='dex'; $('genSel').hidden=view!=='dex'; $('sortSel').hidden=view!=='dex'; $('setSort').hidden=view!=='sets'||!!curSet;
   if(view==='trainers') renderTrainers();
+  if(view==='wish') renderWish();
+  if(view==='history') renderHist();
   if(view!=='sets') return;
   var q=$('q').value.trim().toLowerCase(), h=[];
   if(!curSet){
@@ -739,7 +842,7 @@ function goBack(fallback){
   if(history.state&&history.state.app) history.back();
   else { history.replaceState(null,'',fallback); applyRoute(); }
 }
-// Routes: #/dex   #/dex/25 (card list of one Pokémon)   #/sets   #/sets/<set id>
+// Routes: #/dex   #/dex/25 (card list of one Pokémon)   #/sets   #/sets/<set id>   #/trainers   #/wish   #/history
 async function applyRoute(){
   var h=hashNow(), parts=h.replace(/^#\/?/,'').split('/'), keepTop=false;
   curHash=h;
@@ -749,6 +852,11 @@ async function applyRoute(){
     var id=parts.length>1&&parts[1]?decodeURIComponent(parts.slice(1).join('/')):null;
     if(id){ if(curSet!==id) setFilter='all'; await openSet(id,true); }
     else { curSet=null; setData=null; renderSets(); }
+  } else if(parts[0]==='wish'||parts[0]==='history'){
+    view=parts[0]; curSet=null; setData=null;
+    if(view==='wish') trades=null; // read the other dexes again each time
+    if($('dlg').open){ closingByRoute=true; $('dlg').close(); }
+    render();
   } else if(parts[0]==='trainers'){
     view='trainers'; curSet=null; setData=null;
     if($('dlg').open){ closingByRoute=true; $('dlg').close(); }
@@ -787,7 +895,7 @@ async function markArt(id,art){
 document.addEventListener('click',function(e){
   var t=e.target.closest('[data-do]'); if(!t) return;
   var a=t.dataset.do, n=+t.dataset.n, id=t.dataset.id;
-  if(RO&&/^(any|art|have|main|mark|getp)$/.test(a)) return;
+  if(RO&&/^(any|art|have|main|unwish|mark|getp)$/.test(a)) return;
   if(!ADMIN&&a==='mark') return;
   if(a==='any'){
     if(artOwned(n)) return;
@@ -811,6 +919,7 @@ document.addEventListener('click',function(e){
     if(owned(id)) delete st.cards[id]; else st.cards[id]=1;
     save(); refresh();
   } else if(a==='main'){ st.pick[n]=id; save(); refresh(); }
+  else if(a==='unwish'){ delete st.pick[n]; save(); refresh(); }
   else if(a==='view'){ go('#/dex/'+n); }
   else if(a==='more'){ regShown+=60; fillDex(); }
   else if(a==='zoom'){ openLb(id); }
@@ -852,6 +961,7 @@ $('lb').addEventListener('close',function(){
 $('lb').addEventListener('click',function(e){ if(e.target===$('lb')) $('lb').close(); });
 $('q').addEventListener('input',render);
 $('filter').addEventListener('change',render);
+$('sortSel').addEventListener('change',render);
 $('genSel').addEventListener('change',function(){
   var g=+$('genSel').value;
   if(!g){ window.scrollTo({top:0,behavior:'smooth'}); return; }

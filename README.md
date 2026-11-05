@@ -1,6 +1,6 @@
 # Dex Art Card Tracker
 
-A self-hosted Pokédex-style checklist for collecting one card of every Pokémon in the national dex: first any card, then an art card. Every Pokémon shows its main picture, price and two buttons, and a Sets tab shows every set with the cards in it and your progress.
+A self-hosted Pokédex-style checklist for collecting one card of every Pokémon in the national dex: first any card, then an art card. Every Pokémon shows its main picture, price and two buttons, the Sets view shows every set with the cards in it and your progress, and several trainers can each keep their own dex on one server.
 
 ## Run it
 
@@ -12,13 +12,18 @@ Open http://localhost:8080 (or the server's address on your network).
 
 ## Using it
 
-- **Pokémon tab.** One entry per dex number. The LED shows your state: red = nothing yet, yellow = you have a card, green = you have the art card.
-- **Main picture.** By default the cheapest art card. If a Pokémon has no art card, a regular card is shown instead. Under **view** you can pick any art or regular card as the main picture.
-- **Any card / Art card buttons.** "Art card" checks the art card that counts for that Pokémon (the one you picked, else the cheapest). It is the same check you see on the Sets tab.
-- **Sets tab.** Every scanned set, with progress (cards owned / cards in the set). Open a set to see all its cards, tick the ones you own, and filter by All / Missing / Owned / Art cards. The summary shows the main set, the secret cards and the art cards separately.
+- **The top of the page.** The lens and title on the left with the colour legend under them, the search box in the middle, and the **Dex of** menu on the right to pick whose dex you are looking at.
+- **Views.** The red menu at the start of the bar switches between **Pokémon**, **Sets**, **Trainers**, **Wish list & trades** and **History**.
+- **Pokémon.** One entry per dex number. The LED shows your state: red = nothing yet, yellow = you have a card, green = you have the art card. Filter by what you are missing, jump to a generation, or sort by price: **Owned: price high → low** / **low → high** shows only the Pokémon you own a card of, ranked by the most expensive card you own of each (owned cards without a price last).
+- **Main picture.** The most expensive card you own; otherwise the card on your wish list, else the cheapest art card. If a Pokémon has no art card, a regular card is shown instead.
+- **Any card / Art card buttons.** "Art card" checks the art card that counts for that Pokémon (the one on your wish list, else the cheapest). It is the same check you see in the Sets view.
+- **Wish list.** Under **view** on a Pokémon, **☆ Wish for this one** makes a card you do not own the main picture and puts it on your wish list (the tile shows ★ WISH). **★ On wish list** takes it off again. For cards you own, **Use as main** only changes the picture.
+- **Wish list & trades.** Shows the wish list of the dex you are looking at, with which other trainers own each card, and below it the cards this dex owns that are on another trainer's wish list.
+- **History.** The cards most recently ticked in this dex, newest first and grouped by day (the last 300 are kept). Unticking a card takes it off the list. Restoring a backup is not counted.
+- **Sets.** Every scanned set, with progress (cards owned / cards in the set). Open a set to see all its cards, tick the ones you own, and filter by All / Missing / Owned / Art cards. The summary shows the main set, the secret cards and the art cards separately.
 - **Worth of owned art** is the price of the art cards you checked. **Left to spend** is the cheapest art card (or the one you picked) for every Pokémon you have no art card for yet.
 - **Click a picture** to see it large.
-- **Back and forward buttons** work inside the page: Pokémon, Sets, one set, a card list and the large picture each get their own step, and every view has its own link (for example `#/sets/sv03.5`).
+- **Back and forward buttons** work inside the page: every view, one set, a card list and the large picture each get their own step, and every view has its own link (for example `#/sets/sv03.5`, `#/wish`, `#/history`).
 
 ## Art cards and promos
 
@@ -27,7 +32,7 @@ A card counts as an art card when:
 - its rarity is one of `RARITIES` (default: Illustration Rare, Special Illustration Rare, Promo), or
 - it comes from a promo set (name contains "Promo") and is a Pokémon card. Switch this off with `PROMO_AS_ART=0`.
 
-The data cannot tell every art card apart (for example an older alternate art such as Lugia V in Silver Tempest is just an "Ultra Rare"). So you can correct it yourself, on the Sets tab or under **view**: **Count as art card** adds that card to the art list (one request to read its details and price), and **Not an art card** takes it off.
+The data cannot tell every art card apart (for example an older alternate art such as Lugia V in Silver Tempest is just an "Ultra Rare"). So the main admin can correct it, in the Sets view or under **view**: **Count as art card** adds that card to the art list (one request to read its details and price), and **Not an art card** takes it off.
 
 ## Pictures
 
@@ -51,7 +56,7 @@ Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokea
 
 1. **Sets.** The set list is checked when the container starts and then once a day. Each new set is fetched once. A set request lists all its cards by name and image, so regular cards are stored from that alone, with no price and no further requests. They are matched to Pokémon by name. Pokémon TCG Pocket sets are ignored.
 2. **Art candidates.** Cards numbered above the official set size (for example 199/198) and every card in a promo set get a request of their own, to read rarity, dex number and price. Candidates whose name contains no Pokémon name (trainers, energy) are skipped. The result is stored for good. Newest sets are done first.
-3. **Prices.** The cheapest 2 art cards per Pokémon are re-priced when older than 30 days, oldest first. Cards you checked as owned, and Pokémon whose art card you own, are never re-priced.
+3. **Prices.** The cheapest 2 art cards per Pokémon are re-priced when older than 30 days, oldest first. Cards and Pokémon (art card owned) are only skipped when every account owns them.
 4. **Pace.** No daily limit, one request every 2 seconds (`REQUEST_DELAY_MS`), so the server never hammers TCGdex. The full database takes days to complete, and cards appear as they are fetched. The first build of the database runs in one go unless you set `STAGGER_INITIAL`. Cards that are still waiting for their details are shown on the status line and appear as the server works through them.
 
 "Refresh prices" in the page fetches at most 25 cards (missing ones first, then the oldest prices), once per 10 minutes.
@@ -65,7 +70,7 @@ Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokea
 - Cards the rarity search lists (and promo or secret-numbered cards) are shown as art cards at once, from the set data the server already has, with "price pending". Their details and price are fetched afterwards in the background and replace the pending entry. Japanese set listings only contain the Japanese card name, so the server downloads the Japanese Pokémon names once from PokeAPI (one bulk request, or one request per Pokémon at your request pace if that is not available) and matches them against the card names (longest name wins, so ミュウ is not found inside ミュウツー). This makes Japanese regular cards show up under their Pokémon, with a price fetched in the background like English ones. If a Japanese card still has no Pokémon, it is a trainer, energy or a name the match cannot read; the detail fetch fills in the dex number where TCGdex has one.
 - When these rules change, cards rejected earlier are checked again on the next start. Only cards that now qualify cost a request.
 - Chinese cards are not included: TCGdex has no rarity, prices or dex numbers for them.
-- The first fill of the Japanese data takes a while because it follows your daily request limit.
+- The first fill of the Japanese data takes a while, because it follows the same slow request pace (and `DAILY_REQUESTS`, if you set one).
 
 ## Prices for every card, and shop links
 
@@ -74,7 +79,7 @@ Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokea
 
 ## Trainers tab
 
-Trainer cards with an art rarity (for example Illustration rare or Special illustration rare trainers, English and Japanese) are listed on their own **Trainers** tab, newest set first, with a picture, price, Cardmarket and TCGplayer links and a "Have it" tick. They show owned count, worth and left to spend, and have no effect on the Pokémon counts at the top. They are found through the same rarity search as the other art cards, so the first update re-checks cards that were skipped before.
+Trainer cards with an art rarity (for example Illustration rare or Special illustration rare trainers, English and Japanese) are listed in their own **Trainers** view, newest set first, with a picture, price, Cardmarket and TCGplayer links and a "Have it" tick. They show owned count, worth and left to spend, and have no effect on the Pokémon counts at the top. They are found through the same rarity search as the other art cards, so the first update re-checks cards that were skipped before.
 
 ## Accounts, login and the view-only page
 
@@ -101,7 +106,7 @@ One port, one page. Every account (trainer) has its own dex with its own ticks; 
 
 ## Get price button
 
-A card without a price shows a **Get price** button (owner only, not on the view-only page). It asks the card service about that one card at once, ignoring the usual pause, stores the result and refreshes the page. If the card turns out not to be an art card, or the service has no price for it, the page says so.
+A card without a price shows a **Get price** button (only when logged in to your own dex, not on the view-only page). It asks the card service about that one card at once, ignoring the usual pause, stores the result and refreshes the page. If the card turns out not to be an art card, or the service has no price for it, the page says so.
 
 ## Generations
 
@@ -136,4 +141,4 @@ Saved on the server (`state.json` for the main admin, `states/<id>.json` for oth
 
 - Regular cards are matched to a Pokémon by name (including Nidoran♀/♂, Farfetch’d and Sirfetch’d, which are spelled differently by the card service), so a few may still be missing or wrong.
 - Prices come from TCGdex (Cardmarket in €, TCGplayer in $; the server shows one of them, see `PRICE_SOURCE`). Some cards have none.
-- There is no login. Keep it on your home network or behind a VPN or an authenticated proxy.
+- Passwords travel as plain text over http. Keep the page on your home network, or put it behind an https reverse proxy, tunnel or VPN before opening it to the internet.

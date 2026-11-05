@@ -2,7 +2,7 @@
 // Dex Art Card Tracker server (TCGdex edition).
 //
 // Local database, built gently:
-//  1. Sets: the set list is checked monthly; every new set is fetched once (one request per set).
+//  1. Sets: the set list is checked at start and then daily (SETS_CHECK_DAYS); every new set is fetched once.
 //     A set request returns all its cards by name and image, so every card is stored from that
 //     alone. Regular cards need no further requests.
 //  2. Art candidates: TCGdex is asked which cards have an art rarity (a few dozen list requests), and
@@ -10,8 +10,9 @@
 //     dex number and price. (If the rarity search is not available, cards numbered above the official
 //     set size are used instead.) Japanese sets are read the same way. Card data never changes, so it
 //     is stored forever.
-//  3. Prices: the cheapest few art cards per Pokémon are re-priced slowly, oldest first, within a
-//     daily request budget. Cards you own and Pokémon whose art card you own are never re-priced.
+//  3. Prices: the cheapest few art cards per Pokémon are re-priced slowly, oldest first (one request every
+//     REQUEST_DELAY_MS). Cards and Pokémon that every account owns are not re-priced.
+//  Accounts: every trainer has their own dex (ticks, wish list, history); the card database is shared.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -37,9 +38,9 @@ const SETS_CHECK_DAYS = +process.env.SETS_CHECK_DAYS || 1; // the set list is ch
 const PRICE_CANDIDATES = +process.env.PRICE_CANDIDATES || 2;
 const MIN_SET_DATE = process.env.MIN_SET_DATE || '2000-01-01'; // only sets released on or after this date are read
 const DISABLE_REFRESH = process.env.DISABLE_REFRESH === '1';
-// 0 (default): the first build of the database runs in one go, 1 request per second.
-// 1: even the first build is limited to DAILY_REQUESTS per day.
-const STAGGER_INITIAL = process.env.STAGGER_INITIAL === '4';
+// 0 (default): the first build of the database runs in one go, at REQUEST_DELAY_MS between requests.
+// 1: even the first build is limited to DAILY_REQUESTS per day. ("4" is still accepted from older setups.)
+const STAGGER_INITIAL = process.env.STAGGER_INITIAL === '1' || process.env.STAGGER_INITIAL === '4';
 const RARITIES = (process.env.RARITIES || 'Illustration Rare,Special Illustration Rare,Promo')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const RAR = new Set(RARITIES);
@@ -726,6 +727,34 @@ const stateFile = id => id === MAIN ? STATE_FILE : path.join(STATES_DIR, id + '.
 function allStates() {
   return accounts.list.map(a => { const s = readJSON(stateFile(a.id)) || {}; return { own: s.own || {}, cards: s.cards || {} }; });
 }
+// History: every card that becomes ticked is added at the top, with its name and set kept so the entry
+// still reads well if the card leaves the database. A save that adds more than 50 cards at once (a backup
+// being restored) is not recorded. At most 300 entries are kept.
+const HIST_MAX = 300;
+function addHistory(old, own, cards) {
+  const hist = Array.isArray(old.hist) ? old.hist : [];
+  const oc = old.cards || {}, oo = old.own || {};
+  const newCards = Object.keys(cards).filter(id => cards[id] && !oc[id]);
+  const newAny = Object.keys(own || {}).filter(n => own[n] && own[n].any && !(oo[n] && oo[n].any));
+  if (!newCards.length && !newAny.length) return hist;
+  if (newCards.length + newAny.length > 50) return hist;
+  const t = new Date().toISOString(), idx = regIndex(), add = [];
+  for (const id of newCards) {
+    const rec = db.cards[id], reg = idx.get(id);
+    const sid = (rec && !rec.x && rec.sid) || id.slice(0, id.lastIndexOf('-'));
+    add.push({ id, t, n: (rec && !rec.x && rec.n) || (reg && reg.n) || id, sid, k: localOf(id, sid) });
+  }
+  for (const n of newAny) add.push({ dex: +n, t });
+  // A card ticked again moves to the top instead of appearing twice.
+  return add.concat(hist.filter(h => !(h.id ? newCards.includes(h.id) : newAny.includes(String(h.dex))))).slice(0, HIST_MAX);
+}
+function tradeData() {
+  return accounts.list.map(a => {
+    const s = readJSON(stateFile(a.id)) || {}, cards = s.cards || {}, pick = s.pick || {};
+    const wish = Object.keys(pick).filter(n => pick[n] && !cards[pick[n]]).map(n => ({ dex: +n, id: String(pick[n]) }));
+    return { id: a.id, name: a.name, cards: Object.keys(cards).filter(id => cards[id]), wish };
+  });
+}
 const hashPw = (pw, salt) => crypto.scryptSync(String(pw), salt, 32);
 function checkPw(acc, pw) {
   if (acc.id === MAIN) return sameText(pw, adminPw);
@@ -824,6 +853,8 @@ const server = http.createServer(async (req, res) => {
       return res.end(indexHtml(sess && sess.acc === dexId ? 'full' : (forceAnon ? 'view' : 'ro'), dexId, sess));
     }
     if (req.method === 'GET' && p === '/api/accounts') return sendJSON(res, 200, publicAccounts());
+    // Every dex's owned cards and wish list, for the trade matches.
+    if (req.method === 'GET' && p === '/api/trades') return sendJSON(res, 200, tradeData());
     if (req.method === 'GET' && p === '/data/cards.json') return sendCompressed(req, res, CARDS_FILE);
     if (req.method === 'GET' && p === '/data/names.json') return sendFile(res, NAMES_FILE);
     if (req.method === 'GET' && p === '/api/status') return sendJSON(res, 200, authed ? status() : { count: lastExport.art, regular: lastExport.regular, running: false, backlog: 0, pricesDue: 0, sets: { scanned: lastExport.sets } });
@@ -876,8 +907,10 @@ const server = http.createServer(async (req, res) => {
       const s = JSON.parse(await readBody(req, 5e6));
       if (!s || typeof s.own !== 'object' || Array.isArray(s.own)) return sendJSON(res, 400, { error: 'bad state' });
       const cards = s.cards && typeof s.cards === 'object' && !Array.isArray(s.cards) ? s.cards : {};
-      writeJSON(stateFile(sess.acc), { own: s.own, cards, pick: s.pick || {}, cur: PRICE_CUR });
-      return sendJSON(res, 200, { ok: true });
+      const old = readJSON(stateFile(sess.acc)) || {};
+      const hist = addHistory(old, s.own, cards);
+      writeJSON(stateFile(sess.acc), { own: s.own, cards, pick: s.pick || {}, cur: PRICE_CUR, hist });
+      return sendJSON(res, 200, { ok: true, hist });
     }
     // Every account owner can change their own trainer name.
     if (req.method === 'POST' && p === '/api/account/name') {

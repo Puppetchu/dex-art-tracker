@@ -44,10 +44,16 @@ cards are refreshed slowly, a little each day.
 
 LOGGING IN
 ----------
-Everyone who opens the page sees a view-only version. To change anything, click
-the blue lens at the top left of the page. The password is printed in the
-container log (look for OWNER PASSWORD) and saved as admin.json in the data
-folder. Or choose your own with the ADMIN_PASSWORD setting in docker-compose.yml.
+Everyone who opens the page sees a view-only version. Every trainer has their
+own dex: pick it in the "Dex of" menu at the top right, then click the blue lens
+at the top left and enter that dex's password. A login only works on that dex.
+
+You are the main admin. Your password is printed in the container log (look for
+OWNER PASSWORD) and saved as admin.json in the data folder. Or choose your own
+with the ADMIN_PASSWORD setting in docker-compose.yml.
+To give someone their own dex: log in, open the "Dex of" menu and choose
+"+ Add account...". "Manage accounts..." gives a new password or deletes one.
+Everyone can rename their own dex with the "Trainer name" button.
 Friends can use http://<address>:8080/view/ which has no login option at all.
 
 
@@ -57,14 +63,21 @@ USING IT
   green = you have the art card.
 - "Any card" and "Art card" buttons: tick what you own. Ticks are saved on
   the server, so every device sees them.
+- The red menu at the start of the bar switches between Pokémon, Sets,
+  Trainers, Wish list & trades, and History.
 - "view" on a Pokémon: see all its art cards and regular cards, tick the ones
-  you have, and pick which card is the main picture.
-- "Sets" tab: every set with your progress. Open one to see all its cards and
+  you have, and choose "Wish for this one" to put a card on your wish list.
+- "Wish list & trades": your wish list with who owns those cards, and the cards
+  you have that other trainers wish for.
+- "History": the cards you ticked most recently.
+- The sort menu on the Pokémon view lists the Pokémon you own a card of by
+  price, high to low or low to high.
+- "Sets": every set with your progress. Open one to see all its cards and
   tick the ones you own.
 - Click any picture to see it large.
 - A picture that is missing everywhere shows a Poké Ball with the card's name.
-- If a card is wrongly counted (or not counted) as an art card, use
-  "Count as art card" / "Not an art card" on that card.
+- If a card is wrongly counted (or not counted) as an art card, the main admin
+  can use "Count as art card" / "Not an art card" on that card.
 - Prices are shown in euro (Cardmarket). For dollar (TCGplayer) prices, set
   PRICE_SOURCE: "tcgplayer" in docker-compose.yml and start it again.
 - Once you own the art card of a Pokémon, its price is no longer updated.
@@ -92,7 +105,7 @@ IF SOMETHING GOES WRONG
   may differ. Send me the log and I will adjust the RARITIES setting.
 
 Other devices on your home network can use the page too:
-http://<this computer's address>:8080  (there is no password, so do not
-expose it to the internet).
+http://<this computer's address>:8080  (passwords are sent without https, so
+do not expose it to the internet without an https proxy or VPN).
 
 More settings are described in README.md.

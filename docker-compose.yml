@@ -17,13 +17,15 @@ services:
       # Only sets released on or after this date are scanned (Scarlet & Violet started art cards).
       MIN_SET_DATE: "2000-01-01"
       # Set to "1" so even the first build of the database is limited to DAILY_REQUESTS per day (needs DAILY_REQUESTS to be set).
-      # STAGGER_INITIAL: "4"
+      # STAGGER_INITIAL: "1"
       # Every Pokémon card from a promo set counts as an art card. Set to "0" to turn that off.
       # PROMO_AS_ART: "1"
       # Which rarities count as art cards (compared without upper/lower case).
       # RARITIES: "Illustration Rare,Special Illustration Rare,Promo"
-      # Owner password. Without it a random one is generated and printed in the container log
-      # (also saved as admin.json in the data folder). Only the owner can change anything.
+      # Prices shown on the page: "cardmarket" (euro, default) or "tcgplayer" (dollar).
+      # PRICE_SOURCE: "cardmarket"
+      # Password of the main admin account. Without it a random one is generated and printed in the container log
+      # (also saved as admin.json in the data folder). The main admin adds the other trainers' accounts on the page.
       # ADMIN_PASSWORD: "choose-a-long-password"
       # Set to "1" so visitors who are not logged in also see "worth" and "left to spend".
       # SHOW_VALUE_PUBLIC: "1"
