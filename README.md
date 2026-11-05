@@ -32,7 +32,7 @@ A card counts as an art card when:
 - its rarity is one of `RARITIES` (default: Illustration Rare, Special Illustration Rare, Promo), or
 - it comes from a promo set (name contains "Promo") and is a Pokémon card. Switch this off with `PROMO_AS_ART=0`.
 
-The data cannot tell every art card apart (for example an older alternate art such as Lugia V in Silver Tempest is just an "Ultra Rare"). So the main admin can correct it, in the Sets view or under **view**: **Count as art card** adds that card to the art list (one request to read its details and price), and **Not an art card** takes it off.
+The data cannot tell every art card apart (for example an older alternate art such as Lugia V in Silver Tempest is just an "Ultra Rare"). So the admin can correct it, in the Sets view or under **view**: **Count as art card** adds that card to the art list (one request to read its details and price), and **Not an art card** takes it off.
 
 ## Pictures
 
@@ -45,7 +45,7 @@ The server downloads every card picture the page shows and keeps its own copy in
 - A background job fills the store slowly (one picture per second, at most 25 minutes per hour): cards someone owns or wishes for first, then art cards, then the rest, newest sets first. The status line shows how many are stored and how many are still to download. The first fill takes a day or two.
 - Disk space: roughly 3–5 GB with every card stored in both sizes. `IMAGE_HIGH=art` keeps high resolution only for art cards, owned and wished cards (roughly 1–1.5 GB in all); `IMAGE_HIGH=none` keeps only the low one.
 - A picture that came from a backup site is replaced once TCGdex has one. A card whose picture could not be found anywhere is tried again after 7 days.
-- Safety: automatic downloads only come from assets.tcgdex.net, images.pokemontcg.io and images.scrydex.com over https. Every picture (also custom ones) is limited to 15 MB, decoded and saved again as a clean WebP file; anything that is not a JPG, PNG, WebP, GIF, AVIF or TIFF picture is refused, so SVG drawings and disguised files are never stored. Picture addresses pasted by the main admin must be https on the normal port and may never lead (also not through a redirect) to a private, local or reserved network address such as your own 192.168.x.x / 10.x.x.x network. Stored files are named by a hash of the card id and served with headers that stop a browser from treating them as anything but a picture.
+- Safety: automatic downloads only come from assets.tcgdex.net, images.pokemontcg.io and images.scrydex.com over https. Every picture (also custom ones) is limited to 15 MB, decoded and saved again as a clean WebP file; anything that is not a JPG, PNG, WebP, GIF, AVIF or TIFF picture is refused, so SVG drawings and disguised files are never stored. Picture addresses pasted by the admin must be https on the normal port and may never lead (also not through a redirect) to a private, local or reserved network address such as your own 192.168.x.x / 10.x.x.x network. Stored files are named by a hash of the card id and served with headers that stop a browser from treating them as anything but a picture.
 - The picture processing uses the `sharp` package, installed when the container is built (`docker compose up -d --build`, needs internet once). Without it the page simply keeps using the outside sites.
 
 ### Where pictures come from
@@ -53,7 +53,7 @@ The server downloads every card picture the page shows and keeps its own copy in
 Pictures come from TCGdex. Brand new cards and many promos have no picture there yet. For those:
 
 - **Automatic lookup.** The server asks the pokemontcg.io card search for the exact picture of every English card the page shows that has no TCGdex picture, promo sets first. It searches by set and number, and if the set is named differently there, by name and number, only taking an unambiguous match. Found pictures are stored for good; a card without a result is asked about again after 30 days. It runs in the background at the usual pace, at most 200 cards per hour and `PICTURES_PER_DAY` per day. The status line shows how many cards are still to look up. Japanese cards are not on pokemontcg.io.
-- **By hand.** The main admin sees a **Picture…** button on every card (Sets view and a Pokémon's card list). Paste the address of a picture of that card (for example "Copy image address" on a shop or card site) or choose a picture file from your computer; a preview shows it first. The server downloads or reads it once, checks it and stores a low and a high resolution copy, so the original site is not needed afterwards. Save with nothing filled in to go back to the automatic picture.
+- **By hand.** The admin sees a **Picture…** button on every card (Sets view and a Pokémon's card list). Paste the address of a picture of that card (for example "Copy image address" on a shop or card site) or choose a picture file from your computer; a preview shows it first. The server downloads or reads it once, checks it and stores a low and a high resolution copy, so the original site is not needed afterwards. Save with nothing filled in to go back to the automatic picture.
 - Otherwise the page still tries pokemontcg.io and Scrydex addresses based on the set id, and finally shows a Poké Ball placeholder with the card's name and number.
 
 ## Other languages (check first)
@@ -103,12 +103,13 @@ One port, one page. Every account (trainer) has its own dex with its own ticks; 
 
 - **Dex of:** the menu at the top picks whose dex you are looking at. Every dex has its own link (`/?dex=<id>`).
 - **Login:** open your own dex and click the blue lens at the top left. A login only opens the dex it was made on: on someone else's dex you are view-only (and the lens logs you in to *that* dex). After logging in you get the full page with the tick buttons, Refresh, Trainer name, Password and Log out, and the lens becomes the camera button for scanning. The login lasts 30 days on that device.
-- **Main admin:** the original owner account. Its password is `ADMIN_PASSWORD`; if you do not set it, a random one is generated, printed in the container log (look for `OWNER PASSWORD`) and saved as `admin.json` in the data folder. Its ticks stay in `state.json`, so an existing install keeps everything.
-- **Adding accounts:** logged in as the main admin, open the **Dex of** menu and choose **+ Add account…**. Enter a trainer name and a password (or leave it empty and one is made up). The password is shown once. **Manage accounts…** in the same menu gives an account a new password (this logs them out) or deletes it (its ticks are kept as `states/<id>.deleted-….json`).
-- **Trainer name and password:** every account owner can rename their own dex with the **Trainer name** button and change their password with **Password** (the current password is asked first; other devices logged in to that dex are logged out). The main admin can do this too, unless the password is set with `ADMIN_PASSWORD`: then change it there. A password changed on the page is stored as a salted hash in `admin.json`.
-- **Shared art list:** "Count as art card" / "Not an art card" change the art list for every dex, so only the main admin sees them. Other accounts can tick cards, use Get price and Refresh prices.
+- **Admin:** the admin is not a trainer and has no dex. To log in as admin, open any login box (the blue lens) on the normal address and type `*admin-` followed by the admin password, for example `*admin-MySecret123`. This never works on `/view/`. The admin password is `ADMIN_PASSWORD`; if you do not set it, a random one is generated, printed in the container log (look for `ADMIN PASSWORD`) and saved as `admin.json` in the data folder. The admin sees every dex as a visitor does, plus **Admin settings** (in the view menu, or click the lens), Refresh prices, the art-card and Picture… buttons, and the account menu. (Older installs: the admin's own "Owner" dex is removed on the first start; its ticks are kept as `removed-owner-dex.json`.)
+- **Admin settings:** a page with a dropdown for most settings below (prices, which sets to read, languages, pictures, scanning and the AI reader with its model and key, proxy). Choices made there are saved in `settings.json` in the data folder and win over the container's settings; **Default** uses the container's value or the built-in one. Saving restarts the server by itself in a few seconds. AI keys are never shown again on the page.
+- **Adding accounts:** logged in as the admin, open the **Dex of** menu and choose **+ Add account…**. Enter a trainer name and a password (or leave it empty and one is made up). The password is shown once. **Manage accounts…** in the same menu gives an account a new password (this logs them out) or deletes it (its ticks are kept as `states/<id>.deleted-….json`).
+- **Trainer name and password:** every account owner can rename their own dex with the **Trainer name** button and change their password with **Password** (the current password is asked first; other devices logged in to that dex are logged out). The admin changes the admin password with the same button, unless it is set with `ADMIN_PASSWORD`: then change it there. An admin password changed on the page is stored as a salted hash in `admin.json`.
+- **Shared art list:** "Count as art card" / "Not an art card" change the art list for every dex, so only the admin sees them. Other accounts can tick cards, use Get price and Refresh prices.
 - Background re-pricing only skips a card or Pokémon when every account owns it.
-- **The /view/ address:** `http://yourserver:8080/view/` is the same page, but the main admin can never log in or use an existing admin login there. Other trainers can: they open their own dex there and log in with the lens as usual. The main dex has no login option on /view/ at all.
+- **The /view/ address:** `http://yourserver:8080/view/` is the same page, but the admin can never log in or use an existing admin login there. Trainers can: they open their own dex there and log in with the lens as usual.
 - Eight wrong passwords from one address block further tries for 15 minutes. The money totals are hidden from visitors unless `SHOW_VALUE_PUBLIC=1`.
 - **Outside your home:** only publish the page through an https reverse proxy or tunnel (the password travels as plain text over http), (`TRUST_PROXY` is on by default, so the proxy's forwarded address and https are used; set `TRUST_PROXY=0` if there is no proxy). The visitor's address is taken from the end of `X-Forwarded-For`, where the proxy adds it, so a made-up address cannot get around the wrong-password limit; with two proxies in a row set `PROXY_HOPS=2`. Passwords need at least 8 characters. Put the proxy rule on port 8080 only. To keep the admin login unreachable from outside while trainers can still log in, publish only the `/view/` path.
 
@@ -168,9 +169,11 @@ The Pokémon tab is split into the nine generations, each with a header showing 
 
 ## Your ticks
 
-Saved on the server (`state.json` for the main admin, `states/<id>.json` for other accounts), so every device sees the same progress. "Show backup text" copies them out as text.
+Saved on the server (`states/<id>.json` for every account), so every device sees the same progress. "Show backup text" copies them out as text.
 
 ## Settings (environment variables)
+
+Most of these can also be chosen on the **Admin settings** page; a choice saved there wins over the value set here.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -179,14 +182,14 @@ Saved on the server (`state.json` for the main admin, `states/<id>.json` for oth
 | `PRICE_MAX_AGE_DAYS` | 30 | Re-price candidates older than this |
 | `SETS_CHECK_DAYS` | 1 | The set list is checked at start and then every this many days |
 | `PRICE_CANDIDATES` | 2 | Cheapest art cards per Pokémon kept up to date |
-| `MIN_SET_DATE` | 2000-01-01 | Only sets released on or after this are scanned |
+| `MIN_SET_DATE` | any | Only sets released on or after this date (YYYY-MM-DD) are read; `any` reads every set, including the 1999 Base Set |
 | `RARITIES` | Illustration Rare,Special Illustration Rare,Promo | Art card rarities, case-insensitive |
 | `PROMO_AS_ART` | 1 | 0 = promo cards only count when their rarity is listed above |
 | `DISABLE_REFRESH` | 0 | 1 = never contact the APIs |
 | `EXTRA_RARITIES` | Mega Hyper Rare,Ultra Rare,Holo Rare | Extra rarities that count as art cards in every language (comma separated) |
 | `LANGUAGES` | en,ja | `en` = English only |
 | `REGULAR_PRICES_PER_DAY` | 0 | Most requests per day spent on regular-card prices, 0 = no limit |
-| `ADMIN_PASSWORD` | random | Password of the main admin account |
+| `ADMIN_PASSWORD` | random | The admin password (log in with `*admin-<password>`) |
 | `IMAGE_CACHE` | 1 | 0 = do not store pictures on the server (the page then loads them from the picture sites) |
 | `IMAGE_HIGH` | all | Which cards also get a high resolution copy: `all`, `art` (art, owned and wished cards) or `none` |
 | `IMAGE_DELAY_MS` | 1000 | Pause between two picture downloads, in milliseconds |

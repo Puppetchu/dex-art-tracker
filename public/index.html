@@ -75,7 +75,7 @@ h1{margin:0;font:800 1.45rem/1 var(--head);letter-spacing:.14em;text-transform:u
 #gens{font-family:var(--mono);font-size:.76rem}
 
 /* grids and tiles */
-#grid,#setsView,#trainersView,#wishView,#histView{padding:14px max(16px,env(safe-area-inset-left)) 50px}
+#grid,#setsView,#trainersView,#wishView,#histView,#adminView{padding:14px max(16px,env(safe-area-inset-left)) 50px}
 .cgrid,#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(172px,1fr));gap:14px}
 .setlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
 .tile{position:relative;background:linear-gradient(var(--panel2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:7px;min-width:0}
@@ -150,7 +150,26 @@ dialog::backdrop{background:#000b}
 @media (prefers-reduced-motion:reduce){.lens{animation:none}.bar i{transition:none}}
 @media (max-width:520px){h1{font-size:1.1rem}.legend{margin-left:0}}
 .ro-mode [data-do="any"],.ro-mode [data-do="art"],.ro-mode [data-do="have"]{opacity:.75}
-#toast{position:fixed;inset:auto 0 18px 0;margin:0 auto;width:max-content;max-width:min(92vw,460px);padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text);font-size:.92rem;box-shadow:0 6px 24px #0008;text-align:center}
+.admin-mode [data-do="main"],.admin-mode [data-do="unwish"],.admin-mode [data-do="wish"],.admin-mode .tools,.admin-mode #nameBtn{display:none!important}
+.admin-mode [data-do="any"],.admin-mode [data-do="art"],.admin-mode [data-do="have"]{opacity:.75}
+#adminView{max-width:820px;margin:0 auto}
+#adminView h2{font:800 1.15rem var(--head);margin:6px 0 4px}
+#adminView .intro{color:var(--muted);font-size:.88rem;margin:0 0 12px}
+#adminView .abtns{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+#adminView fieldset{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px 14px 4px;margin:0 0 14px}
+#adminView legend{font:800 .95rem var(--head);padding:0 6px}
+.setrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:4px 14px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.setrow:first-of-type{border-top:0}
+.setrow>label{font-size:.9rem}
+.setrow select,.setrow input{width:100%;margin:0}
+.setrow .hint{grid-column:1/-1;color:var(--muted);font-size:.78rem}
+.setrow .sub{display:flex;flex-direction:column;gap:6px}
+.setrow .keyst{font-size:.8rem;color:var(--muted)}
+.setrow.changed>label::after{content:" ●";color:var(--yellow)}
+.savebar{position:sticky;bottom:0;display:flex;gap:10px;align-items:center;padding:10px 0 14px;background:linear-gradient(transparent,var(--body) 30%)}
+#setMsg{font-size:.88rem;color:var(--muted)}
+@media (max-width:620px){.setrow{grid-template-columns:1fr}}
+#toast{position:fixed;inset:auto 0 18px 0;margin:0 auto;width:max-content;max-width:min(92vw,460px);padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--ink);font-size:.92rem;box-shadow:0 6px 24px #0008;text-align:center}
 #toast:not(:popover-open):not(.show){display:none}
 .ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode [data-do="unwish"],.ro-mode [data-do="wish"],.ro-mode #pwBtn,.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn,.ro-mode #nameBtn{display:none!important}
 /* scanning */
@@ -214,7 +233,7 @@ dialog::backdrop{background:#000b}
 .why{display:flex;gap:4px;flex-wrap:wrap}.why span{font:600 .66rem var(--head);letter-spacing:.06em;text-transform:uppercase;background:var(--screen);color:var(--lcd);border-radius:999px;padding:2px 7px}
 .ro-mode button:disabled{opacity:1}
 #roTag{display:none;margin-left:10px;padding:2px 9px;border-radius:99px;background:var(--screen);color:var(--lcd);font:700 .7rem var(--head);letter-spacing:.08em;text-transform:uppercase;vertical-align:middle}
-.ro-mode #roTag{display:inline-block}
+.ro-mode #roTag,.admin-mode #roTag{display:inline-block}
 .trainer{display:flex;align-items:center;gap:8px;background:#0003;border-radius:999px;padding:4px 6px 4px 12px;font:700 .72rem var(--head);letter-spacing:.1em;text-transform:uppercase}
 .trainer select{padding:4px 10px;border-radius:999px;font:600 .9rem var(--head);letter-spacing:0;text-transform:none;max-width:230px}
 #meTag{font:500 .78rem system-ui,sans-serif;letter-spacing:0;text-transform:none;color:#fff}
@@ -288,7 +307,7 @@ a{color:var(--lcd)}
   .lens{width:46px;height:46px;border-width:3px}
   .leds{gap:4px}.leds i{width:9px;height:9px}
   h1{font-size:.92rem;letter-spacing:.1em;line-height:1.1}
-  #roTag{display:none}.ro-mode #roTag{display:inline-block;margin-left:0;margin-top:3px;font-size:.6rem}
+  #roTag{display:none}.ro-mode #roTag,.admin-mode #roTag{display:inline-block;margin-left:0;margin-top:3px;font-size:.6rem}
   .legend{font-size:.66rem;gap:8px;padding:3px 9px;flex-wrap:nowrap}
   .legend .dot{width:8px;height:8px}
   .tright{grid-column:1;grid-row:2;justify-self:stretch;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:5px}
@@ -306,7 +325,7 @@ a{color:var(--lcd)}
   .deck select,.deck button{font-size:.8rem;padding:6px 8px;width:100%}
   #viewSel{font-size:.78rem;padding:6px 10px}
   #status,#gens{padding:6px 10px 0;font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#gens{font-size:.64rem}
-  #grid,#setsView,#trainersView,#wishView,#histView{padding:8px 8px 40px}
+  #grid,#setsView,#trainersView,#wishView,#histView,#adminView{padding:8px 8px 40px}
   .cgrid,#grid,#scanRes,#opts{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .tile{padding:6px;gap:4px;border-radius:10px}
   .tile .no{font-size:.64rem}.led{width:9px;height:9px}
@@ -440,6 +459,7 @@ a{color:var(--lcd)}
 <main id="trainersView" hidden></main>
 <main id="wishView" hidden></main>
 <main id="histView" hidden></main>
+<main id="adminView" hidden></main>
 <section class="tools">
   <button id="exp" type="button">Show backup text</button>
   <button id="imp" type="button">Restore from backup text</button>
@@ -544,11 +564,12 @@ a{color:var(--lcd)}
 <script>
 (function(){
 var RO=!!window.DEX_READONLY, HIDEV=!!window.DEX_HIDE_VALUE, LOGIN=!!window.DEX_LOGIN, AUTH=!!window.DEX_AUTH;
-var CFG=window.DEX_CFG||{dex:'main',accounts:[{id:'main',name:'Owner'}],me:null};
+var CFG=window.DEX_CFG||{dex:null,accounts:[],me:null};
 var DEX=CFG.dex, ME=CFG.me, ADMIN=!!(ME&&ME.admin);
 function accName(id){ for(var i=0;i<CFG.accounts.length;i++) if(CFG.accounts[i].id===id) return CFG.accounts[i].name; return id; }
-var DEXNAME=accName(DEX);
+var DEXNAME=DEX?accName(DEX):'Nobody';
 if(!ADMIN) document.body.classList.add('no-admin');
+// The admin has no dex: it looks at every dex as a visitor would, with the admin tools and the settings page.
 // Inside the Android app (it adds "DexArtApp" to every request) the page is one trainer's dex only:
 // a closed Pokédex to log in, no switching to other dexes. The web page itself is unchanged.
 var APP=/\bDexArtApp\//.test(navigator.userAgent), LOCKED=false;
@@ -557,11 +578,15 @@ if(APP){
   if(!ME) LOCKED=true;
   else if(DEX!==ME.id){ location.replace(location.pathname+'?dex='+encodeURIComponent(ME.id)+location.hash); LOCKED=true; }
 }
-document.title=DEXNAME+"'s dex · Dex Art Tracker";
-if(RO){
+document.title=DEX?DEXNAME+"'s dex · Dex Art Tracker":'Dex Art Tracker';
+if(ADMIN){
+  document.body.classList.add('admin-mode');
+  document.getElementById('roTag').textContent='Admin';
+  document.title='Admin · Dex Art Tracker';
+} else if(RO){
   document.body.classList.add('ro-mode');
-  document.title=DEXNAME+"'s dex (view only)";
-  if(LOGIN){ var lens=document.querySelector('.lens'); lens.removeAttribute('aria-hidden'); lens.setAttribute('role','button'); lens.setAttribute('tabindex','0'); lens.setAttribute('aria-label','Log in to '+DEXNAME+"'s dex"); lens.title='Log in to '+DEXNAME+"'s dex"; lens.style.cursor='pointer'; }
+  document.title=DEX?DEXNAME+"'s dex (view only)":'Dex Art Tracker';
+  if(LOGIN){ var lens=document.querySelector('.lens'); lens.removeAttribute('aria-hidden'); lens.setAttribute('role','button'); lens.setAttribute('tabindex','0'); lens.setAttribute('aria-label',DEX?'Log in to '+DEXNAME+"'s dex":'Log in'); lens.title=DEX?'Log in to '+DEXNAME+"'s dex":'Log in'; lens.style.cursor='pointer'; }
   if(HIDEV){ ['roWorth','roCost'].forEach(function(i){ var e=document.getElementById(i); if(e) e.style.display='none'; }); }
 }
 'use strict';
@@ -1034,12 +1059,13 @@ function renderHist(){
 }
 function renderSets(){
   $('grid').hidden=view!=='dex'; $('setsView').hidden=view!=='sets'; $('trainersView').hidden=view!=='trainers';
-  $('wishView').hidden=view!=='wish'; $('histView').hidden=view!=='history';
+  $('wishView').hidden=view!=='wish'; $('histView').hidden=view!=='history'; $('adminView').hidden=view!=='admin';
   $('viewSel').value=view;
   $('filter').hidden=view!=='dex'; $('genSel').hidden=view!=='dex'; $('sortSel').hidden=view!=='dex'; $('setSort').hidden=view!=='sets'||!!curSet;
   if(view==='trainers') renderTrainers();
   if(view==='wish') renderWish();
   if(view==='history') renderHist();
+  if(view==='admin') renderAdmin();
   if(view!=='sets') return;
   var q=$('q').value.trim().toLowerCase(), h=[];
   if(!curSet){
@@ -1144,6 +1170,10 @@ async function applyRoute(){
     if(view==='wish') trades=null; // read the other dexes again each time
     if($('dlg').open){ closingByRoute=true; $('dlg').close(); }
     render();
+  } else if(parts[0]==='admin'&&ADMIN){
+    view='admin'; curSet=null; setData=null;
+    if($('dlg').open){ closingByRoute=true; $('dlg').close(); }
+    render();
   } else if(parts[0]==='trainers'){
     view='trainers'; curSet=null; setData=null;
     if($('dlg').open){ closingByRoute=true; $('dlg').close(); }
@@ -1187,7 +1217,8 @@ function toast(t){ // shown above everything, the card dialog included
 }
 // Clicking Have it / Any card / Art card on a dex you are not logged in to: say why nothing changes.
 function readOnlyHint(){
-  if(ME&&ME.id!==DEX) toast('This is '+DEXNAME+"'s dex. Switch to your own dex under \"Dex of\" to mark cards.");
+  if(ADMIN) toast('The admin has no dex. Log out and log in to a trainer\'s dex to mark cards.');
+  else if(ME&&ME.id!==DEX) toast('This is '+DEXNAME+"'s dex. Switch to your own dex under \"Dex of\" to mark cards.");
   else if(LOGIN){ toast('Log in to '+DEXNAME+"'s dex to mark cards."); openLogin(); }
   else toast(DEXNAME+"'s dex is view-only on this address. Open it without /view/ and log in to mark cards.");
 }
@@ -1195,7 +1226,8 @@ document.addEventListener('click',function(e){
   var t=e.target.closest('[data-do]'); if(!t) return;
   var a=t.dataset.do, n=+t.dataset.n, id=t.dataset.id;
   if(RO&&/^(any|art|have)$/.test(a)){ readOnlyHint(); return; }
-  if(RO&&/^(main|unwish|wish|mark|getp)$/.test(a)) return;
+  if(RO&&/^(main|unwish|wish)$/.test(a)) return;
+  if(RO&&!ADMIN&&/^(mark|getp)$/.test(a)) return;
   if(!ADMIN&&(a==='mark'||a==='pic')) return;
   if(a==='any'){
     if(artOwned(n)) return;
@@ -1294,7 +1326,7 @@ $('refresh').addEventListener('click',async function(){
   }
   pollRefresh();
 });
-function openLogin(){ $('lgTitle').textContent='Log in to '+DEXNAME+"'s dex"; $('lgMsg').textContent=''; $('lgPw').value=''; $('lgdlg').showModal(); $('lgPw').focus(); }
+function openLogin(){ $('lgTitle').textContent=DEX?'Log in to '+DEXNAME+"'s dex":'Log in'; $('lgMsg').textContent=''; $('lgPw').value=''; $('lgdlg').showModal(); $('lgPw').focus(); }
 if(LOGIN){
   var lensEl=document.querySelector('.lens');
   lensEl.addEventListener('click',openLogin);
@@ -1304,7 +1336,7 @@ $('lgClose').addEventListener('click',function(){ $('lgdlg').close(); });
 $('lgForm').addEventListener('submit',async function(e){
   e.preventDefault(); $('lgMsg').textContent='…';
   try{ await post('api/login',{dex:DEX,password:$('lgPw').value}); location.reload(); }
-  catch(err){ $('lgMsg').textContent=err.status===429?'Too many tries. Wait 15 minutes.':'Wrong password.'; }
+  catch(err){ $('lgMsg').textContent=err.status===429?'Too many tries. Wait 15 minutes.':(err.status===404?'Pick a dex under "Dex of" first.':'Wrong password.'); }
 });
 /* ---------- scanning: a queue of photos, then a screen to check what was found ---------- */
 // Every tap of the lens adds a photo to the queue; the photos are scanned one by one in the background while you
@@ -1523,7 +1555,8 @@ function fillDexSel(){
   $('dexSel').innerHTML=h.join(''); $('dexSel').value=DEX;
 }
 fillDexSel();
-if(ME&&ME.id!==DEX){ $('meTag').hidden=false; $('meTag').innerHTML='Logged in as '+esc(ME.name)+' · <a href="'+esc(dexUrl(ME.id))+'">your dex</a>'; }
+if(ADMIN){ $('meTag').hidden=false; $('meTag').innerHTML='Logged in as admin · <a href="#/admin">settings</a>'; }
+else if(ME&&ME.id!==DEX){ $('meTag').hidden=false; $('meTag').innerHTML='Logged in as '+esc(ME.name)+' · <a href="'+esc(dexUrl(ME.id))+'">your dex</a>'; }
 $('dexSel').addEventListener('change',function(){
   var v=$('dexSel').value;
   if(v==='__add'||v==='__manage'){ $('dexSel').value=DEX; openAccounts(v==='__add'); return; }
@@ -1586,8 +1619,7 @@ async function loadAccounts(){
   $('accList').innerHTML=list.map(function(a){
     var del=accArmed&&accArmed.key==='del:'+a.id&&Date.now()-accArmed.t<4000;
     return '<div class="accrow"><b>'+esc(a.name)+'</b>'+
-      (a.main?'<span>main admin</span>':
-      '<span>added '+esc(new Date(a.created).toLocaleDateString())+'</span>'+
+      ('<span>added '+esc(new Date(a.created).toLocaleDateString())+'</span>'+
       '<button type="button" class="mini" data-acc="pw" data-id="'+esc(a.id)+'" data-name="'+esc(a.name)+'">New password</button>'+
       '<button type="button" class="mini'+(del?' arm':'')+'" data-acc="del" data-id="'+esc(a.id)+'" data-name="'+esc(a.name)+'">'+(del?'Really delete?':'Delete')+'</button>')+
       '<a class="mini" href="'+esc(dexUrl(a.id))+'">open dex</a></div>';
@@ -1634,11 +1666,129 @@ $('imp').addEventListener('click',function(){
   }catch(e){ b.value='That text could not be read as a backup.'; }
 });
 
+/* ---------- the admin page: settings (dropdowns) and trainers ---------- */
+var setInfo=null, setDirty={};
+if(ADMIN){
+  $('viewSel').insertAdjacentHTML('beforeend','<option value="admin">Admin settings</option>');
+  var lensAdm=document.querySelector('.lens');
+  lensAdm.removeAttribute('aria-hidden'); lensAdm.setAttribute('role','button'); lensAdm.setAttribute('tabindex','0');
+  lensAdm.setAttribute('aria-label','Admin settings'); lensAdm.title='Admin settings'; lensAdm.style.cursor='pointer';
+  lensAdm.addEventListener('click',function(){ go('#/admin'); });
+  lensAdm.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go('#/admin'); } });
+}
+function optLabel(f,v){ var o=(f.options||[]).filter(function(x){ return x[0]===v; })[0]; return o?o[1]:v; }
+function defaultText(f){
+  if(f.type==='secret') return '';
+  return 'Default · '+(f.container!=null?optLabel(f,f.container)+' (container)':optLabel(f,f.def||''));
+}
+function aiService(){ // the service chosen on the page now, else the container's, else none
+  var sel=document.querySelector('#adminView [data-key="SCAN_AI"]');
+  var v=sel?sel.value:'';
+  if(!sel){ var f0=setInfo&&setInfo.fields.filter(function(x){ return x.key==='SCAN_AI'; })[0]; v=f0&&f0.value?f0.value:''; } // while the page is being built
+  if(!v){ var f=setInfo&&setInfo.fields.filter(function(x){ return x.key==='SCAN_AI'; })[0]; v=f&&f.container?f.container:'none'; }
+  return ({gpt:'openai',chatgpt:'openai',anthropic:'claude',google:'gemini',ollama:'local',llama:'local',lmstudio:'local'})[v]||v;
+}
+function modelOptions(f,cur){
+  var list=(setInfo.models[aiService()]||[]).slice(), h=['<option value="">'+esc(defaultText(f))+'</option>'];
+  if(f.none) h.push('<option value="none"'+(cur==='none'?' selected':'')+'>None</option>');
+  list.forEach(function(m){ h.push('<option value="'+esc(m)+'"'+(cur===m?' selected':'')+'>'+esc(m)+'</option>'); });
+  var other=cur&&cur!=='none'&&list.indexOf(cur)<0;
+  h.push('<option value="__other"'+(other?' selected':'')+'>Other…</option>');
+  return h.join('');
+}
+function fieldHTML(f){
+  var h='<div class="setrow" data-row="'+esc(f.key)+'"><label for="set_'+esc(f.key)+'">'+esc(f.label)+'</label>';
+  if(f.options){
+    h+='<select id="set_'+esc(f.key)+'" data-key="'+esc(f.key)+'"><option value="">'+esc(defaultText(f))+'</option>'+
+      f.options.map(function(o){ return '<option value="'+esc(o[0])+'"'+(f.value===o[0]?' selected':'')+'>'+esc(o[1])+'</option>'; }).join('')+'</select>';
+  } else if(f.type==='model'){
+    var other=f.value&&f.value!=='none'&&(setInfo.models[aiService()]||[]).indexOf(f.value)<0;
+    h+='<div class="sub"><select id="set_'+esc(f.key)+'" data-key="'+esc(f.key)+'" data-model="1">'+modelOptions(f,f.value)+'</select>'+
+      '<input type="text" data-other="'+esc(f.key)+'" placeholder="Model name, exactly as the service writes it" value="'+esc(other?f.value:'')+'"'+(other?'':' hidden')+' autocomplete="off" spellcheck="false"></div>';
+  } else if(f.type==='secret'){
+    h+='<div class="sub"><span class="keyst">'+(f.set?'A key is saved on this page.':(f.container?'The container has a key; none saved on this page.':'No key saved.'))+'</span>'+
+      '<input type="password" id="set_'+esc(f.key)+'" data-secret="'+esc(f.key)+'" placeholder="'+(f.set?'New key (leave empty to keep it)':'Paste the key')+'" autocomplete="off">'+
+      (f.set?'<label class="keyst"><input type="checkbox" data-clear="'+esc(f.key)+'" style="width:auto"> Remove the saved key</label>':'')+'</div>';
+  } else {
+    h+='<input type="url" id="set_'+esc(f.key)+'" data-key="'+esc(f.key)+'" value="'+esc(f.value||'')+'" placeholder="'+esc(f.container?f.container+' (container)':f.def||'')+'" autocomplete="off" spellcheck="false">';
+  }
+  if(f.help) h+='<span class="hint">'+esc(f.help)+'</span>';
+  return h+'</div>';
+}
+async function renderAdmin(){
+  setStatus('');
+  var v=$('adminView');
+  if(!setInfo){
+    v.innerHTML='<p class="intro">Loading the settings…</p>';
+    try{ setInfo=await getJSON('api/admin/settings'); }
+    catch(e){ if(e.status===401||e.status===403){ location.reload(); return; } v.innerHTML='<p class="intro">'+esc(e.message)+'</p>'; return; }
+  }
+  var groups=[], by={};
+  setInfo.fields.forEach(function(f){ if(!by[f.group]){ by[f.group]=[]; groups.push(f.group); } by[f.group].push(f); });
+  v.innerHTML='<h2>Admin</h2>'+
+    '<p class="intro">The admin has no dex of its own. Log in to a trainer\'s dex to tick cards.</p>'+
+    '<div class="abtns"><button type="button" id="admAcc">Trainers…</button><button type="button" id="admPw">Change admin password</button></div>'+
+    '<h2>Settings</h2><p class="intro">Choices made here win over the container\'s settings. <b>Default</b> uses the container\'s value (or the built-in one). '+
+    (setInfo.restarts?'Saving restarts the server for a few seconds.':'After saving, restart the container to apply the changes.')+'</p>'+
+    groups.map(function(g){ return '<fieldset><legend>'+esc(g)+'</legend>'+by[g].map(fieldHTML).join('')+'</fieldset>'; }).join('')+
+    '<div class="savebar"><button type="button" id="setSave" disabled>Save settings</button><span id="setMsg" aria-live="polite"></span></div>';
+  setDirty={};
+}
+function markDirty(key){ setDirty[key]=1; var r=document.querySelector('[data-row="'+key+'"]'); if(r) r.classList.add('changed'); $('setSave').disabled=false; $('setMsg').textContent=''; }
+$('adminView').addEventListener('change',function(e){
+  var t=e.target, key=t.dataset.key||t.dataset.other||t.dataset.secret||t.dataset.clear; if(!key) return;
+  if(t.dataset.model){ var o=document.querySelector('[data-other="'+key+'"]'); o.hidden=t.value!=='__other'; if(!o.hidden) o.focus(); }
+  if(key==='SCAN_AI'){ // other services have other models
+    document.querySelectorAll('#adminView select[data-model]').forEach(function(s){
+      var f=setInfo.fields.filter(function(x){ return x.key===s.dataset.key; })[0], cur=s.value==='__other'?(document.querySelector('[data-other="'+s.dataset.key+'"]').value||'__other'):s.value;
+      s.innerHTML=modelOptions(f,cur==='__other'?'':cur);
+      if(cur&&cur!=='__other'&&s.value!==cur){ s.value='__other'; }
+      document.querySelector('[data-other="'+s.dataset.key+'"]').hidden=s.value!=='__other';
+    });
+  }
+  markDirty(key);
+});
+$('adminView').addEventListener('input',function(e){ var t=e.target, key=t.dataset.other||t.dataset.secret||(t.type==='url'&&t.dataset.key); if(key) markDirty(key); });
+$('adminView').addEventListener('click',async function(e){
+  var t=e.target;
+  if(t.id==='admAcc') openAccounts(false);
+  else if(t.id==='admPw') $('pwBtn').click();
+  else if(t.id==='setSave'){
+    var values={}, bad=null;
+    Object.keys(setDirty).forEach(function(key){
+      var f=setInfo.fields.filter(function(x){ return x.key===key; })[0]; if(!f) return;
+      if(f.type==='secret'){
+        var clr=document.querySelector('[data-clear="'+key+'"]'), nv=document.querySelector('[data-secret="'+key+'"]').value.trim();
+        if(nv) values[key]=nv; else if(clr&&clr.checked) values[key]='';
+      } else if(f.type==='model'){
+        var s=document.querySelector('select[data-key="'+key+'"]');
+        if(s.value==='__other'){ var ov=document.querySelector('[data-other="'+key+'"]').value.trim(); if(!ov){ bad='Type the model name for "'+f.label+'"'; return; } values[key]=ov; }
+        else values[key]=s.value;
+      } else values[key]=document.querySelector('[data-key="'+key+'"]').value.trim();
+    });
+    if(bad){ $('setMsg').textContent=bad; return; }
+    t.disabled=true; $('setMsg').textContent='Saving…';
+    try{ var r=await post('api/admin/settings',{values:values}); }
+    catch(err){ t.disabled=false; if(err.status===401||err.status===403){ location.reload(); return; } $('setMsg').textContent=err.message; return; }
+    setInfo=null;
+    if(!r.restarting){ $('setMsg').textContent='Saved. Restart the container to apply the changes.'; return; }
+    $('setMsg').textContent='Saved. The server is restarting…';
+    var t0=Date.now(), down=false;
+    (async function wait(){
+      await sleep(1000);
+      var ok=false; try{ var rr=await fetch('api/status',{cache:'no-store'}); ok=rr.ok; }catch(x){ ok=false; }
+      if(!ok) down=true;
+      if(ok&&(down||Date.now()-t0>4000)){ location.reload(); return; }
+      if(Date.now()-t0>90000){ $('setMsg').textContent='Saved, but the server has not come back yet. Check the container log.'; return; }
+      wait();
+    })();
+  }
+});
+
 /* ---------- the app's closed Pokédex: pick your trainer, log in, it opens ---------- */
 var dlId=null;
 function showLock(){
-  var onView=/^\/view(\/|$)/.test(location.pathname); // the main admin cannot log in on /view/
-  var list=CFG.accounts.filter(function(a){ return !(onView&&a.id==='main'); }), last=null;
+  var list=CFG.accounts, last=null;
   try{ last=localStorage.getItem('dexLast'); }catch(e){}
   $('dlList').innerHTML=list.length?list.map(function(a){ return '<button type="button" data-id="'+esc(a.id)+'"'+(a.id===last?' class="last"':'')+'>'+esc(a.name)+'</button>'; }).join('')
     :'<p>No trainers yet. Ask the admin to add an account for you.</p>';
@@ -1680,7 +1830,7 @@ if(APP&&LOCKED&&!ME) showLock();
     await loadData();
     index(); await applyRoute();
     var s=await getJSON('api/status').catch(function(){return null;});
-    if(s&&s.running&&!RO) pollRefresh();
+    if(s&&s.running&&(!RO||ADMIN)) pollRefresh();
   }catch(e){
     setStatus('Could not load card data ('+(e&&e.message||e)+'). Reload the page to try again.');
   }

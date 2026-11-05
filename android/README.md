@@ -8,7 +8,7 @@ A small Android app around your Dex Art Tracker server. It opens `<your server>/
 2. On first start, enter the server address, for example `dex.example.com`. Use the https address of your reverse proxy: the camera only works over https. The address can be changed later: press Back on the main page and choose **Change server**.
 3. The app starts as a **closed Pokédex**: pick your trainer, enter your password and it opens. Inside the app you only see your own dex. **Log out** closes it again.
 
-- The main admin cannot log in on `/view/`, so the app is for the trainer accounts. The admin uses the web page.
+- The admin cannot log in on `/view/`, so the app is for the trainer accounts. The admin uses the web page (normal address).
 - Pages under `/view/` on your server open inside the app; other links (Cardmarket, TCGplayer) open in the phone's browser.
 - The camera is only handed to pages of your own server. Android asks once for camera permission.
 - If a reverse proxy with login (for example Pangolin) sits in front of the server, let `/view` and `/view/*` through without login, otherwise the app reports that it was sent to a login page.

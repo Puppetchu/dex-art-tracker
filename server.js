@@ -24,6 +24,65 @@ const net = require('net');
 
 const PORT = +process.env.PORT || 8080;
 const DATA_DIR = process.env.DATA_DIR || '/data';
+
+// ---------- settings from the admin page ----------
+// Every setting below can also be chosen on the admin page. Those choices are kept in settings.json in the data
+// folder and win over the container's own values; "Default" on the page means: use the container's value (or the
+// built-in default). The server starts again by itself to apply a change (see start.js).
+const yesNo = (yes, no) => [['1', yes || 'Yes'], ['0', no || 'No']];
+const SETTINGS = [
+  { group: 'Prices', key: 'PRICE_SOURCE', label: 'Prices from', def: 'cardmarket', options: [['cardmarket', 'Cardmarket (€)'], ['tcgplayer', 'TCGplayer ($)']] },
+  { group: 'Prices', key: 'PRICE_MAX_AGE_DAYS', label: 'Check art card prices again after', def: '30', options: [['7', '7 days'], ['14', '14 days'], ['30', '30 days'], ['60', '60 days'], ['90', '90 days']] },
+  { group: 'Prices', key: 'SHOW_VALUE_PUBLIC', label: 'Visitors (not logged in) see worth and left to spend', def: '0', options: yesNo('Shown', 'Hidden') },
+  { group: 'Card database', key: 'MIN_SET_DATE', label: 'Sets to read', def: 'any', help: 'Older sets are read the next time the set list is checked (at start).',
+    options: [['any', 'All sets (from 1996)'], ['2000-01-01', 'From 2000'], ['2011-04-25', 'From Black & White (2011)'], ['2017-02-03', 'From Sun & Moon (2017)'], ['2020-02-07', 'From Sword & Shield (2020)'], ['2023-03-31', 'From Scarlet & Violet (2023)']] },
+  { group: 'Card database', key: 'LANGUAGES', label: 'Languages', def: 'en,ja', options: [['en,ja', 'English and Japanese'], ['en', 'English only']] },
+  { group: 'Card database', key: 'PROMO_AS_ART', label: 'Every Pokémon card from a promo set counts as an art card', def: '1', options: yesNo() },
+  { group: 'Card database', key: 'DISABLE_REFRESH', label: 'Contact the card service (TCGdex)', def: '0', options: [['0', 'Yes'], ['1', 'No (work offline)']] },
+  { group: 'Card database', key: 'REQUEST_DELAY_MS', label: 'Pause between requests to the card service', def: '2000', options: [['1000', '1 second'], ['2000', '2 seconds'], ['5000', '5 seconds'], ['10000', '10 seconds']] },
+  { group: 'Card database', key: 'DAILY_REQUESTS', label: 'Requests per day', def: '0', options: [['0', 'No limit'], ['500', '500'], ['1000', '1,000'], ['2000', '2,000'], ['5000', '5,000'], ['10000', '10,000']] },
+  { group: 'Card database', key: 'SETS_CHECK_DAYS', label: 'Look for new sets', def: '1', options: [['1', 'Every day'], ['3', 'Every 3 days'], ['7', 'Every week']] },
+  { group: 'Pictures', key: 'IMAGE_HIGH', label: 'Store high resolution pictures of', def: 'all', options: [['all', 'All cards'], ['art', 'Art, owned and wished cards'], ['none', 'No cards (small pictures only)']] },
+  { group: 'Pictures', key: 'PICTURE_LOOKUP', label: 'Look up missing pictures on pokemontcg.io', def: '1', options: yesNo() },
+  { group: 'Pictures', key: 'PICTURES_PER_DAY', label: 'Picture lookups per day', def: '500', options: [['100', '100'], ['500', '500'], ['1000', '1,000'], ['0', 'No limit']] },
+  { group: 'Scanning', key: 'SCAN', label: 'Card scanning', def: '1', options: yesNo('On', 'Off') },
+  { group: 'Scanning', key: 'SCAN_AI', label: 'Read cards with', def: 'none', help: 'An AI reads cards much better than the built-in reader. Choose the service, then its model and key.',
+    options: [['none', 'Built-in reader only'], ['gemini', 'Google Gemini'], ['openai', 'OpenAI (GPT)'], ['claude', 'Anthropic Claude'], ['mistral', 'Mistral'], ['openrouter', 'OpenRouter'], ['local', 'Local AI (Ollama, LM Studio, llama.cpp)']] },
+  { group: 'Scanning', key: 'SCAN_AI_MODEL', label: 'AI model', type: 'model', def: '(the service\'s default)', help: 'The model must understand pictures.' },
+  { group: 'Scanning', key: 'SCAN_AI_BACKUP_MODEL', label: 'Backup model (when the first is busy)', type: 'model', def: '(Gemini: gemini-flash-lite-latest, others: none)', none: true },
+  { group: 'Scanning', key: 'SCAN_AI_KEY', label: 'AI key', type: 'secret', help: 'Not needed for most local AIs.' },
+  { group: 'Scanning', key: 'SCAN_AI_URL', label: 'Address of the AI server', type: 'url', def: '(the service\'s own address)', help: 'Only for a local AI, including /v1, for example http://192.168.1.20:11434/v1' },
+  { group: 'Scanning', key: 'SCAN_AI_TIMEOUT', label: 'Wait for the AI at most', def: '45', options: [['30', '30 seconds'], ['45', '45 seconds'], ['60', '1 minute'], ['120', '2 minutes'], ['180', '3 minutes']] },
+  { group: 'Scanning', key: 'SCAN_DEBUG', label: 'Write scan details to the log', def: '0', options: yesNo() },
+  { group: 'Network', key: 'TRUST_PROXY', label: 'Behind a reverse proxy (use X-Forwarded-For)', def: '1', options: yesNo() },
+  { group: 'Network', key: 'PROXY_HOPS', label: 'Proxies in a row in front of the server', def: '1', options: [['1', '1'], ['2', '2'], ['3', '3']] },
+];
+const MODEL_SUGGESTIONS = {
+  gemini: ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest', 'gemini-flash-lite-latest'],
+  openai: ['gpt-5.4-mini', 'gpt-5-mini'],
+  claude: ['claude-haiku-5-5', 'claude-sonnet-5-5'],
+  mistral: ['mistral-small-latest', 'mistral-medium-latest'],
+  openrouter: ['openai/gpt-5.4-mini', 'openrouter/auto'],
+  local: ['qwen2.5vl:7b', 'gemma3:12b', 'llama3.2-vision'],
+};
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const ENV0 = {}; // the container's own values
+function settingOk(f, v) {
+  if (typeof v !== 'string') return false;
+  if (f.options) return f.options.some(o => o[0] === v);
+  if (f.type === 'model') return /^[\w.:/@+-]{1,120}$/.test(v);
+  if (f.type === 'url') return /^https?:\/\/[^\s"'<>]{1,300}$/i.test(v);
+  if (f.type === 'secret') return v.length <= 400 && !/[\u0000-\u001f\u007f\s]/.test(v);
+  return false;
+}
+let pageSettings = {};
+try { pageSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) || {}; } catch (e) { pageSettings = {}; }
+for (const f of SETTINGS) {
+  ENV0[f.key] = process.env[f.key];
+  if (Object.prototype.hasOwnProperty.call(pageSettings, f.key)) {
+    if (settingOk(f, pageSettings[f.key])) process.env[f.key] = pageSettings[f.key]; else delete pageSettings[f.key];
+  }
+}
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const BASE = (process.env.TCGDEX_BASE || 'https://api.tcgdex.net/v2/en').replace(/\/$/, '');
 // Languages whose sets are read: en (always) and ja. Japanese ids are stored as "ja:<id>" so they never clash.
@@ -39,7 +98,9 @@ const REQUEST_DELAY_MS = process.env.REQUEST_DELAY_MS !== undefined ? +process.e
 const PRICE_MAX_AGE_DAYS = +process.env.PRICE_MAX_AGE_DAYS || 30;
 const SETS_CHECK_DAYS = +process.env.SETS_CHECK_DAYS || 1; // the set list is checked at start and then this often
 const PRICE_CANDIDATES = +process.env.PRICE_CANDIDATES || 2;
-const MIN_SET_DATE = process.env.MIN_SET_DATE || '2000-01-01'; // only sets released on or after this date are read
+// Only sets released on or after this date are read. "any" (the default) reads every set, back to the 1996-1999 originals.
+// ('0000' instead of '' so sets without a release date still count as "before" and are not asked for again and again.)
+const MIN_SET_DATE = (v => !v || /^(any|all|none|0)$/i.test(v) ? '0000' : v)(String(process.env.MIN_SET_DATE || '').trim());
 const DISABLE_REFRESH = process.env.DISABLE_REFRESH === '1';
 // 0 (default): the first build of the database runs in one go, at REQUEST_DELAY_MS between requests.
 // 1: even the first build is limited to DAILY_REQUESTS per day. ("4" is still accepted from older setups.)
@@ -682,7 +743,7 @@ async function fillPictures() {
 // owns or wishes for, and custom pictures). The page loads these first and only falls back to the
 // outside sites for pictures not stored yet. Safety:
 //  - Automatic downloads only come from the three known card picture sites, over https.
-//  - Custom picture addresses (main admin) may be any https site, but never a private, local or
+//  - Custom picture addresses (admin) may be any https site, but never a private, local or
 //    reserved network address (checked on the address actually connected to, also after redirects).
 //  - At most 15 MB per picture; every picture is decoded and re-encoded by sharp (anything that is not
 //    a JPG, PNG, WebP, GIF, AVIF or TIFF picture is refused), so only clean WebP files are stored and served.
@@ -1523,39 +1584,46 @@ function status() {
 }
 
 // ---------- accounts and login ----------
-// Every account (trainer) has its own dex. The main account is the admin: its password is ADMIN_PASSWORD
-// (or the generated one in admin.json) and its ticks stay in state.json. The admin creates the other
-// accounts; their ticks are stored in states/<id>.json. A login only opens the dex it was made on.
+// Every account (trainer) has its own dex; its ticks are stored in states/<id>.json. A login only opens the
+// dex it was made on. The admin is not a trainer and has no dex: it logs in on the normal address (never on
+// /view/) by typing *admin-<admin password> in any login box. Its password is ADMIN_PASSWORD, or the one in
+// admin.json. The admin adds trainers, changes the settings and the shared card list (art cards, pictures).
 const ADMIN_FILE = path.join(DATA_DIR, 'admin.json');
 const SESS_FILE = path.join(DATA_DIR, 'sessions.json');
 const ACC_FILE = path.join(DATA_DIR, 'accounts.json');
 const STATES_DIR = path.join(DATA_DIR, 'states');
-const MAIN = 'main';
+const ADMIN_ID = '@admin', ADMIN_PREFIX = '*admin-';
 fs.mkdirSync(STATES_DIR, { recursive: true });
 const sha = x => crypto.createHash('sha256').update(String(x)).digest();
 const sameText = (a, b) => crypto.timingSafeEqual(sha(a), sha(b));
-// The main admin's password: ADMIN_PASSWORD if set (then it can only be changed there). Otherwise admin.json:
+// The admin password: ADMIN_PASSWORD if set (then it can only be changed there). Otherwise admin.json:
 // first a generated password in plain text, and once changed on the page a salted hash ({salt, hash}).
 const ADMIN_FIXED = !!process.env.ADMIN_PASSWORD;
 let adminPw = String(process.env.ADMIN_PASSWORD || ''), adminHash = null;
-if (ADMIN_FIXED) log('owner password: set by ADMIN_PASSWORD');
+if (ADMIN_FIXED) log('admin password: set by ADMIN_PASSWORD (log in with ' + ADMIN_PREFIX + '<password>)');
 else {
   const a = readJSON(ADMIN_FILE) || {};
-  if (a.hash && a.salt) { adminHash = { salt: a.salt, hash: a.hash }; log('owner password: changed on the page (stored hashed in admin.json)'); }
+  if (a.hash && a.salt) { adminHash = { salt: a.salt, hash: a.hash }; log('admin password: changed on the page (stored hashed in admin.json); log in with ' + ADMIN_PREFIX + '<password>'); }
   else {
     adminPw = a.password || '';
     if (!adminPw) { adminPw = crypto.randomBytes(9).toString('base64url'); writeJSON(ADMIN_FILE, { password: adminPw }); }
-    log('OWNER PASSWORD (generated; also saved in admin.json in the data folder; set ADMIN_PASSWORD to choose your own):', adminPw);
+    log('ADMIN PASSWORD (generated; also saved in admin.json in the data folder; set ADMIN_PASSWORD to choose your own):', adminPw, '- log in with ' + ADMIN_PREFIX + adminPw);
   }
 }
 const accounts = readJSON(ACC_FILE) || {};
 accounts.list = Array.isArray(accounts.list) ? accounts.list : [];
-if (!accounts.list.some(a => a.id === MAIN)) accounts.list.unshift({ id: MAIN, name: 'Owner', created: new Date().toISOString() });
 function saveAccounts() { writeJSON(ACC_FILE, accounts); }
+// One-time: the admin used to have a dex of its own ("Owner", ticks in state.json). It no longer has one:
+// the account goes and its ticks are kept aside as removed-owner-dex.json (delete that file when you like).
+if (accounts.list.some(a => a.id === 'main') || fs.existsSync(STATE_FILE)) {
+  accounts.list = accounts.list.filter(a => a.id !== 'main');
+  try { fs.renameSync(STATE_FILE, path.join(DATA_DIR, 'removed-owner-dex.json')); log('the old Owner dex was removed (its ticks are in removed-owner-dex.json)'); } catch (e) { /* none */ }
+}
 saveAccounts();
 const accById = id => accounts.list.find(a => a.id === String(id || '')) || null;
 const publicAccounts = () => accounts.list.map(a => ({ id: a.id, name: a.name }));
-const stateFile = id => id === MAIN ? STATE_FILE : path.join(STATES_DIR, id + '.json');
+const stateFile = id => path.join(STATES_DIR, id + '.json');
+const firstDex = () => (accounts.list[0] && accounts.list[0].id) || null;
 function allStates() {
   return accounts.list.map(a => { const s = readJSON(stateFile(a.id)) || {}; return { own: s.own || {}, cards: s.cards || {}, pick: s.pick || {}, wish: s.wish || {} }; });
 }
@@ -1595,17 +1663,20 @@ function tradeData() {
   });
 }
 const hashPw = (pw, salt) => crypto.scryptSync(String(pw), salt, 32);
+function checkAdmin(pw) {
+  if (adminHash) return crypto.timingSafeEqual(hashPw(pw, adminHash.salt), Buffer.from(adminHash.hash, 'hex'));
+  return !!adminPw && sameText(pw, adminPw);
+}
+function setAdminPw(pw) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  adminHash = { salt, hash: hashPw(pw, salt).toString('hex') }; adminPw = ''; writeJSON(ADMIN_FILE, adminHash);
+}
 function checkPw(acc, pw) {
-  if (acc.id === MAIN) {
-    if (adminHash) return crypto.timingSafeEqual(hashPw(pw, adminHash.salt), Buffer.from(adminHash.hash, 'hex'));
-    return sameText(pw, adminPw);
-  }
   if (!acc.hash || !acc.salt) return false;
   return crypto.timingSafeEqual(hashPw(pw, acc.salt), Buffer.from(acc.hash, 'hex'));
 }
 function setPw(acc, pw) {
   const salt = crypto.randomBytes(16).toString('hex'), hash = hashPw(pw, salt).toString('hex');
-  if (acc.id === MAIN) { adminHash = { salt, hash }; adminPw = ''; writeJSON(ADMIN_FILE, adminHash); return; }
   acc.salt = salt; acc.hash = hash;
 }
 const newPw = () => crypto.randomBytes(9).toString('base64url');
@@ -1618,7 +1689,7 @@ function cleanName(n, selfId) {
 }
 
 const sessions = readJSON(SESS_FILE) || {}; // sha256(token) -> {exp, acc}
-for (const k of Object.keys(sessions)) if (typeof sessions[k] === 'number') sessions[k] = { exp: sessions[k], acc: MAIN }; // older logins belong to the main account
+for (const k of Object.keys(sessions)) if (typeof sessions[k] !== 'object' || sessions[k].acc === 'main') delete sessions[k]; // logins of the old Owner dex end
 const SESSION_MS = 30 * 86400000;
 function saveSessions() { const n = Date.now(); Object.keys(sessions).forEach(k => { if (sessions[k].exp < n) delete sessions[k]; }); writeJSON(SESS_FILE, sessions); }
 function dropSessions(acc) { Object.keys(sessions).forEach(k => { if (sessions[k].acc === acc) delete sessions[k]; }); saveSessions(); }
@@ -1627,7 +1698,7 @@ const hashTok = t => crypto.createHash('sha256').update(t).digest('hex');
 function sessionOf(req) {
   const t = tokenOf(req); if (!t) return null;
   const s = sessions[hashTok(t)];
-  return s && s.exp > Date.now() && accById(s.acc) ? s : null;
+  return s && s.exp > Date.now() && (s.acc === ADMIN_ID || accById(s.acc)) ? s : null;
 }
 // Behind a reverse proxy the visitor's address is the one the proxy adds at the END of X-Forwarded-For:
 // anything before it was sent by the visitor and can be made up (which would get around the
@@ -1642,12 +1713,12 @@ const blocked = ip => { const f = fails.get(ip); return !!f && Date.now() - f.t 
 const hits = new Map();
 const limited = ip => { const n = Date.now(), h = hits.get(ip); if (!h || n - h.t > 60000) { hits.set(ip, { t: n, n: 1 }); return false; } return ++h.n > 600; };
 
-// mode: 'full' (logged in), 'ro' (view only, with a login link), 'view' (view only, no login link: the main dex on /view/)
+// mode: 'full' (logged in to this dex), 'ro' (view only, with a login link), 'admin' (the admin: views every dex, owns none)
 function indexHtml(mode, dexId, sess) {
   let h = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
-  const hide = 'window.DEX_HIDE_VALUE=' + (!SHOW_VALUE_PUBLIC) + ';';
-  const me = sess ? accById(sess.acc) : null;
-  const cfg = { dex: dexId, accounts: publicAccounts(), me: me ? { id: me.id, name: me.name, admin: me.id === MAIN } : null };
+  const hide = 'window.DEX_HIDE_VALUE=' + (mode !== 'admin' && !SHOW_VALUE_PUBLIC) + ';';
+  const me = sess ? (sess.acc === ADMIN_ID ? { id: ADMIN_ID, name: 'Admin', admin: true } : accById(sess.acc)) : null;
+  const cfg = { dex: dexId, accounts: publicAccounts(), me: me ? { id: me.id, name: me.name, admin: me.id === ADMIN_ID } : null };
   const inj = 'window.DEX_CUR=' + JSON.stringify(PRICE_CUR) + ';' + (mode === 'full' ? 'window.DEX_AUTH=true;' : 'window.DEX_READONLY=true;' + hide + (mode === 'ro' ? 'window.DEX_LOGIN=true;' : ''))
     + 'window.DEX_CFG=' + JSON.stringify(cfg).replace(/</g, '\\u003c') + ';';
   return h.replace('<!--DEX_MODE-->', '<script>' + inj + '</script>');
@@ -1698,7 +1769,7 @@ const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
   let p = u.pathname, viewPath = false;
   try {
-    // /view/ is the same page, but the main admin can never log in or use a login there: only the other
+    // /view/ is the same page, but the admin can never log in or use a login there: only the other
     // trainers can. Publishing only /view/ keeps the admin login unreachable from outside.
     if (p === '/view') { res.writeHead(301, { Location: '/view/' + u.search }); return res.end(); }
     if (p.startsWith('/view/')) { p = p.slice(5); viewPath = true; }
@@ -1720,16 +1791,16 @@ const server = http.createServer(async (req, res) => {
       });
     }
     let sess = sessionOf(req);
-    if (viewPath && sess && sess.acc === MAIN) sess = null; // an admin login counts as a visitor on /view/
-    const authed = !!sess, isAdmin = !!sess && sess.acc === MAIN;
+    if (viewPath && sess && sess.acc === ADMIN_ID) sess = null; // an admin login counts as a visitor on /view/
+    const authed = !!sess, isAdmin = !!sess && sess.acc === ADMIN_ID;
     const ip = clientIp(req);
     if (!authed && limited(ip)) { res.writeHead(429); return res.end('Slow down'); }
     // Which dex is looked at: ?dex=<account id>, else your own one when logged in, else the main one.
     const dexQ = u.searchParams.get('dex');
-    const dexId = accById(dexQ) ? dexQ : (sess ? sess.acc : MAIN);
+    const dexId = accById(dexQ) ? dexQ : (sess && accById(sess.acc) ? sess.acc : firstDex());
     if (req.method === 'GET' && (p === '/' || p === '/index.html')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Vary': 'Cookie', 'X-Content-Type-Options': 'nosniff' });
-      return res.end(indexHtml(sess && sess.acc === dexId ? 'full' : (viewPath && dexId === MAIN ? 'view' : 'ro'), dexId, sess));
+      return res.end(indexHtml(isAdmin ? 'admin' : (sess && dexId && sess.acc === dexId ? 'full' : 'ro'), dexId, sess));
     }
     if (req.method === 'GET' && p === '/api/accounts') return sendJSON(res, 200, publicAccounts());
     // Every dex's owned cards and wish list, for the trade matches.
@@ -1741,13 +1812,27 @@ const server = http.createServer(async (req, res) => {
       const s = setPayload(u.searchParams.get('id') || '');
       return s ? sendJSON(res, 200, s) : sendJSON(res, 404, { error: 'unknown set' });
     }
-    if (req.method === 'GET' && p === '/api/state') return sendJSON(res, 200, readJSON(stateFile(dexId)) || {});
+    if (req.method === 'GET' && p === '/api/state') return sendJSON(res, 200, (dexId && readJSON(stateFile(dexId))) || {});
+    if (req.method === 'GET' && p === '/api/admin/settings') {
+      if (!isAdmin) return sendJSON(res, authed ? 403 : 401, { error: 'Only the admin can do that' });
+      return sendJSON(res, 200, {
+        fields: SETTINGS.map(f => {
+          const secret = f.type === 'secret', has = k => Object.prototype.hasOwnProperty.call(pageSettings, k);
+          return Object.assign({}, f, {
+            value: secret ? undefined : (has(f.key) ? pageSettings[f.key] : ''),
+            set: secret ? has(f.key) && !!pageSettings[f.key] : undefined,
+            container: secret ? (ENV0[f.key] ? 'set' : null) : (ENV0[f.key] != null && ENV0[f.key] !== '' ? ENV0[f.key] : null),
+          });
+        }),
+        models: MODEL_SUGGESTIONS, restarts: process.env.DEX_SUPERVISED === '1',
+      });
+    }
     if (req.method === 'GET' && p === '/api/admin/accounts') {
-      if (!isAdmin) return sendJSON(res, authed ? 403 : 401, { error: 'Only the main admin can do that' });
-      return sendJSON(res, 200, accounts.list.map(a => ({ id: a.id, name: a.name, created: a.created, main: a.id === MAIN })));
+      if (!isAdmin) return sendJSON(res, authed ? 403 : 401, { error: 'Only the admin can do that' });
+      return sendJSON(res, 200, accounts.list.map(a => ({ id: a.id, name: a.name, created: a.created })));
     }
     if (req.method === 'GET' && p === '/api/lang-check') {
-      if (!isAdmin) return sendJSON(res, 401, { error: 'login as the main admin required' });
+      if (!isAdmin) return sendJSON(res, 401, { error: 'login as the admin required' });
       if (DISABLE_REFRESH) return sendJSON(res, 409, { error: 'The server is set to not contact the card service' });
       if (Date.now() - lastLang < 20000) return sendJSON(res, 429, { error: 'wait 20 seconds between checks' });
       lastLang = Date.now();
@@ -1761,18 +1846,22 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && p === '/api/login') {
       if (blocked(ip)) return sendJSON(res, 429, { error: 'Too many wrong passwords. Try again in 15 minutes.' });
       const b = JSON.parse(await readBody(req, 1e4));
-      const acc = accById(b.dex || MAIN);
-      if (!acc || (viewPath && acc.id === MAIN)) return sendJSON(res, 404, { error: 'That dex does not exist' });
-      if (!checkPw(acc, String(b.password || ''))) {
+      const given = String(b.password || '');
+      // *admin-<password> in any login box on the normal address: the admin login (never on /view/)
+      const asAdmin = !viewPath && given.startsWith(ADMIN_PREFIX);
+      const acc = asAdmin ? null : accById(b.dex);
+      if (!asAdmin && !acc) return sendJSON(res, 404, { error: 'That dex does not exist' });
+      if (asAdmin ? !checkAdmin(given.slice(ADMIN_PREFIX.length)) : !checkPw(acc, given)) {
         const f = fails.get(ip); fails.set(ip, f && Date.now() - f.t < 15 * 60000 ? { n: f.n + 1, t: Date.now() } : { n: 1, t: Date.now() });
         await sleep(1000);
         return sendJSON(res, 401, { error: 'Wrong password' });
       }
       fails.delete(ip);
       const tok = crypto.randomBytes(24).toString('base64url');
-      sessions[hashTok(tok)] = { exp: Date.now() + SESSION_MS, acc: acc.id }; saveSessions();
+      sessions[hashTok(tok)] = { exp: Date.now() + SESSION_MS, acc: asAdmin ? ADMIN_ID : acc.id }; saveSessions();
+      if (asAdmin) log('admin logged in');
       res.setHeader('Set-Cookie', cookie(req, tok, SESSION_MS / 1000));
-      return sendJSON(res, 200, { ok: true });
+      return sendJSON(res, 200, { ok: true, admin: asAdmin });
     }
     if (req.method === 'POST' && p === '/api/logout') {
       const t = tokenOf(req); if (t) { delete sessions[hashTok(t)]; saveSessions(); }
@@ -1781,6 +1870,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (!authed) return sendJSON(res, 401, { error: 'login required' });
     if (req.method === 'PUT' && p === '/api/state') {
+      if (isAdmin) return sendJSON(res, 403, { error: 'The admin has no dex of its own' });
       if (dexQ && dexQ !== sess.acc) return sendJSON(res, 403, { error: 'You can only change your own dex' });
       const s = JSON.parse(await readBody(req, 5e6));
       if (!s || typeof s.own !== 'object' || Array.isArray(s.own)) return sendJSON(res, 400, { error: 'bad state' });
@@ -1795,6 +1885,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && p === '/api/account/name') {
       const b = JSON.parse(await readBody(req, 1e4));
       const acc = accById(sess.acc);
+      if (!acc) return sendJSON(res, 400, { error: 'The admin has no trainer name' });
       acc.name = cleanName(b.name, acc.id); saveAccounts();
       return sendJSON(res, 200, { ok: true, name: acc.name });
     }
@@ -1802,26 +1893,43 @@ const server = http.createServer(async (req, res) => {
     // Other devices logged in to this dex are logged out; this one stays logged in.
     if (req.method === 'POST' && p === '/api/account/password') {
       const b = JSON.parse(await readBody(req, 1e4));
-      const acc = accById(sess.acc);
-      if (acc.id === MAIN && ADMIN_FIXED) return sendJSON(res, 409, { error: 'This password is set with ADMIN_PASSWORD in docker-compose.yml. Change it there.' });
+      const acc = isAdmin ? null : accById(sess.acc);
+      if (isAdmin && ADMIN_FIXED) return sendJSON(res, 409, { error: 'The admin password is set with ADMIN_PASSWORD in the container settings. Change it there.' });
       if (blocked(ip)) return sendJSON(res, 429, { error: 'Too many wrong passwords. Try again in 15 minutes.' });
-      if (!checkPw(acc, String(b.old || ''))) {
+      if (isAdmin ? !checkAdmin(String(b.old || '').replace(ADMIN_PREFIX, '')) : !checkPw(acc, String(b.old || ''))) {
         const f = fails.get(ip); fails.set(ip, f && Date.now() - f.t < 15 * 60000 ? { n: f.n + 1, t: Date.now() } : { n: 1, t: Date.now() });
         await sleep(1000);
         return sendJSON(res, 401, { error: 'The current password is wrong' });
       }
       const pw = String(b.password || '');
       if (pw.length < 8) return sendJSON(res, 400, { error: 'A password needs at least 8 characters' });
-      setPw(acc, pw); saveAccounts();
-      const mine = hashTok(tokenOf(req));
-      Object.keys(sessions).forEach(k => { if (sessions[k].acc === acc.id && k !== mine) delete sessions[k]; }); saveSessions();
-      log('password changed:', acc.name);
+      if (isAdmin) setAdminPw(pw); else { setPw(acc, pw); saveAccounts(); }
+      const mine = hashTok(tokenOf(req)), who = isAdmin ? ADMIN_ID : acc.id;
+      Object.keys(sessions).forEach(k => { if (sessions[k].acc === who && k !== mine) delete sessions[k]; }); saveSessions();
+      log('password changed:', isAdmin ? 'admin' : acc.name);
       return sendJSON(res, 200, { ok: true });
     }
-    // The main admin creates accounts, gives them a new password and deletes them.
+    // The admin creates accounts, gives them a new password and deletes them.
     if (req.method === 'POST' && p.startsWith('/api/admin/')) {
-      if (!isAdmin) return sendJSON(res, 403, { error: 'Only the main admin can do that' });
+      if (!isAdmin) return sendJSON(res, 403, { error: 'Only the admin can do that' });
       const b = JSON.parse(await readBody(req, 1e4));
+      // Settings: {values: {KEY: "value"}}; "" = back to the container's value; a key left out stays as it is.
+      if (p === '/api/admin/settings') {
+        const v = b && typeof b.values === 'object' && b.values ? b.values : {};
+        const next = Object.assign({}, pageSettings);
+        for (const f of SETTINGS) {
+          if (!Object.prototype.hasOwnProperty.call(v, f.key)) continue;
+          const x = v[f.key] == null ? '' : String(v[f.key]).trim();
+          if (x === '') { delete next[f.key]; continue; }
+          if (!settingOk(f, x)) return sendJSON(res, 400, { error: 'Not a valid choice for "' + f.label + '"' });
+          next[f.key] = x;
+        }
+        writeJSON(SETTINGS_FILE, next); pageSettings = next;
+        log('settings changed on the admin page:', Object.keys(v).filter(k => SETTINGS.some(f => f.key === k)).join(', ') || 'nothing');
+        const restarts = process.env.DEX_SUPERVISED === '1';
+        if (restarts) setTimeout(() => shutDown(75), 400);
+        return sendJSON(res, 200, { ok: true, restarting: restarts });
+      }
       const givenPw = String(b.password || '');
       if (givenPw && givenPw.length < 8) return sendJSON(res, 400, { error: 'A password needs at least 8 characters' });
       if (p === '/api/admin/accounts') {
@@ -1834,7 +1942,6 @@ const server = http.createServer(async (req, res) => {
       }
       const acc = accById(b.id);
       if (!acc) return sendJSON(res, 404, { error: 'Unknown account' });
-      if (acc.id === MAIN) return sendJSON(res, 400, { error: 'The main account uses ADMIN_PASSWORD (or admin.json)' });
       if (p === '/api/admin/accounts/password') {
         const pw = givenPw || newPw();
         setPw(acc, pw); saveAccounts(); dropSessions(acc.id);
@@ -1895,9 +2002,9 @@ const server = http.createServer(async (req, res) => {
       try { return sendJSON(res, 200, await runScan(buf)); }
       catch (e) { log('scan failed:', e.message); return sendJSON(res, 400, { error: /Cannot find module/i.test(e.message) ? 'Scanning is not fully installed on this server (' + (e.message.match(/'([^']+)'/) || [, 'a module'])[1] + ' is missing): rebuild the container with the current package.json' : 'Could not read that photo: ' + e.message.split('\n')[0] }); }
     }
-    // Set a card's picture by hand (main admin): a picture address, or empty to go back to automatic.
+    // Set a card's picture by hand (admin): a picture address, or empty to go back to automatic.
     if (req.method === 'POST' && p === '/api/card/picture') {
-      if (!isAdmin) return sendJSON(res, 403, { error: 'Only the main admin can change pictures' });
+      if (!isAdmin) return sendJSON(res, 403, { error: 'Only the admin can change pictures' });
       const b = JSON.parse(await readBody(req, 22e6)); // an uploaded picture (up to 15 MB) arrives as base64 text
       const id = String(b.id || ''), url = String(b.url || '').trim(), data = typeof b.data === 'string' ? b.data : '';
       if (!regIndex().has(id) && !(db.cards[id] && !db.cards[id].x)) return sendJSON(res, 404, { error: 'unknown card' });
@@ -1926,8 +2033,8 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, { ok: true, high: !!out.high });
     }
     if (req.method === 'POST' && p === '/api/card/mark') {
-      // The art list is shared by every dex, so only the main admin changes it.
-      if (!isAdmin) return sendJSON(res, 403, { error: 'Only the main admin can change the art list' });
+      // The art list is shared by every dex, so only the admin changes it.
+      if (!isAdmin) return sendJSON(res, 403, { error: 'Only the admin can change the art list' });
       const b = JSON.parse(await readBody(req, 1e5));
       const id = String(b.id || '');
       if (!id) return sendJSON(res, 400, { error: 'no card' });
@@ -1951,6 +2058,18 @@ const server = http.createServer(async (req, res) => {
     sendJSON(res, 400, { error: e.message });
   }
 });
+
+// Save what is still in memory before stopping (on "docker stop", and when restarting for new settings).
+let stoppingNow = false;
+function shutDown(code) {
+  if (stoppingNow) return; stoppingNow = true;
+  try { persist(true); } catch (e) { log('saving the database failed:', e.message); }
+  try { saveImgs(true); } catch (e) { /* nothing to save */ }
+  if (code === 75) log('restarting to apply the new settings');
+  server.close(); setTimeout(() => process.exit(code), 200);
+}
+process.on('SIGTERM', () => shutDown(0));
+process.on('SIGINT', () => shutDown(0));
 
 server.listen(PORT, () => {
   log('listening on', PORT, '| data dir', DATA_DIR, '|', DAILY_REQUESTS ? 'up to ' + DAILY_REQUESTS + ' requests per day' : 'no daily limit', '|', REQUEST_DELAY_MS / 1000 + ' s between requests');
