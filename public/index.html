@@ -201,8 +201,9 @@ a{color:var(--lcd)}
 .gen .gbar i{display:block;height:100%;background:#2ecc71}
 /* ---------- the Android app: a closed Pokédex to log in, then only your own dex ---------- */
 .app-mode .trainer,.app-mode #meTag,.app-mode #installBtn{display:none!important}
-#dexLock{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:radial-gradient(800px 600px at 50% 30%,#1b2740,#0a0d13);perspective:1600px;padding:4vmin}
-.dl-shell{position:relative;width:min(92vw,62vh);aspect-ratio:5/7.4;border-radius:5% 7% 7% 5%/4% 5% 5% 4%;
+#dexLock{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;background:radial-gradient(800px 600px at 50% 30%,#1b2740,#0a0d13);perspective:1600px;padding:4vmin}
+/* sized from the screen height when the lock opens (--dlh), so it keeps its size when the keyboard comes up */
+.dl-shell{position:relative;flex:none;margin:auto;width:min(92vw,calc(var(--dlh,100vh) * .62));aspect-ratio:5/7.4;border-radius:5% 7% 7% 5%/4% 5% 5% 4%;
   background:linear-gradient(135deg,var(--shell-hi),var(--shell) 40%,var(--shell-lo));box-shadow:0 30px 60px #000b,inset -10px 0 0 #00000025,inset 0 6px 0 #ffffff30;
   transform-origin:left center;transition:transform .8s cubic-bezier(.6,.05,.4,1),opacity .8s;display:flex;flex-direction:column;padding:6% 7% 6% 11%}
 .dl-shell.opening{transform:rotateY(-110deg);opacity:0}
@@ -214,7 +215,7 @@ a{color:var(--lcd)}
 .dl-leds .r{background:#ff8a8a}.dl-leds .y{background:var(--yellow)}.dl-leds .g{background:var(--green)}
 .dl-frame{background:#e8ecf2;border-radius:6px 6px 6px 18%;padding:6% 7% 4%;box-shadow:inset 0 -4px 0 #b9c0cc}
 .dl-frame-dots{display:flex;gap:8px;justify-content:center;margin-bottom:4%}.dl-frame-dots i{width:8px;height:8px;border-radius:50%;background:var(--shell)}
-.dl-screen{background:var(--screen);border:3px solid #04121c;border-radius:6px;box-shadow:inset 0 0 22px #000c;min-height:40vh;max-height:46vh;overflow:auto;padding:10px;color:var(--lcd);font-family:var(--mono)}
+.dl-screen{background:var(--screen);border:3px solid #04121c;border-radius:6px;box-shadow:inset 0 0 22px #000c;min-height:calc(var(--dlh,100vh) * .40);max-height:calc(var(--dlh,100vh) * .46);overflow:auto;padding:10px;color:var(--lcd);font-family:var(--mono)}
 .dl-head{font:700 .8rem var(--head);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
 .dl-head b{color:var(--lcd);letter-spacing:.06em}
 #dlList{display:flex;flex-direction:column;gap:6px}
@@ -224,7 +225,7 @@ a{color:var(--lcd)}
 #dlForm{display:flex;flex-direction:column;gap:10px}
 #dlPw{background:#0d2536;border:1px solid #1e4a64;color:var(--lcd);font:1rem var(--mono);padding:10px 12px;border-radius:6px}
 #dlMsg{min-height:1.2em;font-size:.82rem;color:#ff8a8a}
-.dl-row{display:flex;gap:8px}.dl-row button{flex:1;background:#0d2536;border-color:#1e4a64;color:var(--lcd);font-family:var(--mono)}
+.dl-row{display:flex;gap:8px}.dl-row button{flex:1;white-space:nowrap;padding:9px 6px;background:#0d2536;border-color:#1e4a64;color:var(--lcd);font-family:var(--mono)}
 #dlGo{background:#17794a;border-color:var(--green);color:#fff}
 .dl-frame-foot{display:flex;gap:5px;justify-content:flex-end;margin-top:4%}.dl-spk{width:22px;height:3px;border-radius:2px;background:#9aa3b1}
 .dl-controls{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:6%}
@@ -1456,8 +1457,17 @@ function showLock(){
   try{ last=localStorage.getItem('dexLast'); }catch(e){}
   $('dlList').innerHTML=list.length?list.map(function(a){ return '<button type="button" data-id="'+esc(a.id)+'"'+(a.id===last?' class="last"':'')+'>'+esc(a.name)+'</button>'; }).join('')
     :'<p>No trainers yet. Ask the admin to add an account for you.</p>';
+  lockSize();
   $('dexLock').hidden=false;
 }
+// The keyboard makes the window shorter: keep the size measured without it, and keep the password field in view.
+function lockSize(){ document.documentElement.style.setProperty('--dlh',window.innerHeight+'px'); }
+var lockW=window.innerWidth;
+window.addEventListener('resize',function(){
+  if($('dexLock').hidden) return;
+  if(window.innerWidth!==lockW){ lockW=window.innerWidth; lockSize(); return; } // turned the phone: measure again
+  if(document.activeElement===$('dlPw')) setTimeout(function(){ $('dlPw').scrollIntoView({block:'center'}); },50);
+});
 function pickTrainer(id){
   dlId=id; $('dlName').textContent=accName(id); $('dlMsg').textContent=''; $('dlPw').value='';
   $('dlPick').hidden=true; $('dlForm').hidden=false; $('dlPw').focus();

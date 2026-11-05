@@ -39,7 +39,7 @@ jobs:
           KEYSTORE: ${{ runner.temp }}/dex-art.jks
           KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
           VERSION_NAME: '1.0'
-        run: android/build.sh
+        run: bash android/build.sh # bash: works even when the file lost its run permission in an upload
 
       - uses: actions/upload-artifact@v4
         with:
