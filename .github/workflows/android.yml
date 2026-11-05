@@ -29,8 +29,11 @@ jobs:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
           RAW_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
         run: |
-          if [ -z "$KEYSTORE_B64" ] || [ -z "$RAW_PASS" ]; then
-            echo "::error::Add the ANDROID_KEYSTORE_B64 and ANDROID_KEYSTORE_PASS secrets first (see android/README.md)."
+          missing=""
+          [ -z "$KEYSTORE_B64" ] && missing="$missing ANDROID_KEYSTORE_B64"
+          [ -z "$RAW_PASS" ] && missing="$missing ANDROID_KEYSTORE_PASS"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing or empty repository secret:$missing. Add it under Settings -> Secrets and variables -> Actions -> Secrets (Repository secrets, exact name; not a Variable or an Environment secret)."
             exit 1
           fi
           # pasted secrets often carry spaces, line breaks or quotes: take them off
