@@ -52,6 +52,8 @@ const PROMO_AS_ART = process.env.PROMO_AS_ART !== '0';
 
 // Visitors who are not logged in see a view-only page. Set to 1 to let them see "worth" and "left to spend" too.
 const SHOW_VALUE_PUBLIC = process.env.SHOW_VALUE_PUBLIC === '1' || process.env.SHARE_SHOW_VALUE === '1';
+// Which prices the page shows: cardmarket (€, default) or tcgplayer ($).
+const PRICE_CUR = /^(tcgplayer|us|usd|\$)$/i.test(String(process.env.PRICE_SOURCE || '').trim()) ? 'us' : 'eu';
 const TRUST_PROXY = process.env.TRUST_PROXY !== '0'; // on by default (reverse proxy: use X-Forwarded-For / -Proto). 0 = off
 
 const CARDS_FILE = path.join(DATA_DIR, 'cards.json');
@@ -766,7 +768,7 @@ function indexHtml(mode, dexId, sess) {
   const hide = 'window.DEX_HIDE_VALUE=' + (!SHOW_VALUE_PUBLIC) + ';';
   const me = sess ? accById(sess.acc) : null;
   const cfg = { dex: dexId, accounts: publicAccounts(), me: me ? { id: me.id, name: me.name, admin: me.id === MAIN } : null };
-  const inj = (mode === 'full' ? 'window.DEX_AUTH=true;' : 'window.DEX_READONLY=true;' + hide + (mode === 'ro' ? 'window.DEX_LOGIN=true;' : ''))
+  const inj = 'window.DEX_CUR=' + JSON.stringify(PRICE_CUR) + ';' + (mode === 'full' ? 'window.DEX_AUTH=true;' : 'window.DEX_READONLY=true;' + hide + (mode === 'ro' ? 'window.DEX_LOGIN=true;' : ''))
     + 'window.DEX_CFG=' + JSON.stringify(cfg).replace(/</g, '\\u003c') + ';';
   return h.replace('<!--DEX_MODE-->', '<script>' + inj + '</script>');
 }
@@ -874,7 +876,7 @@ const server = http.createServer(async (req, res) => {
       const s = JSON.parse(await readBody(req, 5e6));
       if (!s || typeof s.own !== 'object' || Array.isArray(s.own)) return sendJSON(res, 400, { error: 'bad state' });
       const cards = s.cards && typeof s.cards === 'object' && !Array.isArray(s.cards) ? s.cards : {};
-      writeJSON(stateFile(sess.acc), { own: s.own, cards, pick: s.pick || {}, cur: s.cur === 'us' ? 'us' : 'eu' });
+      writeJSON(stateFile(sess.acc), { own: s.own, cards, pick: s.pick || {}, cur: PRICE_CUR });
       return sendJSON(res, 200, { ok: true });
     }
     // Every account owner can change their own trainer name.

@@ -59,7 +59,7 @@ Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokea
 ## Art cards without the number rule, and Japanese cards
 
 - Art cards are found by rarity: the server asks TCGdex for the list of cards with an art rarity (about 40 list requests per language, repeated daily). Number no longer matters, so art cards inside the normal numbering are found too. If that search is not available, the old rule (number above the official set size) is used instead.
-- Japanese sets and their art cards (Special illustration rare, and so on) are added with a "JA" tag. They only have € prices, so they only compete for cheapest in € mode. Regular Japanese cards are linked to a Pokédex number too (see below). Set `LANGUAGES=en` to switch Japanese off.
+- Japanese sets and their art cards (Special illustration rare, and so on) are added with a "JA" tag. They only have € prices, so they only compete for cheapest with `PRICE_SOURCE=cardmarket` (the default). Regular Japanese cards are linked to a Pokédex number too (see below). Set `LANGUAGES=en` to switch Japanese off.
 - Promo sets and sets from the last 180 days are read again every day, because they keep getting new cards. A card with no dex number on TCGdex gets one from its name.
 - Besides the art rarities, every language counts the **Mega Hyper Rare**, **Ultra Rare** and **Holo Rare** rarities (`EXTRA_RARITIES`). Japanese sets also count every Pokémon card numbered above the set size (the "Secret card" label in the set view).
 - Cards the rarity search lists (and promo or secret-numbered cards) are shown as art cards at once, from the set data the server already has, with "price pending". Their details and price are fetched afterwards in the background and replace the pending entry. Japanese set listings only contain the Japanese card name, so the server downloads the Japanese Pokémon names once from PokeAPI (one bulk request, or one request per Pokémon at your request pace if that is not available) and matches them against the card names (longest name wins, so ミュウ is not found inside ミュウツー). This makes Japanese regular cards show up under their Pokémon, with a price fetched in the background like English ones. If a Japanese card still has no Pokémon, it is a trainer, energy or a name the match cannot read; the detail fetch fills in the dex number where TCGdex has one.
@@ -97,7 +97,7 @@ One port, one page. Every account (trainer) has its own dex with its own ticks; 
 - A card you counted as art by hand stays counted, and is re-priced first.
 - Prices already fetched for regular cards survive the daily re-read of growing sets.
 - When a refresh finds no picture or no price, the last known picture and price are kept.
-- Your ticks, picks and currency are only ever changed by you.
+- Your ticks and picks are only ever changed by you.
 
 ## Get price button
 
@@ -128,11 +128,12 @@ Saved on the server (`state.json` for the main admin, `states/<id>.json` for oth
 | `LANGUAGES` | en,ja | `en` = English only |
 | `REGULAR_PRICES_PER_DAY` | 0 | Most requests per day spent on regular-card prices, 0 = no limit |
 | `ADMIN_PASSWORD` | random | Password of the main admin account |
+| `PRICE_SOURCE` | cardmarket | Prices shown on the page for every dex: `cardmarket` (€) or `tcgplayer` ($) |
 | `SHOW_VALUE_PUBLIC` | 0 | 1 = visitors also see the money totals |
 | `TRUST_PROXY` | 1 | Use the reverse proxy's forwarded address and https. 0 = off |
 
 ## Limits
 
 - Regular cards are matched to a Pokémon by name (including Nidoran♀/♂, Farfetch’d and Sirfetch’d, which are spelled differently by the card service), so a few may still be missing or wrong.
-- Prices come from TCGdex (Cardmarket in €, TCGplayer in $). Some cards have none.
+- Prices come from TCGdex (Cardmarket in €, TCGplayer in $; the server shows one of them, see `PRICE_SOURCE`). Some cards have none.
 - There is no login. Keep it on your home network or behind a VPN or an authenticated proxy.

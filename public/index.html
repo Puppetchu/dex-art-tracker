@@ -30,7 +30,17 @@ input::placeholder{color:var(--muted)}
 
 /* shell */
 .shell{background:linear-gradient(var(--shell-hi),var(--shell) 45%,var(--shell-lo));border-bottom:6px solid #5e0813;box-shadow:0 6px 22px #0008;padding:14px max(16px,env(safe-area-inset-left)) 16px}
-.top{display:flex;flex-wrap:wrap;align-items:center;gap:14px}
+/* header: title + legend left, search in the middle, current dex right */
+.top{display:grid;grid-template-columns:1fr minmax(220px,440px) 1fr;align-items:center;gap:14px}
+.brand{display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-width:0}
+.brow{display:flex;align-items:center;gap:14px}
+.tsearch input{width:100%;padding:10px 16px;border-radius:999px;background:var(--screen);border:2px solid #04121c;box-shadow:inset 0 0 12px #000a;color:var(--lcd)}
+.tright{justify-self:end;display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:0}
+.acct{display:flex;gap:6px}
+.acct .mini{background:#0003;border-color:#0004;color:#fff}
+#viewSel{background:var(--shell);border-color:var(--shell-hi);color:#fff;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:.85rem;border-radius:999px;padding:7px 14px}
+#viewSel option{background:var(--panel2);color:var(--ink);text-transform:none}
+@media (max-width:900px){.top{grid-template-columns:1fr}.tright{justify-self:stretch;align-items:flex-start}}
 .lens{width:58px;height:58px;border-radius:50%;flex:none;border:4px solid #f5f7fb;box-shadow:0 0 0 3px #00000040,inset 0 -6px 12px #0b4a7c;
   background:radial-gradient(circle at 32% 28%,#d9f4ff 0 9%,#38bdf8 28%,#0a6fb5 70%,#07416b);animation:glow 3.2s ease-in-out infinite}
 @keyframes glow{50%{box-shadow:0 0 0 3px #00000040,0 0 18px 4px #38bdf8aa,inset 0 -6px 12px #0b4a7c}}
@@ -38,7 +48,7 @@ input::placeholder{color:var(--muted)}
 .leds i{width:13px;height:13px;border-radius:50%;border:2px solid #0006;display:block}
 .leds .r{background:#ff8a8a}.leds .y{background:var(--yellow)}.leds .g{background:var(--green)}
 h1{margin:0;font:800 1.45rem/1 var(--head);letter-spacing:.14em;text-transform:uppercase;text-shadow:0 2px 0 #0005}
-.legend{margin-left:auto;font-size:.78rem;display:flex;gap:12px;flex-wrap:wrap;background:#0003;border-radius:999px;padding:5px 12px}
+.legend{font-size:.78rem;display:flex;gap:12px;flex-wrap:wrap;background:#0003;border-radius:999px;padding:5px 12px}
 .legend span{display:flex;align-items:center;gap:6px}
 .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
 .dot.r{background:var(--red)}.dot.y{background:var(--yellow)}.dot.g{background:var(--green)}
@@ -160,12 +170,24 @@ a{color:var(--lcd)}
 
 <header class="shell">
   <div class="top">
-    <div class="lens" aria-hidden="true"></div>
-    <div class="leds" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
-    <h1>Dex Art Tracker<span id="roTag">View only</span></h1>
-    <div class="trainer"><label for="dexSel">Dex of</label><select id="dexSel"></select><span id="meTag" hidden></span></div>
-    <div class="legend" aria-label="Legend">
-      <span><i class="dot r"></i>nothing yet</span><span><i class="dot y"></i>have a card</span><span><i class="dot g"></i>have the art card</span>
+    <div class="brand">
+      <div class="brow">
+        <div class="lens" aria-hidden="true"></div>
+        <div class="leds" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+        <h1>Dex Art Tracker<span id="roTag">View only</span></h1>
+      </div>
+      <div class="legend" aria-label="Legend">
+        <span><i class="dot r"></i>nothing yet</span><span><i class="dot y"></i>have a card</span><span><i class="dot g"></i>have the art card</span>
+      </div>
+    </div>
+    <div class="tsearch"><input id="q" type="search" placeholder="Search name or number" aria-label="Search"></div>
+    <div class="tright">
+      <div class="trainer"><label for="dexSel">Dex of</label><select id="dexSel"></select></div>
+      <span id="meTag" hidden></span>
+      <div class="acct">
+        <button id="nameBtn" type="button" class="mini" title="Change the name of your dex">Trainer name</button>
+        <button id="logoutBtn" type="button" class="mini" title="Log out of this dex">Log out</button>
+      </div>
     </div>
   </div>
   <div class="readouts">
@@ -179,10 +201,11 @@ a{color:var(--lcd)}
 </header>
 
 <div class="deck">
-  <button id="tabDex" type="button" class="tab on">Pokémon</button>
-  <button id="tabSets" type="button" class="tab">Sets</button>
-  <button id="tabTrainers" type="button" class="tab">Trainers</button>
-  <input id="q" type="search" placeholder="Search name or number">
+  <select id="viewSel" aria-label="Show">
+    <option value="dex">Pokémon</option>
+    <option value="sets">Sets</option>
+    <option value="trainers">Trainers</option>
+  </select>
   <select id="filter" aria-label="Filter">
     <option value="all">All Pokémon</option>
     <option value="noany">Missing any card</option>
@@ -203,13 +226,7 @@ a{color:var(--lcd)}
     <option value="most">Most complete</option>
     <option value="least">Least complete</option>
   </select>
-  <select id="cur" aria-label="Currency">
-    <option value="eu">€ Cardmarket</option>
-    <option value="us">$ TCGplayer</option>
-  </select>
   <button id="refresh" type="button" title="Checks up to 25 missing cards or the oldest prices">Refresh prices</button>
-  <button id="nameBtn" type="button" title="Change the name of your dex">Trainer name</button>
-  <button id="logoutBtn" type="button" title="Log out of this dex">Log out</button>
 </div>
 <div id="gens"></div>
 <div id="status">Loading…</div>
@@ -284,7 +301,9 @@ if(RO){
 'use strict';
 var cards=[], trainers=[], regular=[], sets=[], setsById={}, names={}, maxDex=1025;
 var byDex={}, byReg={}, byId={};
-var st={own:{},cards:{},pick:{},cur:'eu'};
+// Prices: € Cardmarket or $ TCGplayer, chosen on the server with PRICE_SOURCE.
+var CUR=window.DEX_CUR==='us'?'us':'eu';
+var st={own:{},cards:{},pick:{},cur:CUR};
 var trFilter='all', view='dex', curSet=null, setData=null, setFilter='all', setCache={}, dexOpen=null, regShown=60, armed=null;
 
 function $(id){return document.getElementById(id);}
@@ -386,8 +405,7 @@ async function loadData(){
 async function loadState(){
   var s=null;
   try{ s=await getJSON('api/state?dex='+encodeURIComponent(DEX)); }catch(e){}
-  if(s&&s.own) st={own:s.own,cards:s.cards||{},pick:s.pick||{},cur:s.cur||'eu'};
-  $('cur').value=st.cur;
+  if(s&&s.own) st={own:s.own,cards:s.cards||{},pick:s.pick||{},cur:CUR};
 }
 var saveTimer=null;
 function save(){
@@ -630,7 +648,7 @@ function renderTrainers(){
 }
 function renderSets(){
   $('grid').hidden=view!=='dex'; $('setsView').hidden=view!=='sets'; $('trainersView').hidden=view!=='trainers';
-  $('tabDex').classList.toggle('on',view==='dex'); $('tabSets').classList.toggle('on',view==='sets'); $('tabTrainers').classList.toggle('on',view==='trainers');
+  $('viewSel').value=view;
   $('filter').hidden=view!=='dex'; $('genSel').hidden=view!=='dex'; $('setSort').hidden=view!=='sets'||!!curSet;
   if(view==='trainers') renderTrainers();
   if(view!=='sets') return;
@@ -816,9 +834,7 @@ document.addEventListener('click',function(e){
   else if(a==='sf'){ setFilter=t.dataset.v; renderSets(); }
   else if(a==='tf'){ trFilter=t.dataset.v; renderTrainers(); }
 });
-$('tabDex').addEventListener('click',function(){go('#/dex');});
-$('tabSets').addEventListener('click',function(){go('#/sets');});
-$('tabTrainers').addEventListener('click',function(){go('#/trainers');});
+$('viewSel').addEventListener('change',function(){ go('#/'+$('viewSel').value); });
 $('dlgClose').addEventListener('click',function(){$('dlg').close();});
 $('dlg').addEventListener('close',function(){
   dexOpen=null;
@@ -844,7 +860,6 @@ $('genSel').addEventListener('change',function(){
   if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
 });
 $('setSort').addEventListener('change',render);
-$('cur').addEventListener('change',function(){st.cur=$('cur').value;save();index();render();});
 
 async function pollRefresh(){
   if(RO) return;
@@ -953,7 +968,7 @@ $('imp').addEventListener('click',function(){
   if(b.hidden){ b.hidden=false; b.value=''; b.placeholder='Paste backup text here, then press Restore again'; return; }
   try{
     var j=JSON.parse(b.value);
-    if(j&&j.own){ st={own:j.own||{},cards:j.cards||{},pick:j.pick||{},cur:j.cur||'eu'}; save(); $('cur').value=st.cur; index(); render(); b.value=''; b.hidden=true; }
+    if(j&&j.own){ st={own:j.own||{},cards:j.cards||{},pick:j.pick||{},cur:CUR}; save(); index(); render(); b.value=''; b.hidden=true; }
   }catch(e){ b.value='That text could not be read as a backup.'; }
 });
 

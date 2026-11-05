@@ -65,7 +65,8 @@ USING IT
 - A picture that is missing everywhere shows a Poké Ball with the card's name.
 - If a card is wrongly counted (or not counted) as an art card, use
   "Count as art card" / "Not an art card" on that card.
-- Prices: switch between euro (Cardmarket) and dollar (TCGplayer) at the top.
+- Prices are shown in euro (Cardmarket). For dollar (TCGplayer) prices, set
+  PRICE_SOURCE: "tcgplayer" in docker-compose.yml and start it again.
 - Once you own the art card of a Pokémon, its price is no longer updated.
 
 
