@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="shell">#ffd4202f</color>
+    <color name="shell_dark">#ff8c0f1d</color>
+    <color name="body">#ff10131a</color>
+    <color name="icon_bg">#ffd4202f</color>
+
+    <style name="DexTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">@color/shell</item>
+        <item name="android:colorPrimaryDark">@color/shell_dark</item>
+        <item name="android:colorAccent">#ff38bdf8</item>
+        <item name="android:statusBarColor">@color/shell_dark</item>
+        <item name="android:navigationBarColor">@color/body</item>
+        <item name="android:windowBackground">@color/body</item>
+    </style>
+</resources>

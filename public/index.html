@@ -199,6 +199,43 @@ a{color:var(--lcd)}
 .gen span{color:var(--muted);font:.78rem var(--mono)}
 .gen .gbar{flex:1 1 120px;height:6px;border-radius:3px;background:var(--screen);overflow:hidden;min-width:80px}
 .gen .gbar i{display:block;height:100%;background:#2ecc71}
+/* ---------- the Android app: a closed Pokédex to log in, then only your own dex ---------- */
+.app-mode .trainer,.app-mode #meTag,.app-mode #installBtn{display:none!important}
+#dexLock{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:radial-gradient(800px 600px at 50% 30%,#1b2740,#0a0d13);perspective:1600px;padding:4vmin}
+.dl-shell{position:relative;width:min(92vw,62vh);aspect-ratio:5/7.4;border-radius:5% 7% 7% 5%/4% 5% 5% 4%;
+  background:linear-gradient(135deg,var(--shell-hi),var(--shell) 40%,var(--shell-lo));box-shadow:0 30px 60px #000b,inset -10px 0 0 #00000025,inset 0 6px 0 #ffffff30;
+  transform-origin:left center;transition:transform .8s cubic-bezier(.6,.05,.4,1),opacity .8s;display:flex;flex-direction:column;padding:6% 7% 6% 11%}
+.dl-shell.opening{transform:rotateY(-110deg);opacity:0}
+.dl-hinge{position:absolute;left:0;top:4%;bottom:4%;width:6%;border-radius:0 6px 6px 0;background:repeating-linear-gradient(#8c0f1d 0 18%,#5e0813 18% 22%);box-shadow:inset -3px 0 6px #0006}
+.dl-top{display:flex;align-items:flex-start;gap:6%;padding-bottom:5%;border-bottom:3px solid #0003;margin-bottom:6%}
+.dl-lens{width:22%;aspect-ratio:1;border-radius:50%;border:5px solid #f5f7fb;box-shadow:0 0 0 3px #00000040,inset 0 -8px 14px #0b4a7c;
+  background:radial-gradient(circle at 32% 28%,#d9f4ff 0 9%,#38bdf8 28%,#0a6fb5 70%,#07416b);animation:glow 3.2s ease-in-out infinite}
+.dl-leds{display:flex;gap:6px;margin-top:2%}.dl-leds i{width:13px;height:13px;border-radius:50%;border:2px solid #0006;display:block}
+.dl-leds .r{background:#ff8a8a}.dl-leds .y{background:var(--yellow)}.dl-leds .g{background:var(--green)}
+.dl-frame{background:#e8ecf2;border-radius:6px 6px 6px 18%;padding:6% 7% 4%;box-shadow:inset 0 -4px 0 #b9c0cc}
+.dl-frame-dots{display:flex;gap:8px;justify-content:center;margin-bottom:4%}.dl-frame-dots i{width:8px;height:8px;border-radius:50%;background:var(--shell)}
+.dl-screen{background:var(--screen);border:3px solid #04121c;border-radius:6px;box-shadow:inset 0 0 22px #000c;min-height:40vh;max-height:46vh;overflow:auto;padding:10px;color:var(--lcd);font-family:var(--mono)}
+.dl-head{font:700 .8rem var(--head);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.dl-head b{color:var(--lcd);letter-spacing:.06em}
+#dlList{display:flex;flex-direction:column;gap:6px}
+#dlList button{text-align:left;background:#0d2536;border:1px solid #1e4a64;color:var(--lcd);font:600 1rem var(--mono);padding:10px 12px;border-radius:6px;text-shadow:0 0 8px #3ddc8455}
+#dlList button::before{content:"▸ ";color:var(--lens)}
+#dlList button.last{border-color:var(--lens)}
+#dlForm{display:flex;flex-direction:column;gap:10px}
+#dlPw{background:#0d2536;border:1px solid #1e4a64;color:var(--lcd);font:1rem var(--mono);padding:10px 12px;border-radius:6px}
+#dlMsg{min-height:1.2em;font-size:.82rem;color:#ff8a8a}
+.dl-row{display:flex;gap:8px}.dl-row button{flex:1;background:#0d2536;border-color:#1e4a64;color:var(--lcd);font-family:var(--mono)}
+#dlGo{background:#17794a;border-color:var(--green);color:#fff}
+.dl-frame-foot{display:flex;gap:5px;justify-content:flex-end;margin-top:4%}.dl-spk{width:22px;height:3px;border-radius:2px;background:#9aa3b1}
+.dl-controls{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:6%}
+.dl-btn{width:16%;aspect-ratio:1;border-radius:50%;background:#1d2230;box-shadow:inset 0 -4px 0 #0008}
+.dl-slots{display:flex;gap:8px}.dl-slots i{width:34px;height:8px;border-radius:4px;display:block}.dl-slots .r{background:#ff8a8a}.dl-slots .b{background:#38bdf8}
+.dl-pad{position:relative;width:24%;aspect-ratio:1}
+.dl-pad::before,.dl-pad::after{content:"";position:absolute;background:#1d2230;border-radius:4px;box-shadow:inset 0 -3px 0 #0008}
+.dl-pad::before{left:33%;right:33%;top:0;bottom:0}.dl-pad::after{top:33%;bottom:33%;left:0;right:0}
+.dl-title{position:absolute;left:11%;right:7%;bottom:2.4%;text-align:center;font:800 .62rem var(--head);letter-spacing:.3em;text-transform:uppercase;color:#ffffffa0}
+@media (prefers-reduced-motion:reduce){.dl-shell{transition:none}.dl-lens{animation:none}}
+
 /* phones: compact header, a menu bar that scrolls away, two (or three) cards per row */
 @media (max-width:600px){
   body{font-size:14px}
@@ -252,6 +289,37 @@ a{color:var(--lcd)}
 </style>
 </head>
 <body>
+<div id="dexLock" hidden>
+  <div class="dl-shell" id="dlShell">
+    <div class="dl-hinge"></div>
+    <div class="dl-top">
+      <div class="dl-lens"></div>
+      <div class="dl-leds"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+    </div>
+    <div class="dl-frame">
+      <div class="dl-frame-dots"><i></i><i></i></div>
+      <div class="dl-screen">
+        <div id="dlPick">
+          <div class="dl-head">Select trainer</div>
+          <div id="dlList"></div>
+        </div>
+        <form id="dlForm" hidden>
+          <div class="dl-head">Trainer <b id="dlName"></b></div>
+          <input id="dlPw" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
+          <div id="dlMsg" aria-live="polite"></div>
+          <div class="dl-row"><button type="button" id="dlBack">◀ Back</button><button type="submit" id="dlGo">Open ▶</button></div>
+        </form>
+      </div>
+      <div class="dl-frame-foot"><i class="dl-spk"></i><i class="dl-spk"></i><i class="dl-spk"></i></div>
+    </div>
+    <div class="dl-controls">
+      <div class="dl-btn"></div>
+      <div class="dl-slots"><i class="r"></i><i class="b"></i></div>
+      <div class="dl-pad"><i></i></div>
+    </div>
+    <div class="dl-title">Dex Art Tracker</div>
+  </div>
+</div>
 
 <header class="shell">
   <div class="top">
@@ -426,6 +494,14 @@ var DEX=CFG.dex, ME=CFG.me, ADMIN=!!(ME&&ME.admin);
 function accName(id){ for(var i=0;i<CFG.accounts.length;i++) if(CFG.accounts[i].id===id) return CFG.accounts[i].name; return id; }
 var DEXNAME=accName(DEX);
 if(!ADMIN) document.body.classList.add('no-admin');
+// Inside the Android app (it adds "DexArtApp" to every request) the page is one trainer's dex only:
+// a closed Pokédex to log in, no switching to other dexes. The web page itself is unchanged.
+var APP=/\bDexArtApp\//.test(navigator.userAgent), LOCKED=false;
+if(APP){
+  document.body.classList.add('app-mode');
+  if(!ME) LOCKED=true;
+  else if(DEX!==ME.id){ location.replace(location.pathname+'?dex='+encodeURIComponent(ME.id)+location.hash); LOCKED=true; }
+}
 document.title=DEXNAME+"'s dex · Dex Art Tracker";
 if(RO){
   document.body.classList.add('ro-mode');
@@ -1372,7 +1448,38 @@ $('imp').addEventListener('click',function(){
   }catch(e){ b.value='That text could not be read as a backup.'; }
 });
 
+/* ---------- the app's closed Pokédex: pick your trainer, log in, it opens ---------- */
+var dlId=null;
+function showLock(){
+  var onView=/^\/view(\/|$)/.test(location.pathname); // the main admin cannot log in on /view/
+  var list=CFG.accounts.filter(function(a){ return !(onView&&a.id==='main'); }), last=null;
+  try{ last=localStorage.getItem('dexLast'); }catch(e){}
+  $('dlList').innerHTML=list.length?list.map(function(a){ return '<button type="button" data-id="'+esc(a.id)+'"'+(a.id===last?' class="last"':'')+'>'+esc(a.name)+'</button>'; }).join('')
+    :'<p>No trainers yet. Ask the admin to add an account for you.</p>';
+  $('dexLock').hidden=false;
+}
+function pickTrainer(id){
+  dlId=id; $('dlName').textContent=accName(id); $('dlMsg').textContent=''; $('dlPw').value='';
+  $('dlPick').hidden=true; $('dlForm').hidden=false; $('dlPw').focus();
+}
+$('dlList').addEventListener('click',function(e){ var b=e.target.closest('button[data-id]'); if(b) pickTrainer(b.dataset.id); });
+$('dlBack').addEventListener('click',function(){ $('dlForm').hidden=true; $('dlPick').hidden=false; });
+$('dlForm').addEventListener('submit',async function(e){
+  e.preventDefault(); $('dlMsg').textContent='…'; $('dlGo').disabled=true;
+  try{
+    await post('api/login',{dex:dlId,password:$('dlPw').value});
+    try{ localStorage.setItem('dexLast',dlId); }catch(e2){}
+    $('dlMsg').textContent=''; $('dlShell').classList.add('opening');
+    setTimeout(function(){ location.replace(location.pathname+'?dex='+encodeURIComponent(dlId)); },750);
+  }catch(err){
+    $('dlGo').disabled=false;
+    $('dlMsg').textContent=err.status===429?'Too many tries. Wait 15 minutes.':(err.status===404?'That trainer cannot log in here.':'Wrong password.');
+  }
+});
+if(APP&&LOCKED&&!ME) showLock();
+
 (async function start(){
+  if(LOCKED) return; // the app shows the closed Pokédex first
   try{
     await loadState();
     await loadData();

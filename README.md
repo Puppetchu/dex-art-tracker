@@ -138,6 +138,10 @@ The page can be installed as an app on Android (and iPhone): open it in Chrome o
 - Only logged-in trainers can scan, one scan at a time on the server. `SCAN=0` switches scanning off.
 - Through a reverse proxy with login rules (for example Pangolin), the app works for trainers on the `/view/` path: let `/view` and `/view/*` through.
 
+## Android app
+
+The `android/` folder holds a small Android app that opens your server's `/view/` page full screen and uses the server for everything. It starts as a closed Pokédex: pick your trainer, enter the password and it opens on your own dex (inside the app you only see your own dex; the web page is unchanged). Scanning, wish lists and history work as on the web page. See `android/README.md` for installing and building; GitHub builds the APK with `.github/workflows/android.yml`.
+
 ## Generations
 
 The Pokémon tab is split into the nine generations, each with a header showing its range and how many Pokémon you have a card and an art card for. The "Jump to generation" menu next to the filter scrolls straight to the one you pick.
