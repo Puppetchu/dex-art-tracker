@@ -18,6 +18,9 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const crypto = require('crypto');
+const https = require('https');
+const dns = require('dns');
+const net = require('net');
 
 const PORT = +process.env.PORT || 8080;
 const DATA_DIR = process.env.DATA_DIR || '/data';
@@ -335,7 +338,11 @@ async function refreshJaNames() {
 // ---------- export for the page ----------
 let lastExport = { art: 0, regular: 0, sets: 0 };
 // Picture fields for the page: im (small) and iL (large), when one was found elsewhere or set by hand.
-function picOf(id, o) { const p = db.pics[id]; if (p && p.im) { o.im = p.im; o.iL = p.imL || p.im; } return o; }
+function picOf(id, o) {
+  const p = db.pics[id]; if (p && p.im) { o.im = p.im; o.iL = p.imL || p.im; }
+  const st = imgs.c[id]; if (st) { o.lc = st.h ? 2 : 1; o.lv = st.v; } // stored on this server: 1 = low, 2 = low and high
+  return o;
+}
 function exportCards() {
   matchRegular();
   const setPics = regIndex();
@@ -357,7 +364,7 @@ function exportCards() {
       if (c.d && c.d.length) regular.push(picOf(c.id, { id: c.id, n: c.n, sid, k: c.l, b: c.i || null, d: c.d, eu: c.eu, us: c.us, cm: c.cm || undefined, pt: c.pt }));
     }
     sets.push({ id: sid, name: s.name, date: s.date || '', official: s.official, total: s.total, n: s.cards.length, art: a, promo: s.promo ? 1 : 0,
-      lg: noExt(s.lg), sy: noExt(s.sy) });
+      lg: noExt(s.lg), sy: noExt(s.sy), ll: imgs.s[sid] ? imgs.s[sid].v : undefined });
   }
   lastExport = { art: art.length, trainers: trainers.length, regular: regular.length, sets: sets.length };
   if (!art.length && !regular.length && !sets.length) return;
@@ -669,6 +676,231 @@ async function fillPictures() {
   if (n) { persist(true); log('picture lookup: ' + found + ' of ' + n + ' cards found on pokemontcg.io'); }
 }
 
+// ---------- pictures stored on the server ----------
+// Every card picture the page shows is downloaded once, checked and re-saved as WebP in the data folder:
+// low (245 px wide) and high (734 px) for every card (IMAGE_HIGH=art: high only for art cards, cards someone
+// owns or wishes for, and custom pictures). The page loads these first and only falls back to the
+// outside sites for pictures not stored yet. Safety:
+//  - Automatic downloads only come from the three known card picture sites, over https.
+//  - Custom picture addresses (main admin) may be any https site, but never a private, local or
+//    reserved network address (checked on the address actually connected to, also after redirects).
+//  - At most 15 MB per picture; every picture is decoded and re-encoded by sharp (anything that is not
+//    a JPG, PNG, WebP, GIF, AVIF or TIFF picture is refused), so only clean WebP files are stored and served.
+//  - Files are named by a hash of the card id, never by anything from a request.
+let sharp = null;
+try { sharp = require('sharp'); sharp.cache(false); sharp.concurrency(1); }
+catch (e) { log('sharp is not installed: pictures are not stored on the server (rebuild the container)'); }
+const IMAGE_CACHE = process.env.IMAGE_CACHE !== '0';
+// Which cards also get a high resolution copy: all (default), art (art cards, owned and wished cards), none.
+const IMAGE_HIGH = ['art', 'none'].includes(String(process.env.IMAGE_HIGH || '').toLowerCase()) ? process.env.IMAGE_HIGH.toLowerCase() : 'all';
+const IMAGE_DELAY_MS = process.env.IMAGE_DELAY_MS !== undefined ? +process.env.IMAGE_DELAY_MS : 1000;
+const IMG_DIR = path.join(DATA_DIR, 'images');
+const IMG_FILE = path.join(DATA_DIR, 'images.json');
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+const LOW_W = 245, HIGH_W = 734, LOGO_H = 120;
+const AUTO_HOSTS = new Set(['assets.tcgdex.net', 'images.pokemontcg.io', 'images.scrydex.com']);
+const imgs = readJSON(IMG_FILE) || {};
+imgs.c = imgs.c || {};       // card id -> {h: high stored, s: source, v: version, t, hx: time a high one was not found}
+imgs.s = imgs.s || {};       // set id -> {v, t}
+imgs.fail = imgs.fail || {}; // 'c:<id>' / 's:<id>' -> time of the last failed try (tried again after 7 days)
+let imgDirty = 0;
+function saveImgs(force) { if (force || ++imgDirty >= 25) { imgDirty = 0; writeJSON(IMG_FILE, imgs); } }
+const imgHash = id => crypto.createHash('sha1').update(String(id)).digest('hex');
+function imgPath(kind, id, size) { const k = imgHash(id); return path.join(IMG_DIR, kind, k.slice(0, 2), k + (size ? '-' + size : '') + '.webp'); }
+function writeAtomic(file, buf) { fs.mkdirSync(path.dirname(file), { recursive: true }); const tmp = file + '.tmp'; fs.writeFileSync(tmp, buf); fs.renameSync(tmp, file); }
+
+function privateIp(ip) {
+  ip = String(ip).toLowerCase().replace(/^\[|\]$/g, '');
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number);
+    return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19));
+  }
+  if (!net.isIPv6(ip)) return true;
+  if (ip.startsWith('::ffff:')) return net.isIPv4(ip.slice(7)) ? privateIp(ip.slice(7)) : true;
+  return ip === '::' || ip === '::1' || /^f[cd]/.test(ip) || /^fe[89ab]/.test(ip) || /^ff/.test(ip) || ip.startsWith('64:ff9b') || ip.startsWith('2001:db8') || ip.startsWith('100::');
+}
+// Resolves the host and refuses it when any of its addresses is private; the connection uses the checked address.
+function safeLookup(hostname, opts, cb) {
+  if (typeof opts === 'function') { cb = opts; opts = {}; }
+  dns.lookup(hostname, { all: true }, (err, addrs) => {
+    if (err) return cb(err);
+    if (!addrs.length || addrs.some(a => privateIp(a.address))) return cb(new Error('that address points into a private or local network'));
+    if (opts && opts.all) return cb(null, addrs);
+    cb(null, addrs[0].address, addrs[0].family);
+  });
+}
+function fetchImage(url, custom, redirects) {
+  if (redirects === undefined) redirects = 3;
+  return new Promise((resolve, reject) => {
+    let u;
+    try { u = new URL(url); } catch (e) { return reject(new Error('not a valid address')); }
+    if (u.protocol !== 'https:') return reject(new Error('only https:// addresses are downloaded'));
+    if (u.port && u.port !== '443') return reject(new Error('only the normal https port is allowed'));
+    if (u.username || u.password) return reject(new Error('addresses with a user name are not allowed'));
+    const host = u.hostname.replace(/^\[|\]$/g, '');
+    if (!custom && !AUTO_HOSTS.has(host)) return reject(new Error('host not allowed: ' + host));
+    if (net.isIP(host) && privateIp(host)) return reject(new Error('that address points into a private or local network'));
+    let done = false;
+    const finish = (fn, v) => { if (!done) { done = true; clearTimeout(timer); fn(v); } };
+    const req = https.get(u, { lookup: safeLookup, timeout: 20000, headers: { 'User-Agent': 'dex-art-tracker', Accept: 'image/*' } }, res => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+        res.resume();
+        if (redirects <= 0) return finish(reject, new Error('too many redirects'));
+        let next; try { next = new URL(res.headers.location, u).toString(); } catch (e) { return finish(reject, new Error('bad redirect')); }
+        return fetchImage(next, custom, redirects - 1).then(v => finish(resolve, v), e => finish(reject, e));
+      }
+      if (res.statusCode !== 200) { res.resume(); return finish(reject, new Error('the site answered HTTP ' + res.statusCode)); }
+      if (+res.headers['content-length'] > MAX_IMAGE_BYTES) { res.destroy(); return finish(reject, new Error('the picture is larger than 15 MB')); }
+      const chunks = []; let n = 0;
+      res.on('data', c => { n += c.length; if (n > MAX_IMAGE_BYTES) { res.destroy(); finish(reject, new Error('the picture is larger than 15 MB')); } else chunks.push(c); });
+      res.on('end', () => finish(resolve, Buffer.concat(chunks)));
+      res.on('error', e => finish(reject, e));
+    });
+    const timer = setTimeout(() => req.destroy(new Error('the download took too long')), 30000);
+    req.on('timeout', () => req.destroy(new Error('the site did not answer')));
+    req.on('error', e => finish(reject, e));
+  });
+}
+const IMG_FORMATS = ['jpeg', 'png', 'webp', 'gif', 'avif', 'heif', 'tiff'];
+async function checkedImage(buf) {
+  if (!sharp) throw new Error('picture processing is not available');
+  const m = await sharp(buf, { limitInputPixels: 40e6, failOn: 'error' }).metadata();
+  if (!IMG_FORMATS.includes(m.format)) throw new Error('not a supported picture (use JPG, PNG, WebP, GIF or AVIF)');
+  if (!(m.width >= 40 && m.height >= 40)) throw new Error('the picture is too small');
+  return sharp(buf, { limitInputPixels: 40e6, failOn: 'error' }).rotate(); // first frame only, turned upright, no metadata kept
+}
+async function makeCardImages(buf, wantHigh) {
+  const base = await checkedImage(buf);
+  const low = await base.clone().resize({ width: LOW_W, withoutEnlargement: true }).webp({ quality: 80 }).toBuffer();
+  const high = wantHigh ? await base.clone().resize({ width: HIGH_W, withoutEnlargement: true }).webp({ quality: 85 }).toBuffer() : null;
+  return { low, high };
+}
+function storeCard(id, out, src, wantedHigh) {
+  writeAtomic(imgPath('c', id, 'low'), out.low);
+  if (out.high) writeAtomic(imgPath('c', id, 'high'), out.high);
+  else { try { fs.unlinkSync(imgPath('c', id, 'high')); } catch (e) { /* none */ } }
+  const now = new Date().toISOString();
+  imgs.c[id] = { h: out.high ? 1 : 0, s: src, v: Date.now().toString(36), t: now };
+  if (wantedHigh && !out.high) imgs.c[id].hx = now;
+  delete imgs.fail['c:' + id];
+  saveImgs();
+}
+function dropCard(id) {
+  ['low', 'high'].forEach(z => { try { fs.unlinkSync(imgPath('c', id, z)); } catch (e) { /* none */ } });
+  delete imgs.c[id]; delete imgs.fail['c:' + id]; saveImgs(true);
+}
+// Where a card's picture can come from, best first: TCGdex, the pokemontcg.io picture found for it,
+// then the addresses the page used to guess (pokemontcg.io and Scrydex by set id and number).
+function cardSources(c, wantHigh) {
+  const hi = [], lo = [];
+  if (c.b) { hi.push({ url: c.b + '/high.webp', src: 'tcgdex' }); lo.push({ url: c.b + '/low.webp', src: 'tcgdex' }); }
+  const pc = db.pics[c.id];
+  if (pc && pc.im && !pc.m) { hi.push({ url: pc.imL || pc.im, src: 'pokemontcg' }); lo.push({ url: pc.im, src: 'pokemontcg' }); }
+  if (c.k != null && c.k !== '') {
+    const plain = plainNum(c.k);
+    if (langOf(c.sid) === 'ja') {
+      const js = encodeURIComponent(rawId(c.sid).toLowerCase());
+      [plain, String(c.k)].filter((x, i, a) => a.indexOf(x) === i).forEach(n => {
+        hi.push({ url: 'https://images.scrydex.com/pokemon/' + js + '_ja-' + encodeURIComponent(n) + '/medium', src: 'scrydex' });
+        lo.push({ url: 'https://images.scrydex.com/pokemon/' + js + '_ja-' + encodeURIComponent(n) + '/small', src: 'scrydex' });
+      });
+    } else {
+      const pid = encodeURIComponent(ptcgSetId(c.sid)), n = encodeURIComponent(plain);
+      hi.push({ url: 'https://images.pokemontcg.io/' + pid + '/' + n + '_hires.png', src: 'pokemontcg' });
+      lo.push({ url: 'https://images.pokemontcg.io/' + pid + '/' + n + '.png', src: 'pokemontcg' });
+      hi.push({ url: 'https://images.scrydex.com/pokemon/' + pid + '-' + n + '/medium', src: 'scrydex' });
+      lo.push({ url: 'https://images.scrydex.com/pokemon/' + pid + '-' + n + '/small', src: 'scrydex' });
+    }
+  }
+  return wantHigh ? hi.map(x => Object.assign(x, { big: true })).concat(lo) : lo;
+}
+// Cards whose picture should be stored, owned and wished-for cards first, then art cards, then the rest,
+// newest sets first within each group.
+function imageTargets() {
+  const prio = new Set();
+  allStates().forEach(s => { Object.keys(s.cards).forEach(id => { if (s.cards[id]) prio.add(id); }); wishOf(s).forEach(w => prio.add(w.id)); });
+  const out = [];
+  const sets = Object.entries(db.sets).filter(([, s]) => s.scan).sort((a, b) => String(b[1].date).localeCompare(String(a[1].date)));
+  for (const [sid, s] of sets) for (const c of s.cards) {
+    const rec = db.cards[c.id], art = rec ? !rec.x : worth(s, c);
+    if (!art && !(c.d && c.d.length)) continue; // the page only shows Pokémon cards and art cards
+    const have = imgs.c[c.id], pc = db.pics[c.id];
+    if (have && have.s === 'custom') continue;
+    const b = (rec && !rec.x && rec.b) || cleanBase(c.i);
+    const wantHigh = IMAGE_HIGH === 'all' || (IMAGE_HIGH === 'art' && (art || prio.has(c.id)));
+    if (have) {
+      const upgrade = b && have.s !== 'tcgdex'; // TCGdex has a picture now
+      const needHigh = wantHigh && !have.h && !(have.hx && ageDays(have.hx) < 30);
+      if (!upgrade && !needHigh) continue;
+    }
+    const f = imgs.fail['c:' + c.id];
+    if (f && ageDays(f) < 7) continue;
+    out.push({ id: c.id, sid, k: c.l, b, wantHigh, custom: !!(pc && pc.m && pc.im && !have), p: prio.has(c.id) ? 2 : art ? 1 : 0 });
+  }
+  return out.sort((a, b) => b.p - a.p);
+}
+async function downloadCard(c) {
+  if (c.custom) { // a picture address set by hand in an earlier version: store it like a new custom picture
+    try { storeCard(c.id, await makeCardImages(await fetchImage(db.pics[c.id].im, true), true), 'custom', true); return true; }
+    catch (e) { imgs.fail['c:' + c.id] = new Date().toISOString(); saveImgs(); return false; }
+  }
+  for (const s of cardSources(c, c.wantHigh)) {
+    try {
+      const out = await makeCardImages(await fetchImage(s.url, false), c.wantHigh && !!s.big);
+      storeCard(c.id, out, s.src, c.wantHigh);
+      return true;
+    } catch (e) { /* try the next source */ }
+  }
+  imgs.fail['c:' + c.id] = new Date().toISOString(); saveImgs();
+  return false;
+}
+function logoSources(sid, s) {
+  const l = [];
+  if (s.lg) { l.push(s.lg + '.png'); l.push(s.lg + '.webp'); }
+  if (s.sy) l.push(s.sy + '.png');
+  if (langOf(sid) !== 'ja') l.push('https://images.pokemontcg.io/' + encodeURIComponent(ptcgSetId(sid)) + '/logo.png');
+  return l;
+}
+async function downloadLogo(sid, s) {
+  for (const url of logoSources(sid, s)) {
+    try {
+      const base = await checkedImage(await fetchImage(url, false));
+      writeAtomic(imgPath('s', sid), await base.resize({ height: LOGO_H, withoutEnlargement: true }).webp({ quality: 90 }).toBuffer());
+      imgs.s[sid] = { v: Date.now().toString(36), t: new Date().toISOString() }; delete imgs.fail['s:' + sid]; saveImgs();
+      return true;
+    } catch (e) { /* next */ }
+  }
+  imgs.fail['s:' + sid] = new Date().toISOString(); saveImgs();
+  return false;
+}
+// Runs in the hourly background job for at most 25 minutes.
+async function fillImages() {
+  if (!IMAGE_CACHE || !sharp) return;
+  const t0 = Date.now(); let n = 0, ok = 0;
+  for (const [sid, s] of Object.entries(db.sets)) {
+    if (!s.scan || imgs.s[sid] || (imgs.fail['s:' + sid] && ageDays(imgs.fail['s:' + sid]) < 7)) continue;
+    n++; if (await downloadLogo(sid, s)) ok++;
+    await sleep(IMAGE_DELAY_MS);
+  }
+  for (const c of imageTargets()) {
+    if (Date.now() - t0 > 25 * 60000) break;
+    n++; if (await downloadCard(c)) ok++;
+    if (n % 50 === 0) exportCards();
+    await sleep(IMAGE_DELAY_MS);
+  }
+  saveImgs(true);
+  if (n) { exportCards(); log('pictures stored on the server: ' + ok + ' of ' + n + ' this run, ' + Object.keys(imgs.c).length + ' cards in total'); }
+}
+function sendImage(res, file) {
+  fs.readFile(file, (err, buf) => {
+    if (err) { res.writeHead(404); return res.end('Not found'); }
+    res.writeHead(200, { 'Content-Type': 'image/webp', 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=604800', 'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'none'; sandbox", 'Cross-Origin-Resource-Policy': 'same-origin' });
+    res.end(buf);
+  });
+}
+
 let running = false, lastError = null, lastManual = 0;
 async function exclusive(fn) {
   if (running) return false;
@@ -717,6 +949,7 @@ async function tick() {
     }
     if (db.initialDone) await refreshPrices(PRICE_MAX_AGE_DAYS);
     if (db.initialDone && !unlimited) await fillPictures();
+    if (db.initialDone && !unlimited) await fillImages();
     if (db.initialDone && !unlimited) await fillRegularPrices();
   });
 }
@@ -779,6 +1012,7 @@ function status() {
     backlog: pendingCards().length,
     pricesDue: planPriceRefresh(PRICE_MAX_AGE_DAYS, Infinity).length,
     picsDue: PICTURE_LOOKUP ? picsNeeded().length : 0,
+    imgsStored: Object.keys(imgs.c).length, imgsDue: IMAGE_CACHE && sharp ? imageTargets().length : 0,
     setsChecked: db.setsChecked, initialDone: db.initialDone,
     requestsToday: db.budget.used, dailyRequests: DAILY_REQUESTS,
   };
@@ -899,7 +1133,7 @@ const blocked = ip => { const f = fails.get(ip); return !!f && Date.now() - f.t 
 const hits = new Map();
 const limited = ip => { const n = Date.now(), h = hits.get(ip); if (!h || n - h.t > 60000) { hits.set(ip, { t: n, n: 1 }); return false; } return ++h.n > 600; };
 
-// mode: 'full' (logged in), 'ro' (view only, with a login link), 'view' (view only, no login link at all)
+// mode: 'full' (logged in), 'ro' (view only, with a login link), 'view' (view only, no login link: the main dex on /view/)
 function indexHtml(mode, dexId, sess) {
   let h = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
   const hide = 'window.DEX_HIDE_VALUE=' + (!SHOW_VALUE_PUBLIC) + ';';
@@ -944,12 +1178,22 @@ function readBody(req, limit) {
 
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
-  let p = u.pathname, forceAnon = false;
+  let p = u.pathname, viewPath = false;
   try {
-    // /view/ is the same page without any login option, whoever opens it.
-    if (p === '/view') { res.writeHead(301, { Location: '/view/' }); return res.end(); }
-    if (p.startsWith('/view/')) { p = p.slice(5); forceAnon = true; }
-    const sess = forceAnon ? null : sessionOf(req);
+    // /view/ is the same page, but the main admin can never log in or use a login there: only the other
+    // trainers can. Publishing only /view/ keeps the admin login unreachable from outside.
+    if (p === '/view') { res.writeHead(301, { Location: '/view/' + u.search }); return res.end(); }
+    if (p.startsWith('/view/')) { p = p.slice(5); viewPath = true; }
+    // Stored pictures: /img/c/<card id>/<low|high> and /img/s/<set id>. Looked up in the index, never by path.
+    if (req.method === 'GET' && p.startsWith('/img/')) {
+      const m = /^\/img\/(c|s)\/([^/]{1,200})(?:\/(low|high))?$/.exec(p);
+      let id = null; try { id = m && decodeURIComponent(m[2]); } catch (e) { id = null; }
+      const rec = id && (m[1] === 'c' ? imgs.c[id] : imgs.s[id]);
+      if (!rec || !Object.prototype.hasOwnProperty.call(m[1] === 'c' ? imgs.c : imgs.s, id)) { res.writeHead(404); return res.end('Not found'); }
+      return sendImage(res, m[1] === 'c' ? imgPath('c', id, m[3] === 'high' && rec.h ? 'high' : 'low') : imgPath('s', id));
+    }
+    let sess = sessionOf(req);
+    if (viewPath && sess && sess.acc === MAIN) sess = null; // an admin login counts as a visitor on /view/
     const authed = !!sess, isAdmin = !!sess && sess.acc === MAIN;
     const ip = clientIp(req);
     if (!authed && limited(ip)) { res.writeHead(429); return res.end('Slow down'); }
@@ -958,7 +1202,7 @@ const server = http.createServer(async (req, res) => {
     const dexId = accById(dexQ) ? dexQ : (sess ? sess.acc : MAIN);
     if (req.method === 'GET' && (p === '/' || p === '/index.html')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Vary': 'Cookie', 'X-Content-Type-Options': 'nosniff' });
-      return res.end(indexHtml(sess && sess.acc === dexId ? 'full' : (forceAnon ? 'view' : 'ro'), dexId, sess));
+      return res.end(indexHtml(sess && sess.acc === dexId ? 'full' : (viewPath && dexId === MAIN ? 'view' : 'ro'), dexId, sess));
     }
     if (req.method === 'GET' && p === '/api/accounts') return sendJSON(res, 200, publicAccounts());
     // Every dex's owned cards and wish list, for the trade matches.
@@ -988,11 +1232,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== 'GET' && !(req.headers['content-type'] || '').includes('application/json')) return sendJSON(res, 415, { error: 'JSON required' });
 
     if (req.method === 'POST' && p === '/api/login') {
-      if (forceAnon) return sendJSON(res, 404, { error: 'not found' });
       if (blocked(ip)) return sendJSON(res, 429, { error: 'Too many wrong passwords. Try again in 15 minutes.' });
       const b = JSON.parse(await readBody(req, 1e4));
       const acc = accById(b.dex || MAIN);
-      if (!acc) return sendJSON(res, 404, { error: 'That dex does not exist' });
+      if (!acc || (viewPath && acc.id === MAIN)) return sendJSON(res, 404, { error: 'That dex does not exist' });
       if (!checkPw(acc, String(b.password || ''))) {
         const f = fails.get(ip); fails.set(ip, f && Date.now() - f.t < 15 * 60000 ? { n: f.n + 1, t: Date.now() } : { n: 1, t: Date.now() });
         await sleep(1000);
@@ -1115,14 +1358,32 @@ const server = http.createServer(async (req, res) => {
     // Set a card's picture by hand (main admin): a picture address, or empty to go back to automatic.
     if (req.method === 'POST' && p === '/api/card/picture') {
       if (!isAdmin) return sendJSON(res, 403, { error: 'Only the main admin can change pictures' });
-      const b = JSON.parse(await readBody(req, 1e4));
-      const id = String(b.id || ''), url = String(b.url || '').trim();
+      const b = JSON.parse(await readBody(req, 22e6)); // an uploaded picture (up to 15 MB) arrives as base64 text
+      const id = String(b.id || ''), url = String(b.url || '').trim(), data = typeof b.data === 'string' ? b.data : '';
       if (!regIndex().has(id) && !(db.cards[id] && !db.cards[id].x)) return sendJSON(res, 404, { error: 'unknown card' });
-      if (!url) delete db.pics[id];
-      else if (!httpsUrl(url)) return sendJSON(res, 400, { error: 'Paste a picture address that starts with https://' });
-      else db.pics[id] = { im: url, imL: url, m: 1, t: new Date().toISOString() };
+      if (!url && !data) { // back to the automatic picture
+        delete db.pics[id]; dropCard(id); persist(true);
+        return sendJSON(res, 200, { ok: true });
+      }
+      if (!sharp) return sendJSON(res, 409, { error: 'Picture processing is not available on this server (rebuild the container so sharp is installed)' });
+      let buf;
+      if (data) {
+        const m = /^data:image\/[a-z0-9.+-]+;base64,([A-Za-z0-9+/=\s]+)$/i.exec(data);
+        if (!m) return sendJSON(res, 400, { error: 'That file could not be read as a picture' });
+        buf = Buffer.from(m[1], 'base64');
+        if (buf.length > MAX_IMAGE_BYTES) return sendJSON(res, 400, { error: 'The picture is larger than 15 MB' });
+      } else {
+        if (!/^https:\/\//i.test(url) || url.length > 2000) return sendJSON(res, 400, { error: 'Paste a picture address that starts with https://' });
+        try { buf = await fetchImage(url, true); }
+        catch (e) { return sendJSON(res, 400, { error: 'Could not download that picture: ' + e.message }); }
+      }
+      let out;
+      try { out = await makeCardImages(buf, true); }
+      catch (e) { return sendJSON(res, 400, { error: 'That is not a picture that can be used: ' + e.message }); }
+      storeCard(id, out, 'custom'); saveImgs(true);
+      db.pics[id] = { m: 1, src: data ? 'upload' : url, t: new Date().toISOString() };
       persist(true);
-      return sendJSON(res, 200, { ok: true });
+      return sendJSON(res, 200, { ok: true, high: !!out.high });
     }
     if (req.method === 'POST' && p === '/api/card/mark') {
       // The art list is shared by every dex, so only the main admin changes it.

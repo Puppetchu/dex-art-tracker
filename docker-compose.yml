@@ -22,6 +22,10 @@ services:
       # PROMO_AS_ART: "1"
       # Which rarities count as art cards (compared without upper/lower case).
       # RARITIES: "Illustration Rare,Special Illustration Rare,Promo"
+      # Card pictures are stored in the data volume (roughly 3-5 GB). "0" turns that off.
+      # IMAGE_CACHE: "1"
+      # High resolution copies: "all" (default), "art" (art, owned and wished cards, about 1-1.5 GB in all) or "none".
+      # IMAGE_HIGH: "all"
       # Missing card pictures (mostly promos) are looked up on pokemontcg.io. "0" turns that off.
       # PICTURE_LOOKUP: "1"
       # PICTURES_PER_DAY: "500"

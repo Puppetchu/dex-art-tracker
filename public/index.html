@@ -292,9 +292,10 @@ a{color:var(--lcd)}
     <strong id="picTitle" style="font:800 1.05rem var(--head)">Picture</strong>
     <button id="picClose" type="button">Close</button>
   </div>
-  <p style="color:var(--muted);font-size:.85rem;margin:8px 0">Paste the address of a picture of this card (right-click a picture on a shop or card site and copy the image address). Leave it empty and save to go back to the automatic picture.</p>
+  <p style="color:var(--muted);font-size:.85rem;margin:8px 0">Paste the address of a picture of this card (right-click a picture on a shop or card site and copy the image address), or choose a picture file. The server checks it and stores a low and a high resolution copy. Save with nothing filled in to go back to the automatic picture.</p>
   <form id="picForm" style="display:flex;flex-direction:column;gap:8px">
     <input id="picUrl" type="url" placeholder="https://…" aria-label="Picture address" autocomplete="off">
+    <label style="font-size:.85rem;color:var(--muted)">or a file: <input id="picFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif"></label>
     <img id="picPrev" alt="" hidden>
     <div style="display:flex;gap:8px;align-items:center"><button type="submit">Save</button><span id="picMsg" style="color:var(--muted);font-size:.85rem"></span></div>
   </form>
@@ -373,8 +374,12 @@ function isJa(id){ return /^ja:/.test(String(id||'')); }
 function numOf(k){ return /^\d+$/.test(String(k))?String(+k):String(k); }
 var PHONE=false; try{ PHONE=window.matchMedia('(max-width:700px)').matches; }catch(e){}
 function imgList(c,big){
+  var lightbox=!!big;
   big=big||PHONE; // phones get the full resolution picture everywhere
-  var l=[];
+  var l=[], lp=c.lc?'img/c/'+encodeURIComponent(c.id)+'/':null;
+  // Pictures stored on this server come first; the outside sites are only tried for pictures not stored yet.
+  if(lp&&(c.lc>=2||!big)) l.push(lp+(big&&c.lc>=2?'high':'low')+'?v='+encodeURIComponent(c.lv||''));
+  if(lp&&c.lc<2&&big&&!lightbox) l.push(lp+'low?v='+encodeURIComponent(c.lv||''));
   if(c.b) l.push(c.b+'/'+(big?'high':'low')+'.webp');
   if(c.im) l.push(big?(c.iL||c.im):c.im); // found on pokemontcg.io, or set by hand
   if(c.sid&&c.k!=null&&c.k!==''&&isJa(c.sid)){
@@ -388,6 +393,7 @@ function imgList(c,big){
     l.push('https://images.pokemontcg.io/'+pid+'/'+nm+(big?'_hires':'')+'.png');
     l.push('https://images.scrydex.com/pokemon/'+pid+'-'+nm+'/'+(big?'medium':'small'));
   }
+  if(lp&&l.indexOf(lp+'low?v='+encodeURIComponent(c.lv||''))<0) l.push(lp+'low?v='+encodeURIComponent(c.lv||'')); // last resort: the stored low one
   return l;
 }
 function subOf(c){ var s=setsById[c.sid]; return (s?s.name:(c.sid||''))+(c.k?' · '+c.k:'')+(isJa(c.sid)?' · JA':''); }
@@ -399,6 +405,7 @@ function picHTML(c,big){
 }
 function logoList(s){
   var l=[];
+  if(s.ll) l.push('img/s/'+encodeURIComponent(s.id)+'?v='+encodeURIComponent(s.ll)); // stored on this server
   if(s.lg){ l.push(s.lg+'.webp'); l.push(s.lg+'.png'); }
   if(s.sy){ l.push(s.sy+'.webp'); }
   if(!isJa(s.id)){
@@ -430,6 +437,7 @@ function showGens(s){
   if(s.backlog) t+=' · '+s.backlog+' cards still to check';
   t+=' · '+s.pricesDue+' prices due';
   if(s.picsDue) t+=' · '+s.picsDue+' pictures to look up';
+  if(s.imgsStored||s.imgsDue) t+=' · '+s.imgsStored+' pictures stored'+(s.imgsDue?', '+s.imgsDue+' to download':'');
   if(s.setsChecked) t+=' · new sets last checked '+new Date(s.setsChecked).toLocaleDateString(undefined,{day:'numeric',month:'short'});
   $('gens').textContent=t;
 }
@@ -1083,21 +1091,33 @@ $('nameBtn').addEventListener('click',function(){ $('nameIn').value=ME?ME.name:'
 $('nameClose').addEventListener('click',function(){ $('namedlg').close(); });
 $('pwBtn').addEventListener('click',function(){ ['pwOld','pwNew','pwNew2'].forEach(function(i){ $(i).value=''; }); $('pwMsg').textContent=''; $('pwdlg').showModal(); $('pwOld').focus(); });
 $('pwClose').addEventListener('click',function(){ $('pwdlg').close(); });
-var picId=null;
+var picId=null, picData=null;
 function openPic(id){
   var c=lookup(id); picId=id;
   $('picTitle').textContent='Picture · '+(c?c.n+' · '+subOf(c):id);
-  $('picUrl').value=c&&c.im?c.im:''; $('picMsg').textContent=''; showPrev();
+  $('picUrl').value=''; $('picFile').value=''; picData=null; $('picMsg').textContent=''; showPrev();
   $('picdlg').showModal(); $('picUrl').focus();
 }
-function showPrev(){ var u=$('picUrl').value.trim(); $('picPrev').hidden=!/^https?:\/\//.test(u); if(!$('picPrev').hidden) $('picPrev').src=u; }
-$('picUrl').addEventListener('input',showPrev);
+function showPrev(){
+  var u=picData||$('picUrl').value.trim();
+  $('picPrev').hidden=!(picData||/^https:\/\//.test(u)); if(!$('picPrev').hidden) $('picPrev').src=u;
+}
+$('picUrl').addEventListener('input',function(){ picData=null; $('picFile').value=''; showPrev(); });
+$('picFile').addEventListener('change',function(){
+  var f=$('picFile').files[0]; picData=null; $('picMsg').textContent='';
+  if(!f){ showPrev(); return; }
+  if(f.size>15*1024*1024){ $('picFile').value=''; $('picMsg').textContent='That file is larger than 15 MB.'; return; }
+  var rd=new FileReader();
+  rd.onload=function(){ picData=String(rd.result); $('picUrl').value=''; showPrev(); };
+  rd.readAsDataURL(f);
+});
 $('picPrev').addEventListener('error',function(){ $('picPrev').hidden=true; $('picMsg').textContent='That address does not show a picture here.'; });
 $('picPrev').addEventListener('load',function(){ $('picMsg').textContent=''; });
 $('picClose').addEventListener('click',function(){ $('picdlg').close(); });
 $('picForm').addEventListener('submit',async function(e){
   e.preventDefault(); $('picMsg').textContent='…';
-  try{ await post('api/card/picture',{id:picId,url:$('picUrl').value.trim()}); }
+  $('picMsg').textContent=picData||$('picUrl').value.trim()?'Downloading and storing the picture…':'…';
+  try{ await post('api/card/picture',picData?{id:picId,data:picData}:{id:picId,url:$('picUrl').value.trim()}); }
   catch(err){ if(err.status===401){ location.reload(); return; } $('picMsg').textContent=err.message; return; }
   $('picdlg').close();
   await loadData(); index();

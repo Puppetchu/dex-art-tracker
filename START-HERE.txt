@@ -55,7 +55,8 @@ To give someone their own dex: log in, open the "Dex of" menu and choose
 "+ Add account...". "Manage accounts..." gives a new password or deletes one.
 Everyone can rename their own dex with the "Trainer name" button and change
 their own password with the "Password" button.
-Friends can use http://<address>:8080/view/ which has no login option at all.
+Friends can use http://<address>:8080/view/ : other trainers can log in to their
+own dex there, but the main admin login never works on that address.
 
 
 USING IT
@@ -77,9 +78,13 @@ USING IT
 - "Sets": every set with your progress. Open one to see all its cards and
   tick the ones you own.
 - Click any picture to see it large.
+- The server stores its own copy of every card picture (low and high
+  resolution), so the page keeps working when the picture sites are down.
+  Filling the store takes a day or two and roughly 3-5 GB of disk space.
 - Cards without a picture (mostly promos) are looked up automatically in the
   background. One that is still missing shows a Poké Ball with the card's name;
-  the main admin can give it a picture with the "Picture..." button on the card.
+  the main admin can give it a picture with the "Picture..." button on the card
+  (paste a picture address or choose a file).
 - If a card is wrongly counted (or not counted) as an art card, the main admin
   can use "Count as art card" / "Not an art card" on that card.
 - Prices are shown in euro (Cardmarket). For dollar (TCGplayer) prices, set

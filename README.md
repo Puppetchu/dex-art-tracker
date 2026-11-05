@@ -38,10 +38,22 @@ The data cannot tell every art card apart (for example an older alternate art su
 
 Sets show their logo (then their symbol) from TCGdex, with pokemontcg.io and Scrydex as backups and the set's id as text if nothing loads. For cards:
 
+### Pictures stored on the server
+
+The server downloads every card picture the page shows and keeps its own copy in the data folder (`images/`), so the page does not depend on the picture sites being online. Each picture is stored twice as WebP: low resolution (245 px wide, for the tiles) and high resolution (up to 734 px, for the large view and phones). Set logos are stored too. The page loads the stored copy first and only asks the outside sites for pictures that are not stored yet.
+
+- A background job fills the store slowly (one picture per second, at most 25 minutes per hour): cards someone owns or wishes for first, then art cards, then the rest, newest sets first. The status line shows how many are stored and how many are still to download. The first fill takes a day or two.
+- Disk space: roughly 3–5 GB with every card stored in both sizes. `IMAGE_HIGH=art` keeps high resolution only for art cards, owned and wished cards (roughly 1–1.5 GB in all); `IMAGE_HIGH=none` keeps only the low one.
+- A picture that came from a backup site is replaced once TCGdex has one. A card whose picture could not be found anywhere is tried again after 7 days.
+- Safety: automatic downloads only come from assets.tcgdex.net, images.pokemontcg.io and images.scrydex.com over https. Every picture (also custom ones) is limited to 15 MB, decoded and saved again as a clean WebP file; anything that is not a JPG, PNG, WebP, GIF, AVIF or TIFF picture is refused, so SVG drawings and disguised files are never stored. Picture addresses pasted by the main admin must be https on the normal port and may never lead (also not through a redirect) to a private, local or reserved network address such as your own 192.168.x.x / 10.x.x.x network. Stored files are named by a hash of the card id and served with headers that stop a browser from treating them as anything but a picture.
+- The picture processing uses the `sharp` package, installed when the container is built (`docker compose up -d --build`, needs internet once). Without it the page simply keeps using the outside sites.
+
+### Where pictures come from
+
 Pictures come from TCGdex. Brand new cards and many promos have no picture there yet. For those:
 
 - **Automatic lookup.** The server asks the pokemontcg.io card search for the exact picture of every English card the page shows that has no TCGdex picture, promo sets first. It searches by set and number, and if the set is named differently there, by name and number, only taking an unambiguous match. Found pictures are stored for good; a card without a result is asked about again after 30 days. It runs in the background at the usual pace, at most 200 cards per hour and `PICTURES_PER_DAY` per day. The status line shows how many cards are still to look up. Japanese cards are not on pokemontcg.io.
-- **By hand.** The main admin sees a **Picture…** button on every card (Sets view and a Pokémon's card list). Paste the address of a picture of that card (for example "Copy image address" on a shop or card site); a preview shows whether it works. Save an empty address to go back to the automatic picture.
+- **By hand.** The main admin sees a **Picture…** button on every card (Sets view and a Pokémon's card list). Paste the address of a picture of that card (for example "Copy image address" on a shop or card site) or choose a picture file from your computer; a preview shows it first. The server downloads or reads it once, checks it and stores a low and a high resolution copy, so the original site is not needed afterwards. Save with nothing filled in to go back to the automatic picture.
 - Otherwise the page still tries pokemontcg.io and Scrydex addresses based on the set id, and finally shows a Poké Ball placeholder with the card's name and number.
 
 ## Other languages (check first)
@@ -96,9 +108,9 @@ One port, one page. Every account (trainer) has its own dex with its own ticks; 
 - **Trainer name and password:** every account owner can rename their own dex with the **Trainer name** button and change their password with **Password** (the current password is asked first; other devices logged in to that dex are logged out). The main admin can do this too, unless the password is set with `ADMIN_PASSWORD`: then change it there. A password changed on the page is stored as a salted hash in `admin.json`.
 - **Shared art list:** "Count as art card" / "Not an art card" change the art list for every dex, so only the main admin sees them. Other accounts can tick cards, use Get price and Refresh prices.
 - Background re-pricing only skips a card or Pokémon when every account owns it.
-- **No login link at all:** share `http://yourserver:8080/view/`. It is the same view-only page and it never shows a login option, even to you.
+- **The /view/ address:** `http://yourserver:8080/view/` is the same page, but the main admin can never log in or use an existing admin login there. Other trainers can: they open their own dex there and log in with the lens as usual. The main dex has no login option on /view/ at all.
 - Eight wrong passwords from one address block further tries for 15 minutes. The money totals are hidden from visitors unless `SHOW_VALUE_PUBLIC=1`.
-- **Outside your home:** only publish the page through an https reverse proxy or tunnel (the password travels as plain text over http), (`TRUST_PROXY` is on by default, so the proxy's forwarded address and https are used; set `TRUST_PROXY=0` if there is no proxy). Put the proxy rule on port 8080 only. To keep the login unreachable from outside, publish only the `/view/` path.
+- **Outside your home:** only publish the page through an https reverse proxy or tunnel (the password travels as plain text over http), (`TRUST_PROXY` is on by default, so the proxy's forwarded address and https are used; set `TRUST_PROXY=0` if there is no proxy). Put the proxy rule on port 8080 only. To keep the admin login unreachable from outside while trainers can still log in, publish only the `/view/` path.
 
 ## What the background job never overwrites
 
@@ -137,6 +149,9 @@ Saved on the server (`state.json` for the main admin, `states/<id>.json` for oth
 | `LANGUAGES` | en,ja | `en` = English only |
 | `REGULAR_PRICES_PER_DAY` | 0 | Most requests per day spent on regular-card prices, 0 = no limit |
 | `ADMIN_PASSWORD` | random | Password of the main admin account |
+| `IMAGE_CACHE` | 1 | 0 = do not store pictures on the server (the page then loads them from the picture sites) |
+| `IMAGE_HIGH` | all | Which cards also get a high resolution copy: `all`, `art` (art, owned and wished cards) or `none` |
+| `IMAGE_DELAY_MS` | 1000 | Pause between two picture downloads, in milliseconds |
 | `PICTURE_LOOKUP` | 1 | 0 = do not look up missing pictures on pokemontcg.io |
 | `PICTURES_PER_DAY` | 500 | Most picture lookups per day, 0 = no limit (each card takes one or two requests) |
 | `PTCG_API_KEY` | (none) | Optional free pokemontcg.io API key, for a higher request limit there |
