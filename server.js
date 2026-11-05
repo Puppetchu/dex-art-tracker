@@ -1583,6 +1583,91 @@ function status() {
   };
 }
 
+// ---------- importing a collection from another site (a CSV export, for example Collectr) ----------
+// Every row is matched by card number first (the number on the card, without the "/set size"), then checked
+// by name (or, for Japanese cards, by Pokémon), with the set name and set size to choose between sets.
+// Only the matching happens here: the page adds the cards to the owned list or the wish list itself.
+function parseCsv(text) {
+  const rows = []; let row = [], f = '', q = false;
+  const t = String(text).replace(/^﻿/, '');
+  const sep = (t.split('\n')[0].match(/;/g) || []).length > (t.split('\n')[0].match(/,/g) || []).length ? ';' : ',';
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (q) { if (ch === '"') { if (t[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === sep) { row.push(f); f = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && t[i + 1] === '\n') i++; row.push(f); f = ''; if (row.some(x => x.trim())) rows.push(row); row = []; }
+    else f += ch;
+  }
+  row.push(f); if (row.some(x => x.trim())) rows.push(row);
+  return rows;
+}
+const plain = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[’'`]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
+const cardNo = s => String(s || '').trim().toUpperCase().replace(/^([A-Z]*)0+(?=\d)/, '$1'); // "087" -> "87", "TG02" -> "TG2"
+function setWords(name) {
+  return plain(name).replace(/\bpokemon\b/g, ' ').replace(/\bbase set\b/g, ' ').replace(/\bblack star promos?\b/g, ' promo ').replace(/\bpromos\b/g, 'promo').replace(/\s+/g, ' ').trim();
+}
+let importIdx = null, importIdxAt = 0;
+function importIndex() { // card number -> cards in every set read
+  if (importIdx && Date.now() - importIdxAt < 600000) return importIdx;
+  const m = new Map();
+  for (const [sid, s] of Object.entries(db.sets)) {
+    if (!s.scan) continue;
+    const sw = setWords(s.name);
+    for (const c of s.cards) {
+      const k = cardNo(c.l); if (!k) continue;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push({ c, sid, s, sw });
+    }
+  }
+  importIdx = m; importIdxAt = Date.now();
+  return m;
+}
+const IMPORT_COLS = {
+  name: ['product name', 'card name', 'name', 'card'],
+  number: ['card number', 'number', 'collector number', 'card no', 'no'],
+  set: ['set', 'set name', 'expansion', 'edition'],
+};
+function importMatch(text) {
+  const rows = parseCsv(text);
+  if (rows.length < 2) throw new Error('That file has no rows');
+  const head = rows[0].map(h => plain(h));
+  const col = k => { for (const n of IMPORT_COLS[k]) { const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
+  const ci = { name: col('name'), number: col('number'), set: col('set') };
+  if (ci.name < 0 || ci.number < 0) throw new Error('Could not find the card name and card number columns in that file');
+  const idx = importIndex(), found = [], missing = [];
+  rows.slice(1).forEach((r, n) => {
+    const rawName = (r[ci.name] || '').trim(), rawNo = (r[ci.number] || '').trim(), set = ci.set >= 0 ? (r[ci.set] || '').trim() : '';
+    if (!rawName && !rawNo) return;
+    const out = { row: n + 2, name: rawName, number: rawNo, set };
+    const tags = (rawName.match(/\(([^)]*)\)/g) || []).map(x => x.slice(1, -1).trim().toUpperCase());
+    if (tags.includes('CN') || tags.includes('KR') || tags.includes('TW')) return missing.push(Object.assign(out, { why: 'Chinese or Korean cards are not in the card database' }));
+    const ja = tags.includes('JP');
+    const name = plain(rawName.replace(/\([^)]*\)/g, ' '));
+    const parts = rawNo.split('/'), num = cardNo(parts[0]), total = parts[1] ? cardNo(parts[1]) : '';
+    if (!num) return missing.push(Object.assign(out, { why: 'No card number' }));
+    const dex = new Set(nameDex(rawName.replace(/\([^)]*\)/g, ' ')));
+    const sw = setWords(set);
+    let best = null, bestScore = -1, tie = false;
+    for (const x of idx.get(num) || []) {
+      const cn = plain(x.c.n);
+      const nameOk = !!cn && (cn === name || (name.length >= 3 && cn.length >= 3 && (cn.includes(name) || name.includes(cn)))); // Japanese names have no letters left here
+      const dexOk = !nameOk && dex.size && (x.c.d && x.c.d.length ? x.c.d : nameDex(x.c.n)).some(d => dex.has(d));
+      if (!nameOk && !dexOk) continue;
+      let score = nameOk ? (cn === name ? 3 : 2) : 1;
+      if (sw && x.sw === sw) score += 6;
+      else if (sw && x.sw && (x.sw.includes(sw) || sw.includes(x.sw))) score += 3;
+      if (total && (cardNo(String(x.s.official)) === total || cardNo(String(x.s.total)) === total)) score += 2;
+      if ((x.s.lang === 'ja') === ja) score += 1;
+      if (score > bestScore || (score === bestScore && String(x.s.date) > String(best.s.date))) { tie = score === bestScore; best = x; bestScore = score; }
+      else if (score === bestScore) tie = true;
+    }
+    if (!best) return missing.push(Object.assign(out, { why: (idx.get(num) || []).length ? 'No card with that name and number' : 'No card with that number in the sets read' }));
+    found.push(Object.assign(out, { id: best.c.id, card: best.c.n, cardSet: best.s.name, sure: bestScore >= 6 && !tie ? 1 : 0 }));
+  });
+  return { found, missing };
+}
+
 // ---------- accounts and login ----------
 // Every account (trainer) has its own dex; its ticks are stored in states/<id>.json. A login only opens the
 // dex it was made on. The admin is not a trainer and has no dex: it logs in on the normal address (never on
@@ -1962,6 +2047,13 @@ const server = http.createServer(async (req, res) => {
       lastManual = Date.now();
       exclusive(manualRun);
       return sendJSON(res, 202, { started: true });
+    }
+    // Import: match the rows of a CSV export (Collectr and the like) to cards. The page adds them itself.
+    if (req.method === 'POST' && p === '/api/import') {
+      if (isAdmin) return sendJSON(res, 403, { error: 'The admin has no dex to import into' });
+      const b = JSON.parse(await readBody(req, 6e6));
+      try { return sendJSON(res, 200, importMatch(String(b.csv || ''))); }
+      catch (e) { return sendJSON(res, 400, { error: e.message }); }
     }
     // Count a card as an art card (one request to read its details) or take it off the art list.
     if (req.method === 'POST' && p === '/api/prices') {

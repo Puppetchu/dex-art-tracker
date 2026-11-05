@@ -163,6 +163,10 @@ For `local`, set `SCAN_AI_URL` to the server's address including `/v1` (default 
 
 The `android/` folder holds a small Android app that opens your server's `/view/` page full screen and uses the server for everything. It starts as a closed Pokédex: pick your trainer, enter the password and it opens on your own dex (inside the app you only see your own dex; the web page is unchanged). Scanning, wish lists and history work as on the web page. See `android/README.md` for installing and building; GitHub builds the APK with `.github/workflows/android.yml`.
 
+## Importing from another site
+
+Logged in to your dex, click **Import** at the top (or **Import from another site…** at the bottom of the page) and choose a CSV export of your collection, for example from Collectr (your portfolio → Export). Choose whether the cards go to your **owned cards** or your **wish list**. Every row is matched to a card by its card number (without the "/set size"), checked by name (for Japanese cards: by Pokémon), and the set name and set size decide between sets with the same number; rows marked *check* had no exact set-name match. You see every match first and can untick rows; nothing is added until you click **Add**. Rows that cannot be matched are listed with the reason (for example Chinese cards, or sets the server has not read). Other sites' exports work too when they have a card name and card number column (and ideally a set column).
+
 ## Generations
 
 The Pokémon tab is split into the nine generations, each with a header showing its range and how many Pokémon you have a card and an art card for. The "Jump to generation" menu next to the filter scrolls straight to the one you pick.
