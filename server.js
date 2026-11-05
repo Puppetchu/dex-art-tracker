@@ -509,16 +509,17 @@ async function backfill() {
 }
 
 // The cheapest few art cards per Pokémon (by € and by $), skipping Pokémon whose art card you own.
+// With several accounts, a card or Pokémon is only skipped when every account owns it.
 function planPriceRefresh(maxAge, limit) {
-  const stt = readJSON(STATE_FILE) || {};
-  const own = stt.own || {}, owned = stt.cards || {};
+  const states = allStates();
+  const all = fn => states.length > 0 && states.every(fn);
+  const ownedByAll = id => all(s => !!s.cards[id]);
   const byDex = {};
   Object.values(db.cards).forEach(c => { if (!c.x && !c.tr) c.d.forEach(n => { (byDex[n] = byDex[n] || []).push(c); }); });
   const picked = new Map();
-  Object.values(db.cards).forEach(c => { if (!c.x && c.tr && !owned[c.id]) picked.set(c.id, c); });
+  Object.values(db.cards).forEach(c => { if (!c.x && c.tr && !ownedByAll(c.id)) picked.set(c.id, c); });
   Object.keys(byDex).forEach(n => {
-    if (own[n] && own[n].art) return;
-    if (byDex[n].some(c => owned[c.id])) return;
+    if (all(s => (s.own[n] && s.own[n].art) || byDex[n].some(c => s.cards[c.id]))) return;
     ['eu', 'us'].forEach(cur => {
       byDex[n].slice().sort((a, b) => {
         const pa = a[cur], pb = b[cur];
@@ -529,7 +530,7 @@ function planPriceRefresh(maxAge, limit) {
     });
   });
   // Art cards that have no picture yet are asked about again every 7 days (TCGdex adds pictures later).
-  const noPic = Object.values(db.cards).filter(c => !c.x && !c.b && !owned[c.id] && ageDays(c.pt) >= 7);
+  const noPic = Object.values(db.cards).filter(c => !c.x && !c.b && !ownedByAll(c.id) && ageDays(c.pt) >= 7);
   return [...new Set([...picked.values()].filter(c => ageDays(c.pt) >= maxAge).concat(noPic))]
     .sort((a, b) => (b.m ? 1 : 0) - (a.m ? 1 : 0) || Date.parse(a.pt || 0) - Date.parse(b.pt || 0)) // cards you picked by hand first
     .slice(0, limit);
@@ -692,9 +693,16 @@ function status() {
   };
 }
 
-// ---------- owner login ----------
+// ---------- accounts and login ----------
+// Every account (trainer) has its own dex. The main account is the admin: its password is ADMIN_PASSWORD
+// (or the generated one in admin.json) and its ticks stay in state.json. The admin creates the other
+// accounts; their ticks are stored in states/<id>.json. A login only opens the dex it was made on.
 const ADMIN_FILE = path.join(DATA_DIR, 'admin.json');
 const SESS_FILE = path.join(DATA_DIR, 'sessions.json');
+const ACC_FILE = path.join(DATA_DIR, 'accounts.json');
+const STATES_DIR = path.join(DATA_DIR, 'states');
+const MAIN = 'main';
+fs.mkdirSync(STATES_DIR, { recursive: true });
 const sha = x => crypto.createHash('sha256').update(String(x)).digest();
 const sameText = (a, b) => crypto.timingSafeEqual(sha(a), sha(b));
 let adminPw = String(process.env.ADMIN_PASSWORD || '');
@@ -705,12 +713,45 @@ else {
   if (!adminPw) { adminPw = crypto.randomBytes(9).toString('base64url'); writeJSON(ADMIN_FILE, { password: adminPw }); }
   log('OWNER PASSWORD (generated; also saved in admin.json in the data folder; set ADMIN_PASSWORD to choose your own):', adminPw);
 }
-const sessions = readJSON(SESS_FILE) || {}; // sha256(token) -> expiry
+const accounts = readJSON(ACC_FILE) || {};
+accounts.list = Array.isArray(accounts.list) ? accounts.list : [];
+if (!accounts.list.some(a => a.id === MAIN)) accounts.list.unshift({ id: MAIN, name: 'Owner', created: new Date().toISOString() });
+function saveAccounts() { writeJSON(ACC_FILE, accounts); }
+saveAccounts();
+const accById = id => accounts.list.find(a => a.id === String(id || '')) || null;
+const publicAccounts = () => accounts.list.map(a => ({ id: a.id, name: a.name }));
+const stateFile = id => id === MAIN ? STATE_FILE : path.join(STATES_DIR, id + '.json');
+function allStates() {
+  return accounts.list.map(a => { const s = readJSON(stateFile(a.id)) || {}; return { own: s.own || {}, cards: s.cards || {} }; });
+}
+const hashPw = (pw, salt) => crypto.scryptSync(String(pw), salt, 32);
+function checkPw(acc, pw) {
+  if (acc.id === MAIN) return sameText(pw, adminPw);
+  if (!acc.hash || !acc.salt) return false;
+  return crypto.timingSafeEqual(hashPw(pw, acc.salt), Buffer.from(acc.hash, 'hex'));
+}
+function setPw(acc, pw) { acc.salt = crypto.randomBytes(16).toString('hex'); acc.hash = hashPw(pw, acc.salt).toString('hex'); }
+const newPw = () => crypto.randomBytes(9).toString('base64url');
+// Trainer names: 1-30 characters, no control characters, unique (ignoring upper/lower case).
+function cleanName(n, selfId) {
+  const v = String(n || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 30);
+  if (!v) throw new Error('Enter a trainer name');
+  if (accounts.list.some(a => a.id !== selfId && a.name.toLowerCase() === v.toLowerCase())) throw new Error('That trainer name is already taken');
+  return v;
+}
+
+const sessions = readJSON(SESS_FILE) || {}; // sha256(token) -> {exp, acc}
+for (const k of Object.keys(sessions)) if (typeof sessions[k] === 'number') sessions[k] = { exp: sessions[k], acc: MAIN }; // older logins belong to the main account
 const SESSION_MS = 30 * 86400000;
-function saveSessions() { const n = Date.now(); Object.keys(sessions).forEach(k => { if (sessions[k] < n) delete sessions[k]; }); writeJSON(SESS_FILE, sessions); }
+function saveSessions() { const n = Date.now(); Object.keys(sessions).forEach(k => { if (sessions[k].exp < n) delete sessions[k]; }); writeJSON(SESS_FILE, sessions); }
+function dropSessions(acc) { Object.keys(sessions).forEach(k => { if (sessions[k].acc === acc) delete sessions[k]; }); saveSessions(); }
 const tokenOf = req => { const m = String(req.headers.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith('dex_session=')); return m ? m.slice(12) : ''; };
 const hashTok = t => crypto.createHash('sha256').update(t).digest('hex');
-function hasSession(req) { const t = tokenOf(req); if (!t) return false; const e = sessions[hashTok(t)]; return !!e && e > Date.now(); }
+function sessionOf(req) {
+  const t = tokenOf(req); if (!t) return null;
+  const s = sessions[hashTok(t)];
+  return s && s.exp > Date.now() && accById(s.acc) ? s : null;
+}
 function clientIp(req) { const f = TRUST_PROXY && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim(); return f || req.socket.remoteAddress || ''; }
 const isHttps = req => TRUST_PROXY && String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
 const cookie = (req, v, age) => 'dex_session=' + v + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=' + age + (isHttps(req) ? '; Secure' : '');
@@ -720,10 +761,13 @@ const hits = new Map();
 const limited = ip => { const n = Date.now(), h = hits.get(ip); if (!h || n - h.t > 60000) { hits.set(ip, { t: n, n: 1 }); return false; } return ++h.n > 600; };
 
 // mode: 'full' (logged in), 'ro' (view only, with a login link), 'view' (view only, no login link at all)
-function indexHtml(mode) {
+function indexHtml(mode, dexId, sess) {
   let h = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
   const hide = 'window.DEX_HIDE_VALUE=' + (!SHOW_VALUE_PUBLIC) + ';';
-  const inj = mode === 'full' ? 'window.DEX_AUTH=true;' : 'window.DEX_READONLY=true;' + hide + (mode === 'ro' ? 'window.DEX_LOGIN=true;' : '');
+  const me = sess ? accById(sess.acc) : null;
+  const cfg = { dex: dexId, accounts: publicAccounts(), me: me ? { id: me.id, name: me.name, admin: me.id === MAIN } : null };
+  const inj = (mode === 'full' ? 'window.DEX_AUTH=true;' : 'window.DEX_READONLY=true;' + hide + (mode === 'ro' ? 'window.DEX_LOGIN=true;' : ''))
+    + 'window.DEX_CFG=' + JSON.stringify(cfg).replace(/</g, '\\u003c') + ';';
   return h.replace('<!--DEX_MODE-->', '<script>' + inj + '</script>');
 }
 
@@ -766,13 +810,18 @@ const server = http.createServer(async (req, res) => {
     // /view/ is the same page without any login option, whoever opens it.
     if (p === '/view') { res.writeHead(301, { Location: '/view/' }); return res.end(); }
     if (p.startsWith('/view/')) { p = p.slice(5); forceAnon = true; }
-    const authed = !forceAnon && hasSession(req);
+    const sess = forceAnon ? null : sessionOf(req);
+    const authed = !!sess, isAdmin = !!sess && sess.acc === MAIN;
     const ip = clientIp(req);
     if (!authed && limited(ip)) { res.writeHead(429); return res.end('Slow down'); }
+    // Which dex is looked at: ?dex=<account id>, else your own one when logged in, else the main one.
+    const dexQ = u.searchParams.get('dex');
+    const dexId = accById(dexQ) ? dexQ : (sess ? sess.acc : MAIN);
     if (req.method === 'GET' && (p === '/' || p === '/index.html')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Vary': 'Cookie', 'X-Content-Type-Options': 'nosniff' });
-      return res.end(indexHtml(authed ? 'full' : (forceAnon ? 'view' : 'ro')));
+      return res.end(indexHtml(sess && sess.acc === dexId ? 'full' : (forceAnon ? 'view' : 'ro'), dexId, sess));
     }
+    if (req.method === 'GET' && p === '/api/accounts') return sendJSON(res, 200, publicAccounts());
     if (req.method === 'GET' && p === '/data/cards.json') return sendCompressed(req, res, CARDS_FILE);
     if (req.method === 'GET' && p === '/data/names.json') return sendFile(res, NAMES_FILE);
     if (req.method === 'GET' && p === '/api/status') return sendJSON(res, 200, authed ? status() : { count: lastExport.art, regular: lastExport.regular, running: false, backlog: 0, pricesDue: 0, sets: { scanned: lastExport.sets } });
@@ -780,9 +829,13 @@ const server = http.createServer(async (req, res) => {
       const s = setPayload(u.searchParams.get('id') || '');
       return s ? sendJSON(res, 200, s) : sendJSON(res, 404, { error: 'unknown set' });
     }
-    if (req.method === 'GET' && p === '/api/state') return sendJSON(res, 200, readJSON(STATE_FILE) || {});
+    if (req.method === 'GET' && p === '/api/state') return sendJSON(res, 200, readJSON(stateFile(dexId)) || {});
+    if (req.method === 'GET' && p === '/api/admin/accounts') {
+      if (!isAdmin) return sendJSON(res, authed ? 403 : 401, { error: 'Only the main admin can do that' });
+      return sendJSON(res, 200, accounts.list.map(a => ({ id: a.id, name: a.name, created: a.created, main: a.id === MAIN })));
+    }
     if (req.method === 'GET' && p === '/api/lang-check') {
-      if (!authed) return sendJSON(res, 401, { error: 'login required' });
+      if (!isAdmin) return sendJSON(res, 401, { error: 'login as the main admin required' });
       if (DISABLE_REFRESH) return sendJSON(res, 409, { error: 'The server is set to not contact the card service' });
       if (Date.now() - lastLang < 20000) return sendJSON(res, 429, { error: 'wait 20 seconds between checks' });
       lastLang = Date.now();
@@ -797,14 +850,16 @@ const server = http.createServer(async (req, res) => {
       if (forceAnon) return sendJSON(res, 404, { error: 'not found' });
       if (blocked(ip)) return sendJSON(res, 429, { error: 'Too many wrong passwords. Try again in 15 minutes.' });
       const b = JSON.parse(await readBody(req, 1e4));
-      if (!sameText(String(b.password || ''), adminPw)) {
+      const acc = accById(b.dex || MAIN);
+      if (!acc) return sendJSON(res, 404, { error: 'That dex does not exist' });
+      if (!checkPw(acc, String(b.password || ''))) {
         const f = fails.get(ip); fails.set(ip, f && Date.now() - f.t < 15 * 60000 ? { n: f.n + 1, t: Date.now() } : { n: 1, t: Date.now() });
         await sleep(1000);
         return sendJSON(res, 401, { error: 'Wrong password' });
       }
       fails.delete(ip);
       const tok = crypto.randomBytes(24).toString('base64url');
-      sessions[hashTok(tok)] = Date.now() + SESSION_MS; saveSessions();
+      sessions[hashTok(tok)] = { exp: Date.now() + SESSION_MS, acc: acc.id }; saveSessions();
       res.setHeader('Set-Cookie', cookie(req, tok, SESSION_MS / 1000));
       return sendJSON(res, 200, { ok: true });
     }
@@ -815,11 +870,49 @@ const server = http.createServer(async (req, res) => {
     }
     if (!authed) return sendJSON(res, 401, { error: 'login required' });
     if (req.method === 'PUT' && p === '/api/state') {
+      if (dexQ && dexQ !== sess.acc) return sendJSON(res, 403, { error: 'You can only change your own dex' });
       const s = JSON.parse(await readBody(req, 5e6));
       if (!s || typeof s.own !== 'object' || Array.isArray(s.own)) return sendJSON(res, 400, { error: 'bad state' });
       const cards = s.cards && typeof s.cards === 'object' && !Array.isArray(s.cards) ? s.cards : {};
-      writeJSON(STATE_FILE, { own: s.own, cards, pick: s.pick || {}, cur: s.cur === 'us' ? 'us' : 'eu' });
+      writeJSON(stateFile(sess.acc), { own: s.own, cards, pick: s.pick || {}, cur: s.cur === 'us' ? 'us' : 'eu' });
       return sendJSON(res, 200, { ok: true });
+    }
+    // Every account owner can change their own trainer name.
+    if (req.method === 'POST' && p === '/api/account/name') {
+      const b = JSON.parse(await readBody(req, 1e4));
+      const acc = accById(sess.acc);
+      acc.name = cleanName(b.name, acc.id); saveAccounts();
+      return sendJSON(res, 200, { ok: true, name: acc.name });
+    }
+    // The main admin creates accounts, gives them a new password and deletes them.
+    if (req.method === 'POST' && p.startsWith('/api/admin/')) {
+      if (!isAdmin) return sendJSON(res, 403, { error: 'Only the main admin can do that' });
+      const b = JSON.parse(await readBody(req, 1e4));
+      const givenPw = String(b.password || '');
+      if (givenPw && givenPw.length < 6) return sendJSON(res, 400, { error: 'A password needs at least 6 characters' });
+      if (p === '/api/admin/accounts') {
+        const acc = { id: crypto.randomBytes(6).toString('hex'), name: cleanName(b.name), created: new Date().toISOString() };
+        const pw = givenPw || newPw();
+        setPw(acc, pw);
+        accounts.list.push(acc); saveAccounts();
+        log('account created:', acc.name);
+        return sendJSON(res, 200, { ok: true, id: acc.id, name: acc.name, password: pw });
+      }
+      const acc = accById(b.id);
+      if (!acc) return sendJSON(res, 404, { error: 'Unknown account' });
+      if (acc.id === MAIN) return sendJSON(res, 400, { error: 'The main account uses ADMIN_PASSWORD (or admin.json)' });
+      if (p === '/api/admin/accounts/password') {
+        const pw = givenPw || newPw();
+        setPw(acc, pw); saveAccounts(); dropSessions(acc.id);
+        return sendJSON(res, 200, { ok: true, password: pw });
+      }
+      if (p === '/api/admin/accounts/delete') {
+        accounts.list = accounts.list.filter(a => a.id !== acc.id); saveAccounts(); dropSessions(acc.id);
+        try { fs.renameSync(stateFile(acc.id), path.join(STATES_DIR, acc.id + '.deleted-' + Date.now() + '.json')); } catch (e) { /* no ticks yet */ }
+        log('account deleted:', acc.name);
+        return sendJSON(res, 200, { ok: true });
+      }
+      return sendJSON(res, 404, { error: 'not found' });
     }
     if (req.method === 'POST' && p === '/api/refresh') {
       if (DISABLE_REFRESH) return sendJSON(res, 409, { error: 'refresh disabled' });
@@ -856,6 +949,8 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, { ok: true, notArt: !!(isArt && !(now && !now.x)), art: !!(now && !now.x), price: now && !now.x ? { eu: now.eu, us: now.us } : (c ? { eu: c.eu, us: c.us } : null) });
     }
     if (req.method === 'POST' && p === '/api/card/mark') {
+      // The art list is shared by every dex, so only the main admin changes it.
+      if (!isAdmin) return sendJSON(res, 403, { error: 'Only the main admin can change the art list' });
       const b = JSON.parse(await readBody(req, 1e5));
       const id = String(b.id || '');
       if (!id) return sendJSON(res, 400, { error: 'no card' });

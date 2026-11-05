@@ -76,12 +76,17 @@ Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokea
 
 Trainer cards with an art rarity (for example Illustration rare or Special illustration rare trainers, English and Japanese) are listed on their own **Trainers** tab, newest set first, with a picture, price, Cardmarket and TCGplayer links and a "Have it" tick. They show owned count, worth and left to spend, and have no effect on the Pokémon counts at the top. They are found through the same rarity search as the other art cards, so the first update re-checks cards that were skipped before.
 
-## Login and the view-only page
+## Accounts, login and the view-only page
 
-One port, one page. Everyone who opens it sees a **view-only** version: they can browse Pokémon, sets, trainers and cards and see what you own, but cannot change anything. The server refuses every change without a login.
+One port, one page. Every account (trainer) has its own dex with its own ticks; the card database is shared. Everyone who opens the page sees a **view-only** version: they can browse Pokémon, sets, trainers and cards and see what that trainer owns, but cannot change anything. The server refuses every change without a login.
 
-- **Owner login:** click the blue lens at the top left of the Pokédex. After logging in you get the full page with the tick buttons, Refresh and Log out. The login lasts 30 days on that device.
-- **Password:** set `ADMIN_PASSWORD`. If you do not, a random one is generated, printed in the container log (look for `OWNER PASSWORD`) and saved as `admin.json` in the data folder.
+- **Dex of:** the menu at the top picks whose dex you are looking at. Every dex has its own link (`/?dex=<id>`).
+- **Login:** open your own dex and click the blue lens at the top left. A login only opens the dex it was made on: on someone else's dex you are view-only (and the lens logs you in to *that* dex). After logging in you get the full page with the tick buttons, Refresh, Trainer name and Log out. The login lasts 30 days on that device.
+- **Main admin:** the original owner account. Its password is `ADMIN_PASSWORD`; if you do not set it, a random one is generated, printed in the container log (look for `OWNER PASSWORD`) and saved as `admin.json` in the data folder. Its ticks stay in `state.json`, so an existing install keeps everything.
+- **Adding accounts:** logged in as the main admin, open the **Dex of** menu and choose **+ Add account…**. Enter a trainer name and a password (or leave it empty and one is made up). The password is shown once. **Manage accounts…** in the same menu gives an account a new password (this logs them out) or deletes it (its ticks are kept as `states/<id>.deleted-….json`).
+- **Trainer name:** every account owner can rename their own dex with the **Trainer name** button.
+- **Shared art list:** "Count as art card" / "Not an art card" change the art list for every dex, so only the main admin sees them. Other accounts can tick cards, use Get price and Refresh prices.
+- Background re-pricing only skips a card or Pokémon when every account owns it.
 - **No login link at all:** share `http://yourserver:8080/view/`. It is the same view-only page and it never shows a login option, even to you.
 - Eight wrong passwords from one address block further tries for 15 minutes. The money totals are hidden from visitors unless `SHOW_VALUE_PUBLIC=1`.
 - **Outside your home:** only publish the page through an https reverse proxy or tunnel (the password travels as plain text over http), (`TRUST_PROXY` is on by default, so the proxy's forwarded address and https are used; set `TRUST_PROXY=0` if there is no proxy). Put the proxy rule on port 8080 only. To keep the login unreachable from outside, publish only the `/view/` path.
@@ -104,7 +109,7 @@ The Pokémon tab is split into the nine generations, each with a header showing 
 
 ## Your ticks
 
-Saved on the server in `state.json`, so every device sees the same progress. "Show backup text" copies them out as text.
+Saved on the server (`state.json` for the main admin, `states/<id>.json` for other accounts), so every device sees the same progress. "Show backup text" copies them out as text.
 
 ## Settings (environment variables)
 
@@ -122,7 +127,7 @@ Saved on the server in `state.json`, so every device sees the same progress. "Sh
 | `EXTRA_RARITIES` | Mega Hyper Rare,Ultra Rare,Holo Rare | Extra rarities that count as art cards in every language (comma separated) |
 | `LANGUAGES` | en,ja | `en` = English only |
 | `REGULAR_PRICES_PER_DAY` | 0 | Most requests per day spent on regular-card prices, 0 = no limit |
-| `ADMIN_PASSWORD` | random | Owner password |
+| `ADMIN_PASSWORD` | random | Password of the main admin account |
 | `SHOW_VALUE_PUBLIC` | 0 | 1 = visitors also see the money totals |
 | `TRUST_PROXY` | 1 | Use the reverse proxy's forwarded address and https. 0 = off |
 
