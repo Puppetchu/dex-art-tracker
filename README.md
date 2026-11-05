@@ -110,7 +110,7 @@ One port, one page. Every account (trainer) has its own dex with its own ticks; 
 - Background re-pricing only skips a card or Pokémon when every account owns it.
 - **The /view/ address:** `http://yourserver:8080/view/` is the same page, but the main admin can never log in or use an existing admin login there. Other trainers can: they open their own dex there and log in with the lens as usual. The main dex has no login option on /view/ at all.
 - Eight wrong passwords from one address block further tries for 15 minutes. The money totals are hidden from visitors unless `SHOW_VALUE_PUBLIC=1`.
-- **Outside your home:** only publish the page through an https reverse proxy or tunnel (the password travels as plain text over http), (`TRUST_PROXY` is on by default, so the proxy's forwarded address and https are used; set `TRUST_PROXY=0` if there is no proxy). Put the proxy rule on port 8080 only. To keep the admin login unreachable from outside while trainers can still log in, publish only the `/view/` path.
+- **Outside your home:** only publish the page through an https reverse proxy or tunnel (the password travels as plain text over http), (`TRUST_PROXY` is on by default, so the proxy's forwarded address and https are used; set `TRUST_PROXY=0` if there is no proxy). The visitor's address is taken from the end of `X-Forwarded-For`, where the proxy adds it, so a made-up address cannot get around the wrong-password limit; with two proxies in a row set `PROXY_HOPS=2`. Passwords need at least 8 characters. Put the proxy rule on port 8080 only. To keep the admin login unreachable from outside while trainers can still log in, publish only the `/view/` path.
 
 ## What the background job never overwrites
 
@@ -123,6 +123,18 @@ One port, one page. Every account (trainer) has its own dex with its own ticks; 
 ## Get price button
 
 A card without a price shows a **Get price** button (only when logged in to your own dex, not on the view-only page). It asks the card service about that one card at once, ignoring the usual pause, stores the result and refreshes the page. If the card turns out not to be an art card, or the service has no price for it, the page says so.
+
+## App and card scanning
+
+The page can be installed as an app on Android (and iPhone): open it in Chrome over https, then use **Install app** at the top right (or Chrome's menu → *Install app* / *Add to home screen*). It gets its own icon and opens full screen. The app is the same page, so it updates with the server. Without a connection it still shows the cards, ticks and pictures it loaded last.
+
+**Scanning.** When you are logged in to your own dex, **📷 Scan** opens the camera with a card-shaped guide. Hold the card inside it, straight on and without glare, and press **Scan**. The server reads the name at the top and the card number at the bottom (for example `201/198`, `TG05/TG30` or a promo number), looks up the cards that fit, and ranks them by comparing the photo with the stored pictures. The best guesses appear with their picture and price: tap **Have it** or **☆ Wish** on the right one, then scan the next card. **Use a photo** scans a picture taken earlier (this also works without https).
+
+- The camera only works on an https address (your reverse proxy), not on `http://<ip>:8080`.
+- Reading the card runs on your server with Tesseract and its own English language data: nothing is sent anywhere else. A scan takes about a second; the reader is unloaded again after 10 quiet minutes.
+- Results are best with good light and the card filling the guide. Holo glare or tiny print can need a second try; if nothing fits, the page says what it read. Japanese cards are found by their number and set size (the Japanese name cannot be read).
+- Only logged-in trainers can scan, one scan at a time on the server. `SCAN=0` switches scanning off.
+- Through a reverse proxy with login rules (for example Pangolin), the app works for trainers on the `/view/` path: let `/view` and `/view/*` through.
 
 ## Generations
 
@@ -158,6 +170,8 @@ Saved on the server (`state.json` for the main admin, `states/<id>.json` for oth
 | `PRICE_SOURCE` | cardmarket | Prices shown on the page for every dex: `cardmarket` (€) or `tcgplayer` ($) |
 | `SHOW_VALUE_PUBLIC` | 0 | 1 = visitors also see the money totals |
 | `TRUST_PROXY` | 1 | Use the reverse proxy's forwarded address and https. 0 = off |
+| `PROXY_HOPS` | 1 | Number of reverse proxies in a row in front of the server |
+| `SCAN` | 1 | 0 = switch card scanning off |
 
 ## Limits
 

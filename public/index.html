@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dex Art Card Tracker</title>
 <meta name="robots" content="noindex">
+<meta name="theme-color" content="#d4202f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <!--DEX_MODE-->
 <style>
 /* Pokédex look: red shell, cyan lens, dark LCD panels. Red LED = nothing yet, yellow = have a card, green = have the art card. */
@@ -144,7 +150,21 @@ dialog::backdrop{background:#000b}
 @media (prefers-reduced-motion:reduce){.lens{animation:none}.bar i{transition:none}}
 @media (max-width:520px){h1{font-size:1.1rem}.legend{margin-left:0}}
 .ro-mode [data-do="any"],.ro-mode [data-do="art"],.ro-mode [data-do="have"]{pointer-events:none}
-.ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode [data-do="unwish"],.ro-mode [data-do="wish"],.ro-mode #pwBtn,.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn,.ro-mode #nameBtn{display:none!important}
+.ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode [data-do="unwish"],.ro-mode [data-do="wish"],.ro-mode #pwBtn,.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn,.ro-mode #nameBtn,.ro-mode #scanBtn{display:none!important}
+/* scanning */
+#scanBtn{background:var(--lens);border-color:#7dd3fc;color:#04121c;border-radius:999px;padding:7px 16px}
+#scandlg{max-width:min(560px,100vw);padding:12px}
+@media (max-width:600px){#scandlg{width:100vw;max-height:100dvh;margin:0;border-radius:0}}
+.cam{position:relative;width:min(100%,calc(62vh * 0.716));margin:8px auto 0;aspect-ratio:63/88;background:#000;border-radius:12px;overflow:hidden}
+.cam video{width:100%;height:100%;object-fit:cover;display:block}
+.cam .guide{position:absolute;inset:4%;border:3px solid #ffffffcc;border-radius:14px;box-shadow:0 0 0 999px #0006;pointer-events:none}
+.cam .guide::before,.cam .guide::after{content:"";position:absolute;left:6%;right:6%;height:12%;border:2px dashed #7dd3fcaa;border-radius:6px}
+.cam .guide::before{top:1%}.cam .guide::after{bottom:1%}
+.scanbar{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:10px}
+.scanbar .big{background:var(--shell);border-color:var(--shell-hi);color:#fff;padding:10px 26px;border-radius:999px;font-size:1rem}
+#scanMsg{text-align:center;color:var(--muted);font-size:.86rem;margin-top:8px;min-height:1.2em}
+#scanRes .tile.best{border-color:var(--lens);box-shadow:0 0 0 1px var(--lens),0 0 14px #38bdf855}
+.why{display:flex;gap:4px;flex-wrap:wrap}.why span{font:600 .66rem var(--head);letter-spacing:.06em;text-transform:uppercase;background:var(--screen);color:var(--lcd);border-radius:999px;padding:2px 7px}
 .ro-mode button:disabled{opacity:1}
 #roTag{display:none;margin-left:10px;padding:2px 9px;border-radius:99px;background:var(--screen);color:var(--lcd);font:700 .7rem var(--head);letter-spacing:.08em;text-transform:uppercase;vertical-align:middle}
 .ro-mode #roTag{display:inline-block}
@@ -198,6 +218,7 @@ a{color:var(--lcd)}
         <button id="nameBtn" type="button" class="mini" title="Change the name of your dex">Trainer name</button>
         <button id="pwBtn" type="button" class="mini" title="Change your password">Password</button>
         <button id="logoutBtn" type="button" class="mini" title="Log out of this dex">Log out</button>
+        <button id="installBtn" type="button" class="mini" title="Install this page as an app on this device" hidden>Install app</button>
       </div>
     </div>
   </div>
@@ -212,6 +233,7 @@ a{color:var(--lcd)}
 </header>
 
 <div class="deck">
+  <button id="scanBtn" type="button" title="Scan a card with the camera">📷 Scan</button>
   <select id="viewSel" aria-label="Show">
     <option value="dex">Pokémon</option>
     <option value="sets">Sets</option>
@@ -287,6 +309,20 @@ a{color:var(--lcd)}
   </form>
   <div id="nameMsg" style="color:var(--muted);font-size:.85rem;margin-top:6px"></div>
 </dialog>
+<dialog id="scandlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong style="font:800 1.05rem var(--head)">Scan a card</strong>
+    <button id="scanClose" type="button">Close</button>
+  </div>
+  <div id="camBox" class="cam"><video id="camVid" playsinline muted autoplay></video><div class="guide"></div></div>
+  <div class="scanbar">
+    <button id="scanShot" type="button" class="big">Scan</button>
+    <label class="mini" style="display:inline-flex;align-items:center;cursor:pointer">Use a photo<input id="scanFile" type="file" accept="image/*" capture="environment" hidden></label>
+    <button id="scanTorch" type="button" class="mini" hidden>Light</button>
+  </div>
+  <div id="scanMsg">Fill the frame with the card, straight on and without glare. The name goes at the top, the card number at the bottom.</div>
+  <div id="scanRes" class="cgrid" style="margin-top:10px"></div>
+</dialog>
 <dialog id="picdlg">
   <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
     <strong id="picTitle" style="font:800 1.05rem var(--head)">Picture</strong>
@@ -307,7 +343,7 @@ a{color:var(--lcd)}
   </div>
   <form id="pwForm" style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
     <input id="pwOld" type="password" autocomplete="current-password" placeholder="Current password" aria-label="Current password">
-    <input id="pwNew" type="password" autocomplete="new-password" placeholder="New password (at least 6 characters)" aria-label="New password">
+    <input id="pwNew" type="password" autocomplete="new-password" placeholder="New password (at least 8 characters)" aria-label="New password">
     <input id="pwNew2" type="password" autocomplete="new-password" placeholder="New password again" aria-label="New password again">
     <div style="display:flex;gap:8px;align-items:center"><button type="submit">Change password</button><span id="pwMsg" style="color:var(--muted);font-size:.85rem"></span></div>
   </form>
@@ -563,7 +599,7 @@ function isArmed(key){ return armed&&armed.key===key&&Date.now()-armed.t<4000; }
 function arm(key){ armed={key:key,t:Date.now()}; setTimeout(function(){ if(armed&&armed.key===key) refresh(); },4100); }
 
 /* ---------- Pokémon view ---------- */
-function refresh(){ render(); if(dexOpen) fillDex(); }
+function refresh(){ render(); if(dexOpen) fillDex(); if(scanLast&&$('scandlg').open) showScan(); }
 var GENS=[null,[1,151,'I','Kanto'],[152,251,'II','Johto'],[252,386,'III','Hoenn'],[387,493,'IV','Sinnoh'],[494,649,'V','Unova'],[650,721,'VI','Kalos'],[722,809,'VII','Alola'],[810,905,'VIII','Galar & Hisui'],[906,1025,'IX','Paldea']];
 function genOf(n){ for(var g=1;g<GENS.length;g++) if(n<=GENS[g][1]) return g; return GENS.length-1; }
 function render(){
@@ -665,7 +701,7 @@ function fillDex(reset){
 }
 
 /* ---------- lightbox ---------- */
-function lookup(id){ return byId[id]||(setData&&setData.map[id])||null; }
+function lookup(id){ return byId[id]||(setData&&setData.map[id])||scanMap[id]||null; }
 function openLb(id){
   var c=lookup(id); if(!c) return;
   $('lbBody').innerHTML=picHTML(c,true).replace('data-do="zoom"','')+
@@ -991,6 +1027,7 @@ document.addEventListener('click',function(e){
   else if(a==='more'){ regShown+=60; fillDex(); }
   else if(a==='zoom'){ openLb(id); }
   else if(a==='pic'){ openPic(id); }
+  else if(a==='scanview'){ $('scandlg').close(); go('#/dex/'+n); }
   else if(a==='mark'){
     var art=t.dataset.v==='1';
     if(!art&&!isArmed('unart:'+id)){ arm('unart:'+id); refresh(); return; }
@@ -1071,6 +1108,88 @@ $('lgForm').addEventListener('submit',async function(e){
   try{ await post('api/login',{dex:DEX,password:$('lgPw').value}); location.reload(); }
   catch(err){ $('lgMsg').textContent=err.status===429?'Too many tries. Wait 15 minutes.':'Wrong password.'; }
 });
+/* ---------- scanning ---------- */
+var scanStream=null, scanLast=null, scanMap={}, scanBusy=false;
+async function startCam(){
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.isSecureContext)){
+    $('camBox').hidden=true; $('scanShot').hidden=true;
+    $('scanMsg').textContent='The camera only works when this page is opened over https (your Pangolin address). You can still scan a photo with "Use a photo".';
+    return;
+  }
+  try{
+    scanStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+    $('camVid').srcObject=scanStream; $('camBox').hidden=false; $('scanShot').hidden=false;
+    var tr=scanStream.getVideoTracks()[0], caps=tr&&tr.getCapabilities?tr.getCapabilities():{};
+    $('scanTorch').hidden=!caps.torch;
+  }catch(e){ $('camBox').hidden=true; $('scanShot').hidden=true; $('scanMsg').textContent='No camera access ('+e.name+'). Allow the camera for this site, or scan a photo with "Use a photo".'; }
+}
+function stopCam(){ if(scanStream){ scanStream.getTracks().forEach(function(t){ t.stop(); }); scanStream=null; } $('camVid').srcObject=null; }
+// The part of the camera picture inside the white guide, as a 900 x 1257 JPEG.
+function grabFrame(){
+  var v=$('camVid'), box=$('camBox'), vw=v.videoWidth, vh=v.videoHeight; if(!vw||!vh) return null;
+  var bw=box.clientWidth, bh=box.clientHeight, sc=Math.max(bw/vw,bh/vh), sw=bw/sc, sh=bh/sc, sx=(vw-sw)/2, sy=(vh-sh)/2;
+  var ix=sw*0.04, iy=sh*0.04*(bw/bh); // the guide sits 4% inside the box
+  return toJpeg(v, sx+ix, sy+iy, sw-2*ix, sh-2*iy);
+}
+function toJpeg(src,x,y,w,h){
+  var c=document.createElement('canvas'); c.width=900; c.height=1257;
+  c.getContext('2d').drawImage(src,x,y,w,h,0,0,900,1257);
+  return c.toDataURL('image/jpeg',0.9);
+}
+function photoToJpeg(file){ // a photo of the card: the middle part with card proportions
+  return new Promise(function(ok,fail){
+    var im=new Image(), u=URL.createObjectURL(file);
+    im.onload=function(){ var W=im.naturalWidth,H=im.naturalHeight, r=63/88, w=W, h=W/r; if(h>H){ h=H; w=H*r; } URL.revokeObjectURL(u); ok(toJpeg(im,(W-w)/2,(H-h)/2,w,h)); };
+    im.onerror=function(){ URL.revokeObjectURL(u); fail(new Error('That file is not a picture')); };
+    im.src=u;
+  });
+}
+async function sendScan(data){
+  if(!data||scanBusy) return;
+  scanBusy=true; $('scanShot').disabled=true; $('scanMsg').textContent='Reading the card…'; $('scanRes').innerHTML='';
+  try{
+    scanLast=await post('api/scan',{data:data});
+    scanLast.matches.forEach(function(m){ m.a=m.a?1:0; scanMap[m.id]=m; });
+    showScan();
+  }catch(e){ if(e.status===401){ location.reload(); return; } $('scanMsg').textContent=e.message; }
+  finally{ scanBusy=false; $('scanShot').disabled=false; }
+}
+function showScan(){
+  var r=scanLast, rd=r.read||{};
+  var said=[rd.name?'name "'+rd.name+'"':'',rd.number?'number '+rd.number:''].filter(Boolean).join(' · ');
+  if(!r.matches.length){ $('scanMsg').textContent='No card found'+(said?' (read '+said+')':'')+'. Try again closer, straight on and without glare, or search by name on the page.'; $('scanRes').innerHTML=''; return; }
+  $('scanMsg').textContent=(r.matches[0].sure?'Found it':'Best guesses')+(said?' · read '+said:'')+'. Tap the right card.';
+  $('scanRes').innerHTML=r.matches.map(function(m,i){
+    var c=byId[m.id]||m, o=owned(m.id), n=c.d&&c.d[0];
+    return '<div class="tile '+(o?'s-g':'s-r')+(i===0&&m.sure?' best':'')+'"><div class="no"><span>'+esc(m.k||'')+'</span><i class="led"></i></div>'+
+      '<div class="pic">'+picHTML(c,false)+(m.a?'<span class="badge">ART</span>':'')+'</div>'+
+      '<div class="name" title="'+esc(m.n)+'">'+esc(m.n)+'</div><div class="meta">'+esc(m.set||setName(c))+(m.r?' · '+esc(m.r):'')+'</div>'+
+      (m.why&&m.why.length?'<div class="why">'+m.why.map(function(w){ return '<span>'+esc(w)+'</span>'; }).join('')+'</div>':'')+
+      priceHTML(c)+
+      '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(m.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div>'+
+      wishBtn(c)+(n?'<button type="button" class="mini" data-do="scanview" data-n="'+n+'">Open #'+n+' '+esc(names[n]||'')+'</button>':'')+'</div>';
+  }).join('');
+}
+$('scanBtn').addEventListener('click',function(){ scanLast=null; $('scanRes').innerHTML=''; $('scanMsg').textContent='Fill the frame with the card, straight on and without glare. The name goes at the top, the card number at the bottom.'; $('scandlg').showModal(); startCam(); });
+$('scanClose').addEventListener('click',function(){ $('scandlg').close(); });
+$('scandlg').addEventListener('close',stopCam);
+$('scanShot').addEventListener('click',function(){ sendScan(grabFrame()); });
+$('scanFile').addEventListener('change',async function(){
+  var f=$('scanFile').files[0]; $('scanFile').value=''; if(!f) return;
+  try{ sendScan(await photoToJpeg(f)); }catch(e){ $('scanMsg').textContent=e.message; }
+});
+$('scanTorch').addEventListener('click',function(){
+  var tr=scanStream&&scanStream.getVideoTracks()[0]; if(!tr) return;
+  var on=!$('scanTorch').classList.contains('on');
+  tr.applyConstraints({advanced:[{torch:on}]}).then(function(){ $('scanTorch').classList.toggle('on',on); $('scanTorch').textContent=on?'Light off':'Light'; }).catch(function(){});
+});
+
+/* ---------- installable app ---------- */
+if('serviceWorker' in navigator&&window.isSecureContext){ navigator.serviceWorker.register('sw.js').catch(function(){}); }
+var installEvt=null;
+window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); installEvt=e; $('installBtn').hidden=false; });
+window.addEventListener('appinstalled',function(){ installEvt=null; $('installBtn').hidden=true; });
+$('installBtn').addEventListener('click',function(){ if(!installEvt) return; installEvt.prompt(); installEvt.userChoice.then(function(){ installEvt=null; $('installBtn').hidden=true; }); });
 $('logoutBtn').addEventListener('click',async function(){ try{ await post('api/logout'); }catch(e){} location.reload(); });
 
 /* ---------- dex picker, trainer name, accounts ---------- */

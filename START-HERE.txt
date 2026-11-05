@@ -92,6 +92,14 @@ USING IT
 - Once you own the art card of a Pokémon, its price is no longer updated.
 
 
+APP AND SCANNING
+----------------
+On an Android phone, open the page over https (your reverse proxy address) in
+Chrome and press "Install app" at the top right. Log in to your dex, press
+"Scan", hold a card inside the frame and press Scan: the best matches appear,
+tap "Have it" or "Wish" on the right one. "Use a photo" scans a saved picture.
+
+
 STOPPING AND STARTING AGAIN
 ---------------------------
 Stop:   docker compose down      (your data and ticks are kept)

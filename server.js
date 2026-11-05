@@ -901,6 +901,111 @@ function sendImage(res, file) {
   });
 }
 
+// ---------- card scanning ----------
+// The app sends a photo of one card, framed by the camera guide. The server reads the name (top strip) and
+// the collector number (bottom strip, for example "201/198" or "TG05/TG30") with Tesseract, runs entirely
+// here with its own language data, finds cards in the database that fit, and ranks them with the stored
+// pictures (a tiny colour thumbnail of the photo compared with each candidate's picture).
+const SCAN = process.env.SCAN !== '0';
+let ocr = null, ocrIdle = null, ocrChain = Promise.resolve(), ocrWaiting = 0;
+async function ocrWorker() {
+  if (ocr) return ocr;
+  const { createWorker } = require('tesseract.js');
+  const langPath = path.join(path.dirname(require.resolve('@tesseract.js-data/eng/package.json')), '4.0.0_best_int');
+  ocr = await createWorker('eng', 1, { langPath, cacheMethod: 'none', gzip: true });
+  return ocr;
+}
+function ocrRelease() { // free the memory again after 10 quiet minutes
+  clearTimeout(ocrIdle);
+  ocrIdle = setTimeout(() => { if (ocr && !ocrWaiting) { ocr.terminate().catch(() => {}); ocr = null; } }, 10 * 60000);
+}
+const NAME_KINDS = ['ex', 'gx', 'v', 'vmax', 'vstar', 'vunion', 'break', 'prime', 'lv', 'star', 'radiant', 'mega'];
+const SCAN_W = 900, SCAN_H = 1257; // a card is 63 x 88 mm
+// "201", "TG05", "SWSH050", "GG35", "SV-P 050" -> "201", "TG5", "SWSH50", "GG35"
+function normNum(x) {
+  const m = /^([A-Za-z]*)-?0*(\d+)([a-z]?)$/.exec(String(x).replace(/\s+/g, ''));
+  return m ? m[1].toUpperCase() + (+m[2] || 0) + m[3] : String(x).toUpperCase();
+}
+const ocrDigits = s => s.replace(/[Oo]/g, '0').replace(/[Il|!]/g, '1').replace(/[Ss](?=\d)|(?<=\d)[Ss]/g, '5');
+function readNumber(text) {
+  const t = String(text).replace(/[⁄∕]/g, '/');
+  // a letter prefix only counts when it touches the digits ("TG05/TG30"), so "EN 201/198" reads as 201/198
+  let m = /(?:\b([A-Z]{2,4}))?([0-9OoIl|]{1,3})\s*\/\s*([A-Z]{2,4})?([0-9OoIl|]{2,3})\b/.exec(t);
+  if (m) {
+    const n = +ocrDigits(m[2]), tot = +ocrDigits(m[4]);
+    if (n > 0 && tot > 0) return { num: normNum((m[1] || '') + n), total: m[3] ? null : tot, text: m[0].trim() };
+  }
+  m = /\b(SVP|SWSH|SM|XY|BW|DP|HGSS|SV-P|MEP)\s*(?:EN\s*)?([0-9OoIl|]{1,3})\b/i.exec(t); // promos: no "/total"
+  if (m) return { num: normNum(m[1].replace('-', '').toUpperCase() === 'SVP' ? String(+ocrDigits(m[2])) : m[1].replace('-', '') + (+ocrDigits(m[2]))), total: null, promo: true, text: m[0].trim() };
+  return null;
+}
+async function thumb(buf) { return sharp(buf).resize(16, 22, { fit: 'fill' }).removeAlpha().raw().toBuffer(); }
+const thumbCache = new Map();
+async function storedThumb(id) {
+  const st = imgs.c[id]; if (!st) return null;
+  const key = id + '@' + st.v;
+  if (thumbCache.has(key)) return thumbCache.get(key);
+  let t = null;
+  try { t = await thumb(fs.readFileSync(imgPath('c', id, 'low'))); } catch (e) { t = null; }
+  if (thumbCache.size > 6000) thumbCache.clear();
+  thumbCache.set(key, t);
+  return t;
+}
+function likeness(a, b) { let d = 0; for (let i = 0; i < a.length; i++) d += Math.abs(a[i] - b[i]); return Math.max(0, 1 - d / a.length / 96); }
+async function scanCard(buf) {
+  const norm = await (await checkedImage(buf)).resize(SCAN_W, SCAN_H, { fit: 'fill' }).toBuffer();
+  const strip = (y0, y1, scale) => sharp(norm).extract({ left: 0, top: Math.round(SCAN_H * y0), width: SCAN_W, height: Math.round(SCAN_H * y1) - Math.round(SCAN_H * y0) })
+    .resize({ width: SCAN_W * scale }).grayscale().normalize().sharpen().png().toBuffer();
+  const w = await ocrWorker();
+  const topText = (await w.recognize(await strip(0, 0.14, 2))).data.text;
+  let botText = (await w.recognize(await strip(0.88, 1, 3))).data.text;
+  let num = readNumber(botText);
+  if (!num) { const more = (await w.recognize(await strip(0.80, 1, 3))).data.text; botText += '\n' + more; num = readNumber(more); }
+  const photo = await thumb(norm);
+  // what the top line says: words of 2+ letters, without "HP 120" and the like
+  const nameToks = toks(topText.replace(/\bHP\s*\d+\b/gi, ' ')).split(' ').filter(x => x.length >= 2 && !/^\d+$/.test(x));
+  const dexHits = nameDex(nameToks.join(' '));
+  const out = [];
+  for (const [sid, s] of Object.entries(db.sets)) {
+    if (!s.scan) continue;
+    for (const c of s.cards) {
+      const rec = db.cards[c.id], art = rec ? !rec.x : worth(s, c);
+      const d = (rec && !rec.x && rec.d && rec.d.length) ? rec.d : (c.d || []);
+      if (!art && !d.length) continue; // only cards the page shows
+      const name = rec && !rec.x ? rec.n : c.n;
+      const numHit = !!num && normNum(c.l) === num.num;
+      const totHit = numHit && !!num.total && (s.official === num.total || s.total === num.total);
+      const ct = toks(name).split(' ').filter(x => x.length >= 2);
+      let nameHit = ct.length ? ct.filter(x => nameToks.includes(x)).length / ct.length : 0;
+      // "Pikachu ex" is not "Pikachu": a card-type word on one side only counts against the match
+      if (nameHit) for (const k of NAME_KINDS) if (nameToks.includes(k) !== ct.includes(k)) nameHit -= 0.3;
+      const dexHit = d.some(n => dexHits.includes(n));
+      if (!numHit && nameHit < 0.5 && !dexHit) continue;
+      out.push({ c, s, sid, rec, art, d, name, score: (numHit ? 4 : 0) + (totHit ? 2 : 0) + nameHit * 3 + (dexHit ? 1 : 0), numHit, totHit, nameHit });
+    }
+  }
+  out.sort((a, b) => b.score - a.score || String(b.s.date).localeCompare(String(a.s.date)));
+  const top = out.slice(0, 60);
+  for (const x of top) { const t = await storedThumb(x.c.id); x.pic = t ? likeness(photo, t) : null; x.score += x.pic != null ? x.pic * 3 : 1; }
+  top.sort((a, b) => b.score - a.score);
+  const best = top.length ? top[0].score : 0;
+  return {
+    read: { name: nameToks.join(' ').slice(0, 60), number: num ? num.text : null },
+    matches: top.slice(0, 8).map(x => picOf(x.c.id, {
+      id: x.c.id, n: x.name, sid: x.sid, set: x.s.name, k: x.c.l, r: x.rec && !x.rec.x ? x.rec.r : null, a: x.art ? 1 : 0, tr: x.rec && x.rec.tr ? 1 : undefined, d: x.d,
+      b: (x.rec && !x.rec.x && x.rec.b) || cleanBase(x.c.i), eu: x.rec && !x.rec.x ? x.rec.eu : x.c.eu, us: x.rec && !x.rec.x ? x.rec.us : x.c.us, pt: x.rec && !x.rec.x ? x.rec.pt : x.c.pt,
+      why: [x.numHit ? 'number' : null, x.totHit ? 'set size' : null, x.nameHit >= 0.5 ? 'name' : null, x.pic != null && x.pic > 0.75 ? 'picture' : null].filter(Boolean),
+      sure: x.score >= best - 0.01 && x.numHit && (x.totHit || x.nameHit >= 0.5) ? 1 : 0,
+    })),
+  };
+}
+async function runScan(buf) {
+  ocrWaiting++;
+  const job = ocrChain.catch(() => {}).then(() => scanCard(buf));
+  ocrChain = job;
+  try { return await job; } finally { ocrWaiting--; ocrRelease(); }
+}
+
 let running = false, lastError = null, lastManual = 0;
 async function exclusive(fn) {
   if (running) return false;
@@ -1125,8 +1230,13 @@ function sessionOf(req) {
   const s = sessions[hashTok(t)];
   return s && s.exp > Date.now() && accById(s.acc) ? s : null;
 }
-function clientIp(req) { const f = TRUST_PROXY && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim(); return f || req.socket.remoteAddress || ''; }
-const isHttps = req => TRUST_PROXY && String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+// Behind a reverse proxy the visitor's address is the one the proxy adds at the END of X-Forwarded-For:
+// anything before it was sent by the visitor and can be made up (which would get around the
+// wrong-password limit). PROXY_HOPS = number of proxies in a row in front of this server (default 1).
+const PROXY_HOPS = Math.max(1, +process.env.PROXY_HOPS || 1);
+function fromProxy(v) { const l = String(v || '').split(',').map(x => x.trim()).filter(Boolean); return l.length >= PROXY_HOPS ? l[l.length - PROXY_HOPS] : ''; }
+function clientIp(req) { const f = TRUST_PROXY && fromProxy(req.headers['x-forwarded-for']); return f || req.socket.remoteAddress || ''; }
+const isHttps = req => TRUST_PROXY && fromProxy(req.headers['x-forwarded-proto']) === 'https';
 const cookie = (req, v, age) => 'dex_session=' + v + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=' + age + (isHttps(req) ? '; Secure' : '');
 const fails = new Map(); // ip -> {n, t}: wrong passwords
 const blocked = ip => { const f = fails.get(ip); return !!f && Date.now() - f.t < 15 * 60000 && f.n >= 8; };
@@ -1145,6 +1255,15 @@ function indexHtml(mode, dexId, sess) {
 }
 
 // ---------- HTTP ----------
+const APP_FILES = {
+  '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json', 'no-cache'],
+  '/sw.js': ['sw.js', 'text/javascript; charset=utf-8', 'no-cache'],
+  '/icons/icon-192.png': ['icons/icon-192.png', 'image/png', 'public, max-age=604800'],
+  '/icons/icon-512.png': ['icons/icon-512.png', 'image/png', 'public, max-age=604800'],
+  '/icons/maskable-512.png': ['icons/maskable-512.png', 'image/png', 'public, max-age=604800'],
+  '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png', 'public, max-age=604800'],
+  '/favicon.ico': ['icons/icon-192.png', 'image/png', 'public, max-age=604800'],
+};
 const TYPES = { '.html': 'text/html; charset=utf-8', '.json': 'application/json' };
 function sendFile(res, file) {
   fs.readFile(file, (err, buf) => {
@@ -1191,6 +1310,15 @@ const server = http.createServer(async (req, res) => {
       const rec = id && (m[1] === 'c' ? imgs.c[id] : imgs.s[id]);
       if (!rec || !Object.prototype.hasOwnProperty.call(m[1] === 'c' ? imgs.c : imgs.s, id)) { res.writeHead(404); return res.end('Not found'); }
       return sendImage(res, m[1] === 'c' ? imgPath('c', id, m[3] === 'high' && rec.h ? 'high' : 'low') : imgPath('s', id));
+    }
+    // App files for installing the page as an app (fixed list, read from the public folder).
+    if (req.method === 'GET' && APP_FILES[p]) {
+      const [file, type, cache] = APP_FILES[p];
+      return fs.readFile(path.join(PUBLIC_DIR, file), (err, buf) => {
+        if (err) { res.writeHead(404); return res.end('Not found'); }
+        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': cache, 'X-Content-Type-Options': 'nosniff' });
+        res.end(buf);
+      });
     }
     let sess = sessionOf(req);
     if (viewPath && sess && sess.acc === MAIN) sess = null; // an admin login counts as a visitor on /view/
@@ -1284,7 +1412,7 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 401, { error: 'The current password is wrong' });
       }
       const pw = String(b.password || '');
-      if (pw.length < 6) return sendJSON(res, 400, { error: 'A password needs at least 6 characters' });
+      if (pw.length < 8) return sendJSON(res, 400, { error: 'A password needs at least 8 characters' });
       setPw(acc, pw); saveAccounts();
       const mine = hashTok(tokenOf(req));
       Object.keys(sessions).forEach(k => { if (sessions[k].acc === acc.id && k !== mine) delete sessions[k]; }); saveSessions();
@@ -1296,7 +1424,7 @@ const server = http.createServer(async (req, res) => {
       if (!isAdmin) return sendJSON(res, 403, { error: 'Only the main admin can do that' });
       const b = JSON.parse(await readBody(req, 1e4));
       const givenPw = String(b.password || '');
-      if (givenPw && givenPw.length < 6) return sendJSON(res, 400, { error: 'A password needs at least 6 characters' });
+      if (givenPw && givenPw.length < 8) return sendJSON(res, 400, { error: 'A password needs at least 8 characters' });
       if (p === '/api/admin/accounts') {
         const acc = { id: crypto.randomBytes(6).toString('hex'), name: cleanName(b.name), created: new Date().toISOString() };
         const pw = givenPw || newPw();
@@ -1354,6 +1482,18 @@ const server = http.createServer(async (req, res) => {
       persist(true);
       const now = db.cards[id];
       return sendJSON(res, 200, { ok: true, notArt: !!(isArt && !(now && !now.x)), art: !!(now && !now.x), price: now && !now.x ? { eu: now.eu, us: now.us } : (c ? { eu: c.eu, us: c.us } : null) });
+    }
+    // Scan a card: a photo (base64 JPEG/PNG/WebP, up to 6 MB) in, the best matching cards out. Logged-in only.
+    if (req.method === 'POST' && p === '/api/scan') {
+      if (!SCAN || !sharp) return sendJSON(res, 409, { error: 'Scanning is not available on this server' });
+      if (ocrWaiting >= 3) return sendJSON(res, 429, { error: 'The scanner is busy. Try again in a moment.' });
+      const b = JSON.parse(await readBody(req, 9e6));
+      const m = /^data:image\/(?:jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(b.data || ''));
+      if (!m) return sendJSON(res, 400, { error: 'No photo received' });
+      const buf = Buffer.from(m[1], 'base64');
+      if (buf.length > 6 * 1024 * 1024) return sendJSON(res, 400, { error: 'The photo is too large' });
+      try { return sendJSON(res, 200, await runScan(buf)); }
+      catch (e) { log('scan failed:', e.message); return sendJSON(res, 400, { error: /tesseract|Cannot find module/i.test(e.message) ? 'Scanning is not installed on this server (rebuild the container)' : 'Could not read that photo: ' + e.message }); }
     }
     // Set a card's picture by hand (main admin): a picture address, or empty to go back to automatic.
     if (req.method === 'POST' && p === '/api/card/picture') {
