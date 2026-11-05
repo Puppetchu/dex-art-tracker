@@ -150,18 +150,23 @@ dialog::backdrop{background:#000b}
 @media (prefers-reduced-motion:reduce){.lens{animation:none}.bar i{transition:none}}
 @media (max-width:520px){h1{font-size:1.1rem}.legend{margin-left:0}}
 .ro-mode [data-do="any"],.ro-mode [data-do="art"],.ro-mode [data-do="have"]{pointer-events:none}
-.ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode [data-do="unwish"],.ro-mode [data-do="wish"],.ro-mode #pwBtn,.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn,.ro-mode #nameBtn,.ro-mode #scanBtn{display:none!important}
+.ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode [data-do="unwish"],.ro-mode [data-do="wish"],.ro-mode #pwBtn,.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn,.ro-mode #nameBtn{display:none!important}
 /* scanning */
-#scanBtn{background:var(--lens);border-color:#7dd3fc;color:#04121c;border-radius:999px;padding:7px 16px}
+/* logged in to your own dex: the lens opens the scanner (small camera mark on it) */
+.lens.scan{cursor:pointer;position:relative}
+.lens.scan::after{content:"";position:absolute;right:-6px;bottom:-4px;width:24px;height:24px;border-radius:50%;background:#10131a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23e9f1fb' d='M9 4 7.2 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.2L15 4H9zm3 4.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z'/%3E%3C/svg%3E") center/15px no-repeat;border:2px solid #f5f7fb}
+.lens.scan:active{transform:scale(.94)}
 #scandlg{max-width:min(560px,100vw);padding:12px}
 @media (max-width:600px){#scandlg{width:100vw;max-height:100dvh;margin:0;border-radius:0}}
 .cam{position:relative;width:min(100%,calc(62vh * 0.716));margin:8px auto 0;aspect-ratio:63/88;background:#000;border-radius:12px;overflow:hidden}
 .cam video{width:100%;height:100%;object-fit:cover;display:block}
-.cam .guide{position:absolute;inset:4%;border:3px solid #ffffffcc;border-radius:14px;box-shadow:0 0 0 999px #0006;pointer-events:none}
-.cam .guide::before,.cam .guide::after{content:"";position:absolute;left:6%;right:6%;height:12%;border:2px dashed #7dd3fcaa;border-radius:6px}
-.cam .guide::before{top:1%}.cam .guide::after{bottom:1%}
+.cam .guide{position:absolute;inset:4%;border:2px dashed #ffffffaa;border-radius:14px;pointer-events:none}
 .scanbar{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:10px}
-.scanbar .big{background:var(--shell);border-color:var(--shell-hi);color:#fff;padding:10px 26px;border-radius:999px;font-size:1rem}
+.scanbar{align-items:center}
+.shutter{width:76px;height:76px;padding:0;border-radius:50%;border:5px solid #f5f7fb;box-shadow:0 0 0 3px #00000060,inset 0 -8px 14px #0b4a7c;
+  background:radial-gradient(circle at 32% 28%,#d9f4ff 0 9%,#38bdf8 28%,#0a6fb5 70%,#07416b);animation:glow 3.2s ease-in-out infinite}
+.shutter:active{transform:scale(.92)}
+.shutter:disabled{opacity:.5;animation:none}
 #scanMsg{text-align:center;color:var(--muted);font-size:.86rem;margin-top:8px;min-height:1.2em}
 #scanRes .tile.best{border-color:var(--lens);box-shadow:0 0 0 1px var(--lens),0 0 14px #38bdf855}
 .why{display:flex;gap:4px;flex-wrap:wrap}.why span{font:600 .66rem var(--head);letter-spacing:.06em;text-transform:uppercase;background:var(--screen);color:var(--lcd);border-radius:999px;padding:2px 7px}
@@ -194,6 +199,56 @@ a{color:var(--lcd)}
 .gen span{color:var(--muted);font:.78rem var(--mono)}
 .gen .gbar{flex:1 1 120px;height:6px;border-radius:3px;background:var(--screen);overflow:hidden;min-width:80px}
 .gen .gbar i{display:block;height:100%;background:#2ecc71}
+/* phones: compact header, a menu bar that scrolls away, two (or three) cards per row */
+@media (max-width:600px){
+  body{font-size:14px}
+  .shell{padding:10px 10px 10px;border-bottom-width:4px}
+  .top{grid-template-columns:1fr;gap:8px}
+  .brand{gap:6px}.brow{gap:8px}
+  .lens{width:46px;height:46px;border-width:3px}
+  .leds{gap:4px}.leds i{width:9px;height:9px}
+  h1{font-size:.92rem;letter-spacing:.1em;line-height:1.1}
+  #roTag{display:none}.ro-mode #roTag{display:inline-block;margin-left:0;margin-top:3px;font-size:.6rem}
+  .legend{font-size:.66rem;gap:8px;padding:3px 9px;flex-wrap:nowrap}
+  .legend .dot{width:8px;height:8px}
+  .tright{grid-column:1;grid-row:2;justify-self:stretch;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:5px}
+  .trainer{padding:2px 4px 2px 9px;font-size:.6rem;gap:5px;white-space:nowrap}
+  .trainer select{font-size:.8rem;padding:3px 8px;max-width:150px}
+  #meTag{font-size:.68rem;order:3;flex-basis:100%}
+  .acct{flex-wrap:wrap;justify-content:flex-end;gap:4px}.acct .mini{font-size:.66rem;padding:3px 7px}
+  .tsearch{grid-column:1;grid-row:3}.tsearch input{padding:8px 14px}
+  .readouts{display:flex;overflow-x:auto;gap:6px;margin-top:10px;scrollbar-width:none}
+  .readouts::-webkit-scrollbar{display:none}
+  .ro{flex:0 0 auto;padding:5px 10px;border-radius:8px}
+  .ro small{font-size:.56rem;letter-spacing:.08em}.ro b{font-size:.9rem}
+  .bar{margin-top:8px;height:7px}
+  .deck{position:static;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px 10px}
+  .deck select,.deck button{font-size:.8rem;padding:6px 8px;width:100%}
+  #viewSel{font-size:.78rem;padding:6px 10px}
+  #status,#gens{padding:6px 10px 0;font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#gens{font-size:.64rem}
+  #grid,#setsView,#trainersView,#wishView,#histView{padding:8px 8px 40px}
+  .cgrid,#grid,#scanRes,#opts{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .tile{padding:6px;gap:4px;border-radius:10px}
+  .tile .no{font-size:.64rem}.led{width:9px;height:9px}
+  .badge{font-size:.54rem;padding:1px 5px;left:4px;top:4px}.badge.wish{left:auto;right:4px}
+  .name{font-size:.84rem}
+  .meta{font-size:.66rem;min-height:0;line-height:1.25}
+  .price{font-size:.8rem}
+  .links{font-size:.6rem;gap:6px}
+  .row{gap:4px}.row button{font-size:.68rem;padding:5px 2px;border-radius:7px}
+  .alt,.mini{font-size:.64rem;padding:4px 5px}
+  .who{font-size:.66rem}.why span{font-size:.56rem;padding:1px 5px}
+  .gen{margin-top:8px;padding:6px 9px;gap:3px 10px}.gen b{font-size:.86rem}.gen span{font-size:.64rem}
+  .sec{font-size:.78rem}
+  .setlist{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .settile{padding:8px;gap:4px}.settile b{font-size:.82rem}.settile span{font-size:.66rem}.slbox{height:44px}
+  .sethead{gap:6px}.sethead h2{font-size:1rem}.chip{padding:4px 9px;font-size:.7rem}
+  .setprog{padding:7px 10px;font-size:.7rem;gap:4px 12px}
+  dialog{padding:10px;width:100vw;max-width:100vw}
+  #opts{max-height:78vh}
+  .opt{padding:5px;font-size:.7rem}
+}
+@media (min-width:430px) and (max-width:600px){.cgrid,#grid,#scanRes,#opts{grid-template-columns:repeat(3,minmax(0,1fr))}.setlist{grid-template-columns:repeat(3,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -233,7 +288,6 @@ a{color:var(--lcd)}
 </header>
 
 <div class="deck">
-  <button id="scanBtn" type="button" title="Scan a card with the camera">📷 Scan</button>
   <select id="viewSel" aria-label="Show">
     <option value="dex">Pokémon</option>
     <option value="sets">Sets</option>
@@ -316,11 +370,11 @@ a{color:var(--lcd)}
   </div>
   <div id="camBox" class="cam"><video id="camVid" playsinline muted autoplay></video><div class="guide"></div></div>
   <div class="scanbar">
-    <button id="scanShot" type="button" class="big">Scan</button>
+    <button id="scanShot" type="button" class="shutter" aria-label="Take the picture" title="Take the picture"></button>
     <label class="mini" style="display:inline-flex;align-items:center;cursor:pointer">Use a photo<input id="scanFile" type="file" accept="image/*" capture="environment" hidden></label>
     <button id="scanTorch" type="button" class="mini" hidden>Light</button>
   </div>
-  <div id="scanMsg">Fill the frame with the card, straight on and without glare. The name goes at the top, the card number at the bottom.</div>
+  <div id="scanMsg">Hold one card in the frame, or lay several cards side by side. Straight on, without glare, so the card numbers are readable. Tap the lens to take the picture.</div>
   <div id="scanRes" class="cgrid" style="margin-top:10px"></div>
 </dialog>
 <dialog id="picdlg">
@@ -1124,53 +1178,60 @@ async function startCam(){
   }catch(e){ $('camBox').hidden=true; $('scanShot').hidden=true; $('scanMsg').textContent='No camera access ('+e.name+'). Allow the camera for this site, or scan a photo with "Use a photo".'; }
 }
 function stopCam(){ if(scanStream){ scanStream.getTracks().forEach(function(t){ t.stop(); }); scanStream=null; } $('camVid').srcObject=null; }
-// The part of the camera picture inside the white guide, as a 900 x 1257 JPEG.
-function grabFrame(){
-  var v=$('camVid'), box=$('camBox'), vw=v.videoWidth, vh=v.videoHeight; if(!vw||!vh) return null;
-  var bw=box.clientWidth, bh=box.clientHeight, sc=Math.max(bw/vw,bh/vh), sw=bw/sc, sh=bh/sc, sx=(vw-sw)/2, sy=(vh-sh)/2;
-  var ix=sw*0.04, iy=sh*0.04*(bw/bh); // the guide sits 4% inside the box
-  return toJpeg(v, sx+ix, sy+iy, sw-2*ix, sh-2*iy);
-}
-function toJpeg(src,x,y,w,h){
-  var c=document.createElement('canvas'); c.width=900; c.height=1257;
-  c.getContext('2d').drawImage(src,x,y,w,h,0,0,900,1257);
+// The whole camera picture (the server finds the cards on it), at most 2000 px on the longest side.
+function grabFrame(){ var v=$('camVid'); if(!v.videoWidth) return null; return toJpeg(v,v.videoWidth,v.videoHeight); }
+function toJpeg(src,W,H){
+  var k=Math.min(1,2000/Math.max(W,H)), c=document.createElement('canvas'); c.width=Math.round(W*k); c.height=Math.round(H*k);
+  c.getContext('2d').drawImage(src,0,0,c.width,c.height);
   return c.toDataURL('image/jpeg',0.9);
 }
-function photoToJpeg(file){ // a photo of the card: the middle part with card proportions
+function photoToJpeg(file){ // a photo taken earlier, as it is
   return new Promise(function(ok,fail){
     var im=new Image(), u=URL.createObjectURL(file);
-    im.onload=function(){ var W=im.naturalWidth,H=im.naturalHeight, r=63/88, w=W, h=W/r; if(h>H){ h=H; w=H*r; } URL.revokeObjectURL(u); ok(toJpeg(im,(W-w)/2,(H-h)/2,w,h)); };
+    im.onload=function(){ URL.revokeObjectURL(u); ok(toJpeg(im,im.naturalWidth,im.naturalHeight)); };
     im.onerror=function(){ URL.revokeObjectURL(u); fail(new Error('That file is not a picture')); };
     im.src=u;
   });
 }
 async function sendScan(data){
   if(!data||scanBusy) return;
-  scanBusy=true; $('scanShot').disabled=true; $('scanMsg').textContent='Reading the card…'; $('scanRes').innerHTML='';
+  scanBusy=true; $('scanShot').disabled=true; $('scanMsg').textContent='Reading the cards…'; $('scanRes').innerHTML='';
   try{
     scanLast=await post('api/scan',{data:data});
-    scanLast.matches.forEach(function(m){ m.a=m.a?1:0; scanMap[m.id]=m; });
+    scanLast.cards.forEach(function(c){ c.matches.forEach(function(m){ m.a=m.a?1:0; scanMap[m.id]=m; }); });
     showScan();
   }catch(e){ if(e.status===401){ location.reload(); return; } $('scanMsg').textContent=e.message; }
   finally{ scanBusy=false; $('scanShot').disabled=false; }
 }
+function scanTile(m,best){
+  var c=byId[m.id]||m, o=owned(m.id), n=c.d&&c.d[0];
+  return '<div class="tile '+(o?'s-g':'s-r')+(best?' best':'')+'"><div class="no"><span>'+esc(m.k||'')+'</span><i class="led"></i></div>'+
+    '<div class="pic">'+picHTML(c,false)+(m.a?'<span class="badge">ART</span>':'')+'</div>'+
+    '<div class="name" title="'+esc(m.n)+'">'+esc(m.n)+'</div><div class="meta">'+esc(m.set||setName(c))+(m.r?' · '+esc(m.r):'')+'</div>'+
+    (m.why&&m.why.length?'<div class="why">'+m.why.map(function(w){ return '<span>'+esc(w)+'</span>'; }).join('')+'</div>':'')+
+    priceHTML(c)+
+    '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(m.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div>'+
+    wishBtn(c)+(n?'<button type="button" class="mini" data-do="scanview" data-n="'+n+'">Open #'+n+' '+esc(names[n]||'')+'</button>':'')+'</div>';
+}
 function showScan(){
-  var r=scanLast, rd=r.read||{};
-  var said=[rd.name?'name "'+rd.name+'"':'',rd.number?'number '+rd.number:''].filter(Boolean).join(' · ');
-  if(!r.matches.length){ $('scanMsg').textContent='No card found'+(said?' (read '+said+')':'')+'. Try again closer, straight on and without glare, or search by name on the page.'; $('scanRes').innerHTML=''; return; }
-  $('scanMsg').textContent=(r.matches[0].sure?'Found it':'Best guesses')+(said?' · read '+said:'')+'. Tap the right card.';
-  $('scanRes').innerHTML=r.matches.map(function(m,i){
-    var c=byId[m.id]||m, o=owned(m.id), n=c.d&&c.d[0];
-    return '<div class="tile '+(o?'s-g':'s-r')+(i===0&&m.sure?' best':'')+'"><div class="no"><span>'+esc(m.k||'')+'</span><i class="led"></i></div>'+
-      '<div class="pic">'+picHTML(c,false)+(m.a?'<span class="badge">ART</span>':'')+'</div>'+
-      '<div class="name" title="'+esc(m.n)+'">'+esc(m.n)+'</div><div class="meta">'+esc(m.set||setName(c))+(m.r?' · '+esc(m.r):'')+'</div>'+
-      (m.why&&m.why.length?'<div class="why">'+m.why.map(function(w){ return '<span>'+esc(w)+'</span>'; }).join('')+'</div>':'')+
-      priceHTML(c)+
-      '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(m.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div>'+
-      wishBtn(c)+(n?'<button type="button" class="mini" data-do="scanview" data-n="'+n+'">Open #'+n+' '+esc(names[n]||'')+'</button>':'')+'</div>';
+  var r=scanLast, cards=r.cards||[];
+  if(!cards.length){ $('scanMsg').textContent='No card found'+(r.text?' (read: "'+r.text.slice(0,80)+'")':'')+'. Try again with more light and less glare, or closer so the card number is readable.'; $('scanRes').innerHTML=''; return; }
+  var sure=cards.filter(function(c){ return c.matches[0].sure; }).length;
+  $('scanMsg').textContent=(cards.length===1?(sure?'Found it':'Best guesses'):(cards.length+' cards found'+(sure?', '+sure+' for sure':'')))+(r.turned?' (photo was turned)':'')+'. Tap the right card'+(cards.length>1?' in each row':'')+'.';
+  $('scanRes').innerHTML=cards.map(function(c,i){
+    var rd=c.read||{}, said=[rd.name?'"'+rd.name+'"':'',rd.number||''].filter(Boolean).join(' · ');
+    return (cards.length>1?'<div class="sec">Card '+(i+1)+(said?' · read '+esc(said):'')+'</div>':'')+
+      c.matches.map(function(m,j){ return scanTile(m,j===0&&m.sure); }).join('');
   }).join('');
 }
-$('scanBtn').addEventListener('click',function(){ scanLast=null; $('scanRes').innerHTML=''; $('scanMsg').textContent='Fill the frame with the card, straight on and without glare. The name goes at the top, the card number at the bottom.'; $('scandlg').showModal(); startCam(); });
+function openScanner(){ scanLast=null; $('scanRes').innerHTML=''; $('scanMsg').textContent='Hold one card in the frame, or lay several cards side by side. Straight on, without glare, so the card numbers are readable. Tap the lens to take the picture.'; $('scandlg').showModal(); startCam(); }
+if(AUTH){ // your own dex: the lens is the camera button
+  var lensCam=document.querySelector('.lens');
+  lensCam.classList.add('scan'); lensCam.removeAttribute('aria-hidden'); lensCam.setAttribute('role','button'); lensCam.setAttribute('tabindex','0');
+  lensCam.setAttribute('aria-label','Scan cards'); lensCam.title='Scan cards with the camera';
+  lensCam.addEventListener('click',openScanner);
+  lensCam.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openScanner(); } });
+}
 $('scanClose').addEventListener('click',function(){ $('scandlg').close(); });
 $('scandlg').addEventListener('close',stopCam);
 $('scanShot').addEventListener('click',function(){ sendScan(grabFrame()); });

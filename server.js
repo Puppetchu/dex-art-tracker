@@ -902,10 +902,12 @@ function sendImage(res, file) {
 }
 
 // ---------- card scanning ----------
-// The app sends a photo of one card, framed by the camera guide. The server reads the name (top strip) and
-// the collector number (bottom strip, for example "201/198" or "TG05/TG30") with Tesseract, runs entirely
-// here with its own language data, finds cards in the database that fit, and ranks them with the stored
-// pictures (a tiny colour thumbnail of the photo compared with each candidate's picture).
+// The app sends a photo with one or more cards. The server reads all text on it with Tesseract (runs
+// entirely here with its own language data), wherever it is: each collector number (for example "201/198",
+// "TG05/TG30" or a promo number) is paired with the large name line above it, and each pair is one card.
+// A card whose number cannot be read is still found by its name. For each card it looks up the cards that
+// fit in the database and ranks them, also comparing that part of the photo with the stored pictures.
+// A photo held sideways or upside down is turned and read again.
 const SCAN = process.env.SCAN !== '0';
 let ocr = null, ocrIdle = null, ocrChain = Promise.resolve(), ocrWaiting = 0;
 async function ocrWorker() {
@@ -913,6 +915,7 @@ async function ocrWorker() {
   const { createWorker } = require('tesseract.js');
   const langPath = path.join(path.dirname(require.resolve('@tesseract.js-data/eng/package.json')), '4.0.0_best_int');
   ocr = await createWorker('eng', 1, { langPath, cacheMethod: 'none', gzip: true });
+  await ocr.setParameters({ tessedit_pageseg_mode: '11' }); // sparse text: find text anywhere on the photo
   return ocr;
 }
 function ocrRelease() { // free the memory again after 10 quiet minutes
@@ -920,7 +923,8 @@ function ocrRelease() { // free the memory again after 10 quiet minutes
   ocrIdle = setTimeout(() => { if (ocr && !ocrWaiting) { ocr.terminate().catch(() => {}); ocr = null; } }, 10 * 60000);
 }
 const NAME_KINDS = ['ex', 'gx', 'v', 'vmax', 'vstar', 'vunion', 'break', 'prime', 'lv', 'star', 'radiant', 'mega'];
-const SCAN_W = 900, SCAN_H = 1257; // a card is 63 x 88 mm
+const OCR_LONG = 2000;   // the photo is read at this size (longest side)
+const MAX_CARDS = 12;
 // "201", "TG05", "SWSH050", "GG35", "SV-P 050" -> "201", "TG5", "SWSH50", "GG35"
 function normNum(x) {
   const m = /^([A-Za-z]*)-?0*(\d+)([a-z]?)$/.exec(String(x).replace(/\s+/g, ''));
@@ -952,18 +956,72 @@ async function storedThumb(id) {
   return t;
 }
 function likeness(a, b) { let d = 0; for (let i = 0; i < a.length; i++) d += Math.abs(a[i] - b[i]); return Math.max(0, 1 - d / a.length / 96); }
-async function scanCard(buf) {
-  const norm = await (await checkedImage(buf)).resize(SCAN_W, SCAN_H, { fit: 'fill' }).toBuffer();
-  const strip = (y0, y1, scale) => sharp(norm).extract({ left: 0, top: Math.round(SCAN_H * y0), width: SCAN_W, height: Math.round(SCAN_H * y1) - Math.round(SCAN_H * y0) })
-    .resize({ width: SCAN_W * scale }).grayscale().normalize().sharpen().png().toBuffer();
+
+// The text lines Tesseract found, with their position and letter height.
+async function readLines(color) {
   const w = await ocrWorker();
-  const topText = (await w.recognize(await strip(0, 0.14, 2))).data.text;
-  let botText = (await w.recognize(await strip(0.88, 1, 3))).data.text;
-  let num = readNumber(botText);
-  if (!num) { const more = (await w.recognize(await strip(0.80, 1, 3))).data.text; botText += '\n' + more; num = readNumber(more); }
-  const photo = await thumb(norm);
-  // what the top line says: words of 2+ letters, without "HP 120" and the like
-  const nameToks = toks(topText.replace(/\bHP\s*\d+\b/gi, ' ')).split(' ').filter(x => x.length >= 2 && !/^\d+$/.test(x));
+  const gray = await sharp(color).grayscale().normalize().png().toBuffer();
+  const r = await w.recognize(gray, {}, { blocks: true });
+  const lines = [];
+  for (const b of r.data.blocks || []) for (const p of b.paragraphs || []) for (const l of p.lines || []) {
+    const words = (l.words || []).filter(x => x.confidence >= 40 && x.text.trim());
+    if (!words.length) continue;
+    const hs = words.map(x => x.bbox.y1 - x.bbox.y0).sort((a, c) => a - c);
+    lines.push({ text: words.map(x => x.text).join(' '), h: hs[Math.floor(hs.length / 2)],
+      x0: Math.min(...words.map(x => x.bbox.x0)), y0: Math.min(...words.map(x => x.bbox.y0)), x1: Math.max(...words.map(x => x.bbox.x1)), y1: Math.max(...words.map(x => x.bbox.y1)) });
+  }
+  return lines;
+}
+const nameWords = t => toks(String(t).replace(/\bHP\s*\d+\b/gi, ' ')).split(' ').filter(x => x.length >= 2 && !/^\d+$/.test(x));
+// Groups the lines into cards: a big name line with the collector number below it.
+function findCards(lines, W, H) {
+  const nums = lines.map(l => Object.assign({ r: readNumber(l.text) }, l)).filter(l => l.r);
+  // name candidates, tallest first: the real name of a card comes before its attack names and rules text,
+  // which then fall inside the card already found and are skipped
+  const names = lines.filter(l => !readNumber(l.text) && nameWords(l.text).some(x => x.length >= 3)).sort((a, b) => b.h - a.h);
+  const cards = [], usedNum = new Set();
+  const inside = (l) => cards.some(c => l.x0 >= c.x0 - 2 && l.x1 <= c.x1 + 2 && l.y0 >= c.y0 - 2 && l.y1 <= c.y1 + 2);
+  for (const n of names) {
+    if (cards.length >= MAX_CARDS) break;
+    if (inside(n)) continue; // attack names, "Evolves from ..." and the like inside a card already found
+    // a card is about 30 name heights tall (anything from 18 to 48), 63:88 wide, the number at the bottom
+    let best = null;
+    for (const m of nums) {
+      if (usedNum.has(m)) continue;
+      const dy = m.y0 - n.y0, hc = dy / 0.93, wc = hc * 63 / 88;
+      if (dy < n.h * 17 || dy > n.h * 45) continue;
+      if (m.x0 < n.x0 - wc * 0.2 || m.x0 > n.x0 + wc * 0.9) continue;
+      const off = Math.abs(dy / n.h - 29);
+      if (!best || off < best.off) best = { m, off, hc };
+    }
+    const hc = best ? best.hc : n.h * 30, wc = hc * 63 / 88;
+    if (best) usedNum.add(best.m);
+    const x0 = Math.max(0, Math.min(n.x0, best ? best.m.x0 : n.x0) - wc * 0.07), y0 = Math.max(0, n.y0 - hc * 0.04);
+    const card = { name: n, num: best ? best.m : null, x0, y0, x1: Math.min(W, x0 + wc), y1: Math.min(H, y0 + hc) };
+    if (!best && !nameDex(nameWords(n.text).join(' ')).length && !cardNameKnown(n.text)) continue; // a big line that is no card name
+    cards.push(card);
+  }
+  for (const m of nums) { // numbers without a name line: a card of their own
+    if (usedNum.has(m) || inside(m) || cards.length >= MAX_CARDS) continue;
+    const hc = m.h * 70, wc = hc * 63 / 88;
+    cards.push({ name: null, num: m, x0: Math.max(0, m.x0 - wc * 0.07), y0: Math.max(0, m.y1 - hc), x1: Math.min(W, m.x0 + wc), y1: Math.min(H, m.y1 + m.h) });
+  }
+  return cards.sort((a, b) => (a.y0 - b.y0) > H * 0.15 || (b.y0 - a.y0) > H * 0.15 ? a.y0 - b.y0 : a.x0 - b.x0);
+}
+let cardWords = null, cardWordsKey = '';
+function cardNameKnown(text) { // words that appear in some card name (trainer cards, for example)
+  const key = Object.keys(db.sets).length + ':' + Object.keys(db.cards).length;
+  if (cardWordsKey !== key) {
+    cardWords = new Set(); cardWordsKey = key;
+    for (const s of Object.values(db.sets)) if (s.scan) for (const c of s.cards) toks(c.n).split(' ').forEach(x => { if (x.length >= 4) cardWords.add(x); });
+  }
+  const t = nameWords(text);
+  return t.length > 0 && t.filter(x => cardWords.has(x)).length / t.length >= 0.5;
+}
+// Cards in the database that fit what was read on one card, best first.
+async function matchCard(card, color, W, H) {
+  const num = card.num ? card.num.r : null;
+  const nameToks = card.name ? nameWords(card.name.text) : [];
   const dexHits = nameDex(nameToks.join(' '));
   const out = [];
   for (const [sid, s] of Object.entries(db.sets)) {
@@ -986,22 +1044,51 @@ async function scanCard(buf) {
   }
   out.sort((a, b) => b.score - a.score || String(b.s.date).localeCompare(String(a.s.date)));
   const top = out.slice(0, 60);
-  for (const x of top) { const t = await storedThumb(x.c.id); x.pic = t ? likeness(photo, t) : null; x.score += x.pic != null ? x.pic * 3 : 1; }
+  let photo = null;
+  try {
+    const left = Math.round(card.x0), topY = Math.round(card.y0), width = Math.round(card.x1 - card.x0), height = Math.round(card.y1 - card.y0);
+    if (width > 20 && height > 20 && left + width <= W && topY + height <= H) photo = await thumb(await sharp(color).extract({ left, top: topY, width, height }).toBuffer());
+  } catch (e) { photo = null; }
+  for (const x of top) { const t = photo && await storedThumb(x.c.id); x.pic = t ? likeness(photo, t) : null; x.score += x.pic != null ? x.pic * 2 : 0.7; }
   top.sort((a, b) => b.score - a.score);
-  const best = top.length ? top[0].score : 0;
-  return {
-    read: { name: nameToks.join(' ').slice(0, 60), number: num ? num.text : null },
-    matches: top.slice(0, 8).map(x => picOf(x.c.id, {
-      id: x.c.id, n: x.name, sid: x.sid, set: x.s.name, k: x.c.l, r: x.rec && !x.rec.x ? x.rec.r : null, a: x.art ? 1 : 0, tr: x.rec && x.rec.tr ? 1 : undefined, d: x.d,
-      b: (x.rec && !x.rec.x && x.rec.b) || cleanBase(x.c.i), eu: x.rec && !x.rec.x ? x.rec.eu : x.c.eu, us: x.rec && !x.rec.x ? x.rec.us : x.c.us, pt: x.rec && !x.rec.x ? x.rec.pt : x.c.pt,
-      why: [x.numHit ? 'number' : null, x.totHit ? 'set size' : null, x.nameHit >= 0.5 ? 'name' : null, x.pic != null && x.pic > 0.75 ? 'picture' : null].filter(Boolean),
-      sure: x.score >= best - 0.01 && x.numHit && (x.totHit || x.nameHit >= 0.5) ? 1 : 0,
-    })),
-  };
+  return top;
+}
+function matchOut(x, best) {
+  return picOf(x.c.id, {
+    id: x.c.id, n: x.name, sid: x.sid, set: x.s.name, k: x.c.l, r: x.rec && !x.rec.x ? x.rec.r : null, a: x.art ? 1 : 0, tr: x.rec && x.rec.tr ? 1 : undefined, d: x.d,
+    b: (x.rec && !x.rec.x && x.rec.b) || cleanBase(x.c.i), eu: x.rec && !x.rec.x ? x.rec.eu : x.c.eu, us: x.rec && !x.rec.x ? x.rec.us : x.c.us, pt: x.rec && !x.rec.x ? x.rec.pt : x.c.pt,
+    why: [x.numHit ? 'number' : null, x.totHit ? 'set size' : null, x.nameHit >= 0.5 ? 'name' : null, x.pic != null && x.pic > 0.75 ? 'picture' : null].filter(Boolean),
+    sure: x.score >= best - 0.01 && x.numHit && (x.totHit || x.nameHit >= 0.5) ? 1 : 0,
+  });
+}
+async function scanPhoto(buf) {
+  const base = await checkedImage(buf);
+  const meta = await sharp(buf, { limitInputPixels: 40e6 }).rotate().metadata();
+  const turns = (meta.width > meta.height) ? [0, 90, 270, 180] : [0, 180, 90, 270];
+  let firstRead = null;
+  for (const turn of turns) {
+    const { data: color, info } = await base.clone().rotate(turn).resize(OCR_LONG, OCR_LONG, { fit: 'inside' }).jpeg({ quality: 92 }).toBuffer({ resolveWithObject: true });
+    const lines = await readLines(color);
+    const cards = findCards(lines, info.width, info.height);
+    const found = [];
+    for (const card of cards) {
+      const m = await matchCard(card, color, info.width, info.height);
+      if (!m.length) continue;
+      const best = m[0].score;
+      found.push({ read: { name: card.name ? nameWords(card.name.text).join(' ').slice(0, 60) : null, number: card.num ? card.num.r.text : null }, best, matches: m });
+    }
+    if (!firstRead) firstRead = { text: lines.map(l => l.text).join(' ').slice(0, 200) };
+    // stop at the first way round that finds a card with a number or a clear name
+    if (found.some(f => f.matches[0].numHit || f.matches[0].nameHit >= 0.5)) {
+      const per = found.length > 1 ? 4 : 8;
+      return { turned: turn, cards: found.map(f => ({ read: f.read, matches: f.matches.slice(0, per).map(x => matchOut(x, f.best)) })) };
+    }
+  }
+  return { turned: 0, cards: [], text: firstRead ? firstRead.text : '' };
 }
 async function runScan(buf) {
   ocrWaiting++;
-  const job = ocrChain.catch(() => {}).then(() => scanCard(buf));
+  const job = ocrChain.catch(() => {}).then(() => scanPhoto(buf));
   ocrChain = job;
   try { return await job; } finally { ocrWaiting--; ocrRelease(); }
 }
@@ -1483,7 +1570,8 @@ const server = http.createServer(async (req, res) => {
       const now = db.cards[id];
       return sendJSON(res, 200, { ok: true, notArt: !!(isArt && !(now && !now.x)), art: !!(now && !now.x), price: now && !now.x ? { eu: now.eu, us: now.us } : (c ? { eu: c.eu, us: c.us } : null) });
     }
-    // Scan a card: a photo (base64 JPEG/PNG/WebP, up to 6 MB) in, the best matching cards out. Logged-in only.
+    // Scan cards: a photo (base64 JPEG/PNG/WebP, up to 6 MB) with one or more cards in, for every card found the
+    // best matching cards out. Logged-in only, one scan at a time.
     if (req.method === 'POST' && p === '/api/scan') {
       if (!SCAN || !sharp) return sendJSON(res, 409, { error: 'Scanning is not available on this server' });
       if (ocrWaiting >= 3) return sendJSON(res, 429, { error: 'The scanner is busy. Try again in a moment.' });
