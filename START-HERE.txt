@@ -53,7 +53,8 @@ OWNER PASSWORD) and saved as admin.json in the data folder. Or choose your own
 with the ADMIN_PASSWORD setting in docker-compose.yml.
 To give someone their own dex: log in, open the "Dex of" menu and choose
 "+ Add account...". "Manage accounts..." gives a new password or deletes one.
-Everyone can rename their own dex with the "Trainer name" button.
+Everyone can rename their own dex with the "Trainer name" button and change
+their own password with the "Password" button.
 Friends can use http://<address>:8080/view/ which has no login option at all.
 
 
@@ -67,15 +68,18 @@ USING IT
   Trainers, Wish list & trades, and History.
 - "view" on a Pokémon: see all its art cards and regular cards, tick the ones
   you have, and choose "Wish for this one" to put a card on your wish list.
-- "Wish list & trades": your wish list with who owns those cards, and the cards
-  you have that other trainers wish for.
+  Cards in the Sets and Trainers views have a "Wish" button too.
+- "Wish list & trades": your wish list with its total price and who owns those
+  cards, and the cards you have that other trainers wish for.
 - "History": the cards you ticked most recently.
 - The sort menu on the Pokémon view lists the Pokémon you own a card of by
   price, high to low or low to high.
 - "Sets": every set with your progress. Open one to see all its cards and
   tick the ones you own.
 - Click any picture to see it large.
-- A picture that is missing everywhere shows a Poké Ball with the card's name.
+- Cards without a picture (mostly promos) are looked up automatically in the
+  background. One that is still missing shows a Poké Ball with the card's name;
+  the main admin can give it a picture with the "Picture..." button on the card.
 - If a card is wrongly counted (or not counted) as an art card, the main admin
   can use "Count as art card" / "Not an art card" on that card.
 - Prices are shown in euro (Cardmarket). For dollar (TCGplayer) prices, set

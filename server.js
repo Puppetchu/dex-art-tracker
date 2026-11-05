@@ -55,6 +55,11 @@ const PROMO_AS_ART = process.env.PROMO_AS_ART !== '0';
 const SHOW_VALUE_PUBLIC = process.env.SHOW_VALUE_PUBLIC === '1' || process.env.SHARE_SHOW_VALUE === '1';
 // Which prices the page shows: cardmarket (€, default) or tcgplayer ($).
 const PRICE_CUR = /^(tcgplayer|us|usd|\$)$/i.test(String(process.env.PRICE_SOURCE || '').trim()) ? 'us' : 'eu';
+// Pictures for cards TCGdex has none for (mostly promos) are looked up in the pokemontcg.io card search.
+const PICTURE_LOOKUP = process.env.PICTURE_LOOKUP !== '0';
+const PTCG_API = (process.env.PTCG_API || 'https://api.pokemontcg.io/v2').replace(/\/$/, '');
+const PTCG_API_KEY = process.env.PTCG_API_KEY || '';
+const PICTURES_PER_DAY = process.env.PICTURES_PER_DAY !== undefined ? +process.env.PICTURES_PER_DAY : 500; // 0 = no limit
 const TRUST_PROXY = process.env.TRUST_PROXY !== '0'; // on by default (reverse proxy: use X-Forwarded-For / -Proto). 0 = off
 
 const CARDS_FILE = path.join(DATA_DIR, 'cards.json');
@@ -81,6 +86,7 @@ db.budget = db.budget || { date: '', used: 0 };
 db.regMatched = db.regMatched || null;
 db.rar = db.rar || {};            // lang -> {t, ok, ids:[card ids that have an art rarity]}
 db.langsDone = db.langsDone || {};
+db.pics = db.pics || {};          // card id -> {im, imL, t, m}: picture found elsewhere (m = set by hand)
 if (db.setsChecked && !db.langsDone.en) db.langsDone.en = true;
 
 // Pokémon TCG Pocket sets (A1, A2a, B1, P-A ...) are not physical cards.
@@ -328,13 +334,15 @@ async function refreshJaNames() {
 
 // ---------- export for the page ----------
 let lastExport = { art: 0, regular: 0, sets: 0 };
+// Picture fields for the page: im (small) and iL (large), when one was found elsewhere or set by hand.
+function picOf(id, o) { const p = db.pics[id]; if (p && p.im) { o.im = p.im; o.iL = p.imL || p.im; } return o; }
 function exportCards() {
   matchRegular();
   const setPics = regIndex();
   const art = [], trainers = [], regular = [], sets = [];
   Object.values(db.cards).forEach(c => {
     if (c.x) return;
-    (c.tr ? trainers : art).push({ id: c.id, n: c.n, r: c.r, sid: c.sid, k: localOf(c.id, c.sid), b: c.b || (setPics.get(c.id) && setPics.get(c.id).i ? cleanBase(setPics.get(c.id).i) : null), d: c.d, eu: c.eu, us: c.us, cm: c.cm || undefined, pt: c.pt, m: c.m ? 1 : undefined });
+    (c.tr ? trainers : art).push(picOf(c.id, { id: c.id, n: c.n, r: c.r, sid: c.sid, k: localOf(c.id, c.sid), b: c.b || (setPics.get(c.id) && setPics.get(c.id).i ? cleanBase(setPics.get(c.id).i) : null), d: c.d, eu: c.eu, us: c.us, cm: c.cm || undefined, pt: c.pt, m: c.m ? 1 : undefined }));
   });
   for (const [sid, s] of Object.entries(db.sets)) {
     if (!s.scan) continue;
@@ -343,10 +351,10 @@ function exportCards() {
       const rec = db.cards[c.id];
       if (rec && !rec.x) { a++; continue; }
       if (!rec && worth(s, c)) { // known to be an art card, details still to be fetched: show it already
-        if (c.d && c.d.length) art.push({ id: c.id, n: c.n, r: provRarity(c.id), sid, k: c.l, b: c.i ? cleanBase(c.i) : null, d: c.d, eu: null, us: null, pv: 1 });
+        if (c.d && c.d.length) art.push(picOf(c.id, { id: c.id, n: c.n, r: provRarity(c.id), sid, k: c.l, b: c.i ? cleanBase(c.i) : null, d: c.d, eu: null, us: null, pv: 1 }));
         a++; continue;
       }
-      if (c.d && c.d.length) regular.push({ id: c.id, n: c.n, sid, k: c.l, b: c.i || null, d: c.d, eu: c.eu, us: c.us, cm: c.cm || undefined, pt: c.pt });
+      if (c.d && c.d.length) regular.push(picOf(c.id, { id: c.id, n: c.n, sid, k: c.l, b: c.i || null, d: c.d, eu: c.eu, us: c.us, cm: c.cm || undefined, pt: c.pt }));
     }
     sets.push({ id: sid, name: s.name, date: s.date || '', official: s.official, total: s.total, n: s.cards.length, art: a, promo: s.promo ? 1 : 0,
       lg: noExt(s.lg), sy: noExt(s.sy) });
@@ -363,7 +371,7 @@ function setPayload(sid) {
     id: sid, name: s.name, date: s.date || '', official: s.official, total: s.total, promo: !!s.promo,
     cards: s.cards.map(c => {
       const rec = db.cards[c.id];
-      const o = { id: c.id, k: c.l, n: c.n, b: c.i || null };
+      const o = picOf(c.id, { id: c.id, k: c.l, n: c.n, b: c.i || null });
       if (rec && !rec.x) { o.t = 'a'; o.r = rec.r; o.eu = rec.eu; o.us = rec.us; o.cm = rec.cm; o.pt = rec.pt; o.d = rec.d; if (rec.m) o.m = 1; }
       else if (!rec && worth(s, c)) { o.t = 'a'; o.pv = 1; o.r = provRarity(c.id); o.d = c.d || []; o.eu = null; o.us = null; }
       else { o.t = 'r'; o.eu = c.eu; o.us = c.us; o.cm = c.cm; o.pt = c.pt; o.d = c.d || []; }
@@ -532,6 +540,9 @@ function planPriceRefresh(maxAge, limit) {
       }).slice(0, PRICE_CANDIDATES).forEach(c => picked.set(c.id, c));
     });
   });
+  // Art cards on someone's wish list are kept up to date as well, however expensive they are.
+  const wished = wishedIds();
+  Object.values(db.cards).forEach(c => { if (!c.x && wished.has(c.id)) picked.set(c.id, c); });
   // Art cards that have no picture yet are asked about again every 7 days (TCGdex adds pictures later).
   const noPic = Object.values(db.cards).filter(c => !c.x && !c.b && !ownedByAll(c.id) && ageDays(c.pt) >= 7);
   return [...new Set([...picked.values()].filter(c => ageDays(c.pt) >= maxAge).concat(noPic))]
@@ -544,7 +555,17 @@ async function refreshPrices(maxAge) {
     if (!canSpend()) return;
     await fetchCard(c.id);
   }
+  // Wished regular cards (art cards are in the plan above).
+  const idx = regIndex();
+  for (const id of wishedIds()) {
+    const c = idx.get(id);
+    if (!c || db.cards[id] || ageDays(c.pt) < maxAge) continue;
+    if (!canSpend()) return;
+    await priceRegular(id, idx);
+  }
 }
+// Every card on someone's wish list.
+function wishedIds() { const out = new Set(); allStates().forEach(s => wishOf(s).forEach(w => out.add(w.id))); return out; }
 
 // ---------- prices of regular cards ----------
 function regIndex() {
@@ -581,6 +602,71 @@ async function fillRegularPrices() {
     db.budget.reg++;
     await priceRegular(ids[0], idx);
   }
+}
+
+// ---------- pictures from pokemontcg.io ----------
+// Cards the page shows that have no TCGdex picture, promo sets first, then newest sets. English only:
+// pokemontcg.io has no Japanese cards. A card without a result is asked about again after 30 days.
+function picsNeeded() {
+  const out = [];
+  const sets = Object.entries(db.sets).filter(([, s]) => s.scan && s.lang !== 'ja')
+    .sort((a, b) => (b[1].promo ? 1 : 0) - (a[1].promo ? 1 : 0) || String(b[1].date).localeCompare(String(a[1].date)));
+  for (const [sid, s] of sets) for (const c of s.cards) {
+    const rec = db.cards[c.id], art = !!(rec && !rec.x);
+    if (c.i || (art && rec.b)) continue;
+    if (!art && !(c.d && c.d.length)) continue; // the page only shows Pokémon cards and art cards
+    const p = db.pics[c.id];
+    if (p && (p.m || p.im || ageDays(p.t) < 30)) continue;
+    out.push({ id: c.id, sid, k: c.l, n: art ? rec.n : c.n, promo: !!s.promo });
+  }
+  return out;
+}
+const ptcgSetId = sid => String(sid).replace(/^([a-z]+)0*(\d)/i, '$1$2').replace('.', 'pt');
+const plainNum = k => /^\d+$/.test(String(k)) ? String(+k) : String(k);
+async function ptcgSearch(q) {
+  const headers = { 'User-Agent': 'dex-art-tracker' }; if (PTCG_API_KEY) headers['X-Api-Key'] = PTCG_API_KEY;
+  const r = await fetch(PTCG_API + '/cards?q=' + encodeURIComponent(q) + '&pageSize=20&select=id,name,number,set,images', { headers, signal: AbortSignal.timeout(30000) });
+  if (!r.ok) throw new Error('pokemontcg.io answered HTTP ' + r.status);
+  const j = await r.json();
+  return Array.isArray(j.data) ? j.data : [];
+}
+const httpsUrl = u => typeof u === 'string' && /^https?:\/\/\S+$/.test(u) && u.length < 1000;
+// First by set and number; if the set id differs there, by name and number, keeping only an unambiguous match.
+async function findPicture(c) {
+  const clean = x => String(x).replace(/["\\]/g, '').replace(/\s+/g, ' ').trim();
+  const num = clean(plainNum(c.k));
+  let hits = await ptcgSearch('set.id:' + ptcgSetId(c.sid) + ' number:"' + num + '"');
+  if (!hits.length) {
+    await sleep(REQUEST_DELAY_MS);
+    hits = await ptcgSearch('name:"' + clean(c.n) + '" number:"' + num + '"');
+    if (hits.length > 1) {
+      const setName = toks((db.sets[c.sid] || {}).name || '');
+      const same = hits.filter(h => h.set && toks(h.set.name) === setName);
+      hits = same.length ? same : hits.filter(h => /promo/i.test((h.set && h.set.name) || '') === c.promo);
+    }
+    if (hits.length !== 1) hits = [];
+  }
+  const h = hits.find(x => x.images && (httpsUrl(x.images.small) || httpsUrl(x.images.large)));
+  if (!h) return null;
+  const sm = httpsUrl(h.images.small) ? h.images.small : h.images.large, lg = httpsUrl(h.images.large) ? h.images.large : sm;
+  return { im: sm, imL: lg };
+}
+async function fillPictures() {
+  if (!PICTURE_LOOKUP) return;
+  rollBudget(); db.budget.pic = db.budget.pic || 0;
+  let n = 0, found = 0;
+  for (const c of picsNeeded()) {
+    if ((PICTURES_PER_DAY && db.budget.pic >= PICTURES_PER_DAY) || n >= 200) break; // at most 200 per hourly run
+    n++; db.budget.pic++;
+    try {
+      const f = await findPicture(c);
+      db.pics[c.id] = f ? Object.assign(f, { t: new Date().toISOString() }) : { t: new Date().toISOString() };
+      if (f) found++;
+    } catch (e) { log('picture lookup paused:', e.message); break; }
+    persist(false);
+    await sleep(REQUEST_DELAY_MS);
+  }
+  if (n) { persist(true); log('picture lookup: ' + found + ' of ' + n + ' cards found on pokemontcg.io'); }
 }
 
 let running = false, lastError = null, lastManual = 0;
@@ -630,6 +716,7 @@ async function tick() {
       log('first build of the database finished');
     }
     if (db.initialDone) await refreshPrices(PRICE_MAX_AGE_DAYS);
+    if (db.initialDone && !unlimited) await fillPictures();
     if (db.initialDone && !unlimited) await fillRegularPrices();
   });
 }
@@ -691,6 +778,7 @@ function status() {
     sets: { known: Object.keys(db.sets).length, scanned: lastExport.sets },
     backlog: pendingCards().length,
     pricesDue: planPriceRefresh(PRICE_MAX_AGE_DAYS, Infinity).length,
+    picsDue: PICTURE_LOOKUP ? picsNeeded().length : 0,
     setsChecked: db.setsChecked, initialDone: db.initialDone,
     requestsToday: db.budget.used, dailyRequests: DAILY_REQUESTS,
   };
@@ -708,13 +796,19 @@ const MAIN = 'main';
 fs.mkdirSync(STATES_DIR, { recursive: true });
 const sha = x => crypto.createHash('sha256').update(String(x)).digest();
 const sameText = (a, b) => crypto.timingSafeEqual(sha(a), sha(b));
-let adminPw = String(process.env.ADMIN_PASSWORD || '');
-if (adminPw) log('owner password: set by ADMIN_PASSWORD');
+// The main admin's password: ADMIN_PASSWORD if set (then it can only be changed there). Otherwise admin.json:
+// first a generated password in plain text, and once changed on the page a salted hash ({salt, hash}).
+const ADMIN_FIXED = !!process.env.ADMIN_PASSWORD;
+let adminPw = String(process.env.ADMIN_PASSWORD || ''), adminHash = null;
+if (ADMIN_FIXED) log('owner password: set by ADMIN_PASSWORD');
 else {
-  const a = readJSON(ADMIN_FILE);
-  adminPw = (a && a.password) || '';
-  if (!adminPw) { adminPw = crypto.randomBytes(9).toString('base64url'); writeJSON(ADMIN_FILE, { password: adminPw }); }
-  log('OWNER PASSWORD (generated; also saved in admin.json in the data folder; set ADMIN_PASSWORD to choose your own):', adminPw);
+  const a = readJSON(ADMIN_FILE) || {};
+  if (a.hash && a.salt) { adminHash = { salt: a.salt, hash: a.hash }; log('owner password: changed on the page (stored hashed in admin.json)'); }
+  else {
+    adminPw = a.password || '';
+    if (!adminPw) { adminPw = crypto.randomBytes(9).toString('base64url'); writeJSON(ADMIN_FILE, { password: adminPw }); }
+    log('OWNER PASSWORD (generated; also saved in admin.json in the data folder; set ADMIN_PASSWORD to choose your own):', adminPw);
+  }
 }
 const accounts = readJSON(ACC_FILE) || {};
 accounts.list = Array.isArray(accounts.list) ? accounts.list : [];
@@ -725,7 +819,7 @@ const accById = id => accounts.list.find(a => a.id === String(id || '')) || null
 const publicAccounts = () => accounts.list.map(a => ({ id: a.id, name: a.name }));
 const stateFile = id => id === MAIN ? STATE_FILE : path.join(STATES_DIR, id + '.json');
 function allStates() {
-  return accounts.list.map(a => { const s = readJSON(stateFile(a.id)) || {}; return { own: s.own || {}, cards: s.cards || {} }; });
+  return accounts.list.map(a => { const s = readJSON(stateFile(a.id)) || {}; return { own: s.own || {}, cards: s.cards || {}, pick: s.pick || {}, wish: s.wish || {} }; });
 }
 // History: every card that becomes ticked is added at the top, with its name and set kept so the entry
 // still reads well if the card leaves the database. A save that adds more than 50 cards at once (a backup
@@ -748,20 +842,34 @@ function addHistory(old, own, cards) {
   // A card ticked again moves to the top instead of appearing twice.
   return add.concat(hist.filter(h => !(h.id ? newCards.includes(h.id) : newAny.includes(String(h.dex))))).slice(0, HIST_MAX);
 }
+// A wish list: the main picture you picked for a Pokémon (pick) plus cards wished for without one (wish,
+// for example trainer cards), leaving out cards you already own.
+function wishOf(s) {
+  const cards = s.cards || {}, pick = s.pick || {}, extra = s.wish || {}, out = [];
+  Object.keys(pick).forEach(n => { if (pick[n] && !cards[pick[n]]) out.push({ dex: +n, id: String(pick[n]) }); });
+  Object.keys(extra).forEach(id => { if (extra[id] && !cards[id] && !out.some(w => w.id === id)) out.push({ dex: null, id }); });
+  return out;
+}
 function tradeData() {
   return accounts.list.map(a => {
-    const s = readJSON(stateFile(a.id)) || {}, cards = s.cards || {}, pick = s.pick || {};
-    const wish = Object.keys(pick).filter(n => pick[n] && !cards[pick[n]]).map(n => ({ dex: +n, id: String(pick[n]) }));
-    return { id: a.id, name: a.name, cards: Object.keys(cards).filter(id => cards[id]), wish };
+    const s = readJSON(stateFile(a.id)) || {}, cards = s.cards || {};
+    return { id: a.id, name: a.name, cards: Object.keys(cards).filter(id => cards[id]), wish: wishOf(s) };
   });
 }
 const hashPw = (pw, salt) => crypto.scryptSync(String(pw), salt, 32);
 function checkPw(acc, pw) {
-  if (acc.id === MAIN) return sameText(pw, adminPw);
+  if (acc.id === MAIN) {
+    if (adminHash) return crypto.timingSafeEqual(hashPw(pw, adminHash.salt), Buffer.from(adminHash.hash, 'hex'));
+    return sameText(pw, adminPw);
+  }
   if (!acc.hash || !acc.salt) return false;
   return crypto.timingSafeEqual(hashPw(pw, acc.salt), Buffer.from(acc.hash, 'hex'));
 }
-function setPw(acc, pw) { acc.salt = crypto.randomBytes(16).toString('hex'); acc.hash = hashPw(pw, acc.salt).toString('hex'); }
+function setPw(acc, pw) {
+  const salt = crypto.randomBytes(16).toString('hex'), hash = hashPw(pw, salt).toString('hex');
+  if (acc.id === MAIN) { adminHash = { salt, hash }; adminPw = ''; writeJSON(ADMIN_FILE, adminHash); return; }
+  acc.salt = salt; acc.hash = hash;
+}
 const newPw = () => crypto.randomBytes(9).toString('base64url');
 // Trainer names: 1-30 characters, no control characters, unique (ignoring upper/lower case).
 function cleanName(n, selfId) {
@@ -909,7 +1017,8 @@ const server = http.createServer(async (req, res) => {
       const cards = s.cards && typeof s.cards === 'object' && !Array.isArray(s.cards) ? s.cards : {};
       const old = readJSON(stateFile(sess.acc)) || {};
       const hist = addHistory(old, s.own, cards);
-      writeJSON(stateFile(sess.acc), { own: s.own, cards, pick: s.pick || {}, cur: PRICE_CUR, hist });
+      const wish = s.wish && typeof s.wish === 'object' && !Array.isArray(s.wish) ? s.wish : {};
+      writeJSON(stateFile(sess.acc), { own: s.own, cards, pick: s.pick || {}, wish, cur: PRICE_CUR, hist });
       return sendJSON(res, 200, { ok: true, hist });
     }
     // Every account owner can change their own trainer name.
@@ -918,6 +1027,26 @@ const server = http.createServer(async (req, res) => {
       const acc = accById(sess.acc);
       acc.name = cleanName(b.name, acc.id); saveAccounts();
       return sendJSON(res, 200, { ok: true, name: acc.name });
+    }
+    // Every account owner can change their own password (the old one is asked first).
+    // Other devices logged in to this dex are logged out; this one stays logged in.
+    if (req.method === 'POST' && p === '/api/account/password') {
+      const b = JSON.parse(await readBody(req, 1e4));
+      const acc = accById(sess.acc);
+      if (acc.id === MAIN && ADMIN_FIXED) return sendJSON(res, 409, { error: 'This password is set with ADMIN_PASSWORD in docker-compose.yml. Change it there.' });
+      if (blocked(ip)) return sendJSON(res, 429, { error: 'Too many wrong passwords. Try again in 15 minutes.' });
+      if (!checkPw(acc, String(b.old || ''))) {
+        const f = fails.get(ip); fails.set(ip, f && Date.now() - f.t < 15 * 60000 ? { n: f.n + 1, t: Date.now() } : { n: 1, t: Date.now() });
+        await sleep(1000);
+        return sendJSON(res, 401, { error: 'The current password is wrong' });
+      }
+      const pw = String(b.password || '');
+      if (pw.length < 6) return sendJSON(res, 400, { error: 'A password needs at least 6 characters' });
+      setPw(acc, pw); saveAccounts();
+      const mine = hashTok(tokenOf(req));
+      Object.keys(sessions).forEach(k => { if (sessions[k].acc === acc.id && k !== mine) delete sessions[k]; }); saveSessions();
+      log('password changed:', acc.name);
+      return sendJSON(res, 200, { ok: true });
     }
     // The main admin creates accounts, gives them a new password and deletes them.
     if (req.method === 'POST' && p.startsWith('/api/admin/')) {
@@ -982,6 +1111,18 @@ const server = http.createServer(async (req, res) => {
       persist(true);
       const now = db.cards[id];
       return sendJSON(res, 200, { ok: true, notArt: !!(isArt && !(now && !now.x)), art: !!(now && !now.x), price: now && !now.x ? { eu: now.eu, us: now.us } : (c ? { eu: c.eu, us: c.us } : null) });
+    }
+    // Set a card's picture by hand (main admin): a picture address, or empty to go back to automatic.
+    if (req.method === 'POST' && p === '/api/card/picture') {
+      if (!isAdmin) return sendJSON(res, 403, { error: 'Only the main admin can change pictures' });
+      const b = JSON.parse(await readBody(req, 1e4));
+      const id = String(b.id || ''), url = String(b.url || '').trim();
+      if (!regIndex().has(id) && !(db.cards[id] && !db.cards[id].x)) return sendJSON(res, 404, { error: 'unknown card' });
+      if (!url) delete db.pics[id];
+      else if (!httpsUrl(url)) return sendJSON(res, 400, { error: 'Paste a picture address that starts with https://' });
+      else db.pics[id] = { im: url, imL: url, m: 1, t: new Date().toISOString() };
+      persist(true);
+      return sendJSON(res, 200, { ok: true });
     }
     if (req.method === 'POST' && p === '/api/card/mark') {
       // The art list is shared by every dex, so only the main admin changes it.

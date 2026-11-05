@@ -86,6 +86,8 @@ h1{margin:0;font:800 1.45rem/1 var(--head);letter-spacing:.14em;text-transform:u
 .badge.reg{color:var(--muted)}
 .badge.wish{left:auto;right:6px;color:var(--yellow)}
 .who{font-size:.76rem;color:var(--lcd)}
+.mini.wished{color:var(--yellow);border-color:var(--yellow)}
+.wtot{font:600 .9rem var(--mono);color:var(--lcd)}
 .who.none{color:var(--muted)}
 .histday{grid-column:1/-1;font:700 .9rem var(--head);letter-spacing:.08em;text-transform:uppercase;color:var(--lcd);margin-top:8px}
 .ph{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:10px;color:var(--muted);font-size:.78rem;width:100%;height:100%}
@@ -142,7 +144,7 @@ dialog::backdrop{background:#000b}
 @media (prefers-reduced-motion:reduce){.lens{animation:none}.bar i{transition:none}}
 @media (max-width:520px){h1{font-size:1.1rem}.legend{margin-left:0}}
 .ro-mode [data-do="any"],.ro-mode [data-do="art"],.ro-mode [data-do="have"]{pointer-events:none}
-.ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode [data-do="unwish"],.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn,.ro-mode #nameBtn{display:none!important}
+.ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode [data-do="unwish"],.ro-mode [data-do="wish"],.ro-mode #pwBtn,.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn,.ro-mode #nameBtn{display:none!important}
 .ro-mode button:disabled{opacity:1}
 #roTag{display:none;margin-left:10px;padding:2px 9px;border-radius:99px;background:var(--screen);color:var(--lcd);font:700 .7rem var(--head);letter-spacing:.08em;text-transform:uppercase;vertical-align:middle}
 .ro-mode #roTag{display:inline-block}
@@ -150,11 +152,15 @@ dialog::backdrop{background:#000b}
 .trainer select{padding:4px 10px;border-radius:999px;font:600 .9rem var(--head);letter-spacing:0;text-transform:none;max-width:230px}
 #meTag{font:500 .78rem system-ui,sans-serif;letter-spacing:0;text-transform:none;color:#fff}
 #meTag a{color:#fff}
-.no-admin [data-do="mark"]{display:none!important}
+.no-admin [data-do="mark"],.no-admin [data-do="pic"],.ro-mode [data-do="pic"]{display:none!important}
+#picdlg{max-width:min(560px,95vw)}
+#picUrl{width:100%;background:var(--screen);color:var(--lcd)}
+#picPrev{max-height:240px;max-width:100%;display:block;margin:10px auto 0;border-radius:8px}
 .accrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
 .accrow b{flex:1 1 140px}
 .accrow span{color:var(--muted);font-size:.8rem}
-#accdlg,#namedlg,#lgdlg{max-width:min(560px,95vw)}
+#accdlg,#namedlg,#lgdlg,#pwdlg{max-width:min(560px,95vw)}
+#pwForm input{background:var(--screen);color:var(--lcd)}
 #accForm,#nameForm{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 #accForm input,#nameForm input{flex:1 1 180px;background:var(--screen);color:var(--lcd)}
 .pwshow{font:600 .95rem var(--mono);color:var(--lcd);background:var(--screen);padding:2px 8px;border-radius:6px;user-select:all}
@@ -190,6 +196,7 @@ a{color:var(--lcd)}
       <span id="meTag" hidden></span>
       <div class="acct">
         <button id="nameBtn" type="button" class="mini" title="Change the name of your dex">Trainer name</button>
+        <button id="pwBtn" type="button" class="mini" title="Change your password">Password</button>
         <button id="logoutBtn" type="button" class="mini" title="Log out of this dex">Log out</button>
       </div>
     </div>
@@ -280,6 +287,30 @@ a{color:var(--lcd)}
   </form>
   <div id="nameMsg" style="color:var(--muted);font-size:.85rem;margin-top:6px"></div>
 </dialog>
+<dialog id="picdlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong id="picTitle" style="font:800 1.05rem var(--head)">Picture</strong>
+    <button id="picClose" type="button">Close</button>
+  </div>
+  <p style="color:var(--muted);font-size:.85rem;margin:8px 0">Paste the address of a picture of this card (right-click a picture on a shop or card site and copy the image address). Leave it empty and save to go back to the automatic picture.</p>
+  <form id="picForm" style="display:flex;flex-direction:column;gap:8px">
+    <input id="picUrl" type="url" placeholder="https://…" aria-label="Picture address" autocomplete="off">
+    <img id="picPrev" alt="" hidden>
+    <div style="display:flex;gap:8px;align-items:center"><button type="submit">Save</button><span id="picMsg" style="color:var(--muted);font-size:.85rem"></span></div>
+  </form>
+</dialog>
+<dialog id="pwdlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong style="font:800 1.05rem var(--head)">Change password</strong>
+    <button id="pwClose" type="button">Close</button>
+  </div>
+  <form id="pwForm" style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+    <input id="pwOld" type="password" autocomplete="current-password" placeholder="Current password" aria-label="Current password">
+    <input id="pwNew" type="password" autocomplete="new-password" placeholder="New password (at least 6 characters)" aria-label="New password">
+    <input id="pwNew2" type="password" autocomplete="new-password" placeholder="New password again" aria-label="New password again">
+    <div style="display:flex;gap:8px;align-items:center"><button type="submit">Change password</button><span id="pwMsg" style="color:var(--muted);font-size:.85rem"></span></div>
+  </form>
+</dialog>
 <dialog id="accdlg">
   <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
     <strong style="font:800 1.05rem var(--head)">Accounts</strong>
@@ -316,7 +347,7 @@ var cards=[], trainers=[], regular=[], sets=[], setsById={}, names={}, maxDex=10
 var byDex={}, byReg={}, byId={};
 // Prices: € Cardmarket or $ TCGplayer, chosen on the server with PRICE_SOURCE.
 var CUR=window.DEX_CUR==='us'?'us':'eu';
-var st={own:{},cards:{},pick:{},cur:CUR};
+var st={own:{},cards:{},pick:{},wish:{},cur:CUR};
 var hist=[], trades=null;
 var trFilter='all', view='dex', curSet=null, setData=null, setFilter='all', setCache={}, dexOpen=null, regShown=60, armed=null;
 
@@ -345,6 +376,7 @@ function imgList(c,big){
   big=big||PHONE; // phones get the full resolution picture everywhere
   var l=[];
   if(c.b) l.push(c.b+'/'+(big?'high':'low')+'.webp');
+  if(c.im) l.push(big?(c.iL||c.im):c.im); // found on pokemontcg.io, or set by hand
   if(c.sid&&c.k!=null&&c.k!==''&&isJa(c.sid)){
     // Japanese cards: Scrydex lists them as <set>_ja-<number>. The exact numbering style is a guess, so both are tried.
     var js=String(c.sid).replace(/^ja:/,'').toLowerCase(), sz=big?'medium':'small', plain=numOf(c.k);
@@ -397,6 +429,7 @@ function showGens(s){
   var t=s.count+' art cards · '+s.regular+' regular cards · '+s.sets.scanned+' sets';
   if(s.backlog) t+=' · '+s.backlog+' cards still to check';
   t+=' · '+s.pricesDue+' prices due';
+  if(s.picsDue) t+=' · '+s.picsDue+' pictures to look up';
   if(s.setsChecked) t+=' · new sets last checked '+new Date(s.setsChecked).toLocaleDateString(undefined,{day:'numeric',month:'short'});
   $('gens').textContent=t;
 }
@@ -419,7 +452,7 @@ async function loadData(){
 async function loadState(){
   var s=null;
   try{ s=await getJSON('api/state?dex='+encodeURIComponent(DEX)); }catch(e){}
-  if(s&&s.own) st={own:s.own,cards:s.cards||{},pick:s.pick||{},cur:CUR}; hist=s.hist||[];
+  if(s&&s.own) st={own:s.own,cards:s.cards||{},pick:s.pick||{},wish:s.wish||{},cur:CUR}; hist=s.hist||[];
 }
 var saveTimer=null;
 function save(){
@@ -607,6 +640,7 @@ function fillDex(reset){
     var isOwn=owned(c.id), sel=cur&&cur.id===c.id;
     var mk=c.a?'<button type="button" class="mini'+(isArmed('unart:'+c.id)?' arm':'')+'" data-do="mark" data-id="'+esc(c.id)+'" data-v="0">'+(isArmed('unart:'+c.id)?'Really?':'Not an art card')+'</button>'
       :'<button type="button" class="mini" data-do="mark" data-id="'+esc(c.id)+'" data-v="1">Count as art card</button>';
+    mk+='<button type="button" class="mini" data-do="pic" data-id="'+esc(c.id)+'" title="Set this card\'s picture by hand">Picture…</button>';
     return '<div class="opt'+(sel?' sel':'')+(isOwn?' own':'')+'"><div class="pic">'+picHTML(c,false)+'</div>'+
       '<div><b>'+esc(c.n)+'</b></div><div>'+esc(subOf(c))+'</div>'+(c.a?'<div>'+esc(c.r||'Art card')+'</div>':'')+priceHTML(c)+linkHTML(c)+
       '<div class="row"><button type="button" class="'+(isOwn?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(isOwn?'✓ Have it':'Have it')+'</button></div>'+
@@ -665,7 +699,7 @@ function renderTrainers(){
       '<div class="name" title="'+esc(c.n)+'">'+esc(c.n)+'</div>'+
       '<div class="meta">'+esc(c.r||'Art card')+' · '+esc(setName(c))+(isJa(c.sid)?' · JA':'')+'</div>'+
       priceHTML(c)+linkHTML(c)+
-      '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div></div>');
+      '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div>'+wishBtn(c)+'</div>');
   });
   h.push('</div>');
   $('trainersView').innerHTML=h.join('');
@@ -683,6 +717,27 @@ function ownedPrice(n){
 /* ---------- wish list: the main picture you picked yourself, for a card you do not own ---------- */
 function pl(n,w){ return n+' '+w+(n===1?'':'s'); }
 function isWish(n,id){ return st.pick[n]===id&&!owned(id); }
+// The wish list: main pictures you picked for cards you do not own, plus cards wished for without a Pokémon
+// (trainer cards). A Pokémon card wished for from the Sets or Trainers view becomes that Pokémon's main picture.
+function wished(id){ if(st.wish[id]) return true; for(var k in st.pick) if(st.pick[k]===id) return true; return false; }
+function wishList(){
+  var out=[], seen={};
+  Object.keys(st.pick).forEach(function(n){ var id=st.pick[n]; if(id&&!owned(id)&&byId[id]&&!seen[id]){ seen[id]=1; out.push({id:id,dex:+n}); } });
+  Object.keys(st.wish).forEach(function(id){ if(st.wish[id]&&!owned(id)&&byId[id]&&!seen[id]){ seen[id]=1; out.push({id:id,dex:null}); } });
+  return out.sort(function(a,b){ return (a.dex==null)-(b.dex==null)||(a.dex||0)-(b.dex||0)||String(byId[a.id].n).localeCompare(byId[b.id].n); });
+}
+function wishToggle(id){
+  var c=byId[id]; if(!c) return;
+  if(wished(id)){ delete st.wish[id]; Object.keys(st.pick).forEach(function(k){ if(st.pick[k]===id) delete st.pick[k]; }); }
+  else if(!c.tr&&c.d&&c.d.length) st.pick[c.d[0]]=id;
+  else st.wish[id]=1;
+  save(); refresh();
+}
+function wishBtn(c){
+  if(owned(c.id)||!byId[c.id]) return '';
+  var w=wished(c.id), b=byId[c.id], n=!b.tr&&b.d&&b.d.length?b.d[0]:null;
+  return '<button type="button" class="mini'+(w?' wished':'')+'" data-do="wish" data-id="'+esc(c.id)+'" title="'+(w?'Take it off the wish list':(n?'Put it on the wish list and make it the main picture of #'+n+' (replaces an earlier wish for that Pokémon)':'Put it on the wish list'))+'">'+(w?'★ On wish list':'☆ Wish')+'</button>';
+}
 function cardTile(c,stc,body){
   return '<div class="tile '+stc+'"><div class="no"><span>'+esc(c.k||'')+'</span><i class="led"></i></div>'+
     '<div class="pic">'+picHTML(c,false)+(c.a?'<span class="badge">ART</span>':'')+'</div>'+
@@ -698,17 +753,19 @@ function renderWish(){
   if(!trades){ $('wishView').innerHTML='<p>Loading…</p>'; loadTrades(); return; }
   var others=trades.filter(function(t){ return t.id!==DEX; });
   var holders={}; others.forEach(function(t){ t.cards.forEach(function(id){ (holders[id]=holders[id]||[]).push(t.name); }); });
-  var mine=Object.keys(st.pick).filter(function(n){ return st.pick[n]&&!owned(st.pick[n])&&byId[st.pick[n]]; }).map(Number).sort(function(a,b){return a-b;});
+  var mine=wishList();
   var wanted={}; others.forEach(function(t){ t.wish.forEach(function(w){ if(owned(w.id)&&byId[w.id]) (wanted[w.id]=wanted[w.id]||{dex:w.dex,by:[]}).by.push(t.name); }); });
-  var wantedIds=Object.keys(wanted), match=mine.filter(function(n){ return holders[st.pick[n]]; }).length;
-  var h=['<div class="sethead"><h2>'+esc(DEXNAME)+'\'s wish list</h2><span>'+pl(mine.length,'card')+' · '+match+' owned by another trainer</span></div>'];
-  if(!mine.length) h.push('<p>Nothing on the wish list yet. Open a Pokémon with "view" and choose "☆ Wish for this one" on a card: it becomes the main picture and goes on this list.</p>');
+  var wantedIds=Object.keys(wanted), match=mine.filter(function(w){ return holders[w.id]; }).length;
+  var S=st.cur==='eu'?'€':'$', total=0, noPrice=0;
+  mine.forEach(function(w){ var p=price(byId[w.id]); if(p==null) noPrice++; else total+=p; });
+  var h=['<div class="sethead"><h2>'+esc(DEXNAME)+'\'s wish list</h2><span class="wtot">'+pl(mine.length,'card')+(HIDEV?'':' · '+S+total.toFixed(2)+(noPrice?' (+'+noPrice+' without a price)':''))+'</span><span>'+match+' owned by another trainer</span></div>'];
+  if(!mine.length) h.push('<p>Nothing on the wish list yet. Use "☆ Wish" on a card in the Sets or Trainers view, or "☆ Wish for this one" in a Pokémon\'s card list (that card also becomes the main picture).</p>');
   h.push('<div class="cgrid">');
-  mine.forEach(function(n){
-    var c=byId[st.pick[n]], who=holders[c.id];
+  mine.forEach(function(w){
+    var c=byId[w.id], who=holders[c.id];
     h.push(cardTile(c,who?'s-y':'s-r',priceHTML(c)+linkHTML(c)+
-      '<div class="who'+(who?'':' none')+'">'+(who?'Owned by '+esc(who.join(', ')):'No other trainer has this one')+'</div>'+dexBtn(n)+
-      '<div class="row"><button type="button" data-do="unwish" data-n="'+n+'">Take off wish list</button></div>'));
+      '<div class="who'+(who?'':' none')+'">'+(who?'Owned by '+esc(who.join(', ')):'No other trainer has this one')+'</div>'+(w.dex?dexBtn(w.dex):'')+
+      '<div class="row"><button type="button" data-do="wish" data-id="'+esc(c.id)+'">Take off wish list</button></div>'));
   });
   h.push('</div>');
   h.push('<div class="sethead" style="margin-top:22px"><h2>'+esc(DEXNAME)+' has, others want</h2><span>'+pl(wantedIds.length,'card')+'</span></div>');
@@ -716,7 +773,7 @@ function renderWish(){
   h.push('<div class="cgrid">');
   wantedIds.forEach(function(id){
     var c=byId[id], w=wanted[id];
-    h.push(cardTile(c,'s-g',priceHTML(c)+linkHTML(c)+'<div class="who">Wanted by '+esc(w.by.join(', '))+'</div>'+dexBtn(w.dex)));
+    h.push(cardTile(c,'s-g',priceHTML(c)+linkHTML(c)+'<div class="who">Wanted by '+esc(w.by.join(', '))+'</div>'+(w.dex?dexBtn(w.dex):'')));
   });
   h.push('</div>');
   $('wishView').innerHTML=h.join('');
@@ -804,13 +861,14 @@ function renderSets(){
     var stc=o?(isA?'s-g':'s-y'):'s-r';
     var mk=isA?'<button type="button" class="mini'+(isArmed('unart:'+c.id)?' arm':'')+'" data-do="mark" data-id="'+esc(c.id)+'" data-v="0">'+(isArmed('unart:'+c.id)?'Really?':'Not an art card')+'</button>'
       :'<button type="button" class="mini" data-do="mark" data-id="'+esc(c.id)+'" data-v="1">Count as art card</button>';
+    mk+='<button type="button" class="mini" data-do="pic" data-id="'+esc(c.id)+'" title="Set this card\'s picture by hand">Picture…</button>';
     h.push('<div class="tile '+stc+'"><div class="no"><span>'+esc(c.k)+(s.official&&/^\d+$/.test(c.k)?' / '+s.official:'')+'</span><i class="led"></i></div>'+
       '<div class="pic">'+picHTML(c,false)+(isA?'<span class="badge">ART</span>':'')+'</div>'+
       '<div class="name" title="'+esc(c.n)+'">'+esc(c.n)+'</div>'+
       (c.d&&c.d.length?'<div class="row">'+c.d.slice(0,3).map(function(d){ return '<button type="button" class="mini" data-do="view" data-n="'+d+'" title="Open this Pokémon">#'+d+' '+esc(names[d]||'')+' →</button>'; }).join('')+'</div>':'')+
       '<div class="meta">'+(isA?esc(c.r||'Art card'):(c.t==='p'?'Not checked yet':(c.sec?'Secret card':'Regular card')))+'</div>'+
       priceHTML(c)+linkHTML(c)+
-      '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div>'+mk+'</div>');
+      '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div>'+wishBtn(c)+''+mk+'</div>');
   });
   h.push('</div>');
   $('setsView').innerHTML=h.join('');
@@ -895,8 +953,8 @@ async function markArt(id,art){
 document.addEventListener('click',function(e){
   var t=e.target.closest('[data-do]'); if(!t) return;
   var a=t.dataset.do, n=+t.dataset.n, id=t.dataset.id;
-  if(RO&&/^(any|art|have|main|unwish|mark|getp)$/.test(a)) return;
-  if(!ADMIN&&a==='mark') return;
+  if(RO&&/^(any|art|have|main|unwish|wish|mark|getp)$/.test(a)) return;
+  if(!ADMIN&&(a==='mark'||a==='pic')) return;
   if(a==='any'){
     if(artOwned(n)) return;
     if(anyOwned(n)){
@@ -920,9 +978,11 @@ document.addEventListener('click',function(e){
     save(); refresh();
   } else if(a==='main'){ st.pick[n]=id; save(); refresh(); }
   else if(a==='unwish'){ delete st.pick[n]; save(); refresh(); }
+  else if(a==='wish'){ wishToggle(id); }
   else if(a==='view'){ go('#/dex/'+n); }
   else if(a==='more'){ regShown+=60; fillDex(); }
   else if(a==='zoom'){ openLb(id); }
+  else if(a==='pic'){ openPic(id); }
   else if(a==='mark'){
     var art=t.dataset.v==='1';
     if(!art&&!isArmed('unart:'+id)){ arm('unart:'+id); refresh(); return; }
@@ -1021,6 +1081,36 @@ $('dexSel').addEventListener('change',function(){
 });
 $('nameBtn').addEventListener('click',function(){ $('nameIn').value=ME?ME.name:''; $('nameMsg').textContent=''; $('namedlg').showModal(); $('nameIn').focus(); });
 $('nameClose').addEventListener('click',function(){ $('namedlg').close(); });
+$('pwBtn').addEventListener('click',function(){ ['pwOld','pwNew','pwNew2'].forEach(function(i){ $(i).value=''; }); $('pwMsg').textContent=''; $('pwdlg').showModal(); $('pwOld').focus(); });
+$('pwClose').addEventListener('click',function(){ $('pwdlg').close(); });
+var picId=null;
+function openPic(id){
+  var c=lookup(id); picId=id;
+  $('picTitle').textContent='Picture · '+(c?c.n+' · '+subOf(c):id);
+  $('picUrl').value=c&&c.im?c.im:''; $('picMsg').textContent=''; showPrev();
+  $('picdlg').showModal(); $('picUrl').focus();
+}
+function showPrev(){ var u=$('picUrl').value.trim(); $('picPrev').hidden=!/^https?:\/\//.test(u); if(!$('picPrev').hidden) $('picPrev').src=u; }
+$('picUrl').addEventListener('input',showPrev);
+$('picPrev').addEventListener('error',function(){ $('picPrev').hidden=true; $('picMsg').textContent='That address does not show a picture here.'; });
+$('picPrev').addEventListener('load',function(){ $('picMsg').textContent=''; });
+$('picClose').addEventListener('click',function(){ $('picdlg').close(); });
+$('picForm').addEventListener('submit',async function(e){
+  e.preventDefault(); $('picMsg').textContent='…';
+  try{ await post('api/card/picture',{id:picId,url:$('picUrl').value.trim()}); }
+  catch(err){ if(err.status===401){ location.reload(); return; } $('picMsg').textContent=err.message; return; }
+  $('picdlg').close();
+  await loadData(); index();
+  if(curSet){ delete setCache[curSet]; await openSet(curSet,true); }
+  refresh();
+});
+$('pwForm').addEventListener('submit',async function(e){
+  e.preventDefault();
+  if($('pwNew').value!==$('pwNew2').value){ $('pwMsg').textContent='The two new passwords are not the same.'; return; }
+  $('pwMsg').textContent='…';
+  try{ await post('api/account/password',{old:$('pwOld').value,password:$('pwNew').value}); ['pwOld','pwNew','pwNew2'].forEach(function(i){ $(i).value=''; }); $('pwMsg').textContent='Password changed. Other devices are logged out.'; }
+  catch(err){ if(err.status===401&&/login required/.test(err.message)){ location.reload(); return; } $('pwMsg').textContent=err.message; }
+});
 $('nameForm').addEventListener('submit',async function(e){
   e.preventDefault(); $('nameMsg').textContent='…';
   try{ await post('api/account/name',{name:$('nameIn').value}); location.reload(); }
@@ -1078,7 +1168,7 @@ $('imp').addEventListener('click',function(){
   if(b.hidden){ b.hidden=false; b.value=''; b.placeholder='Paste backup text here, then press Restore again'; return; }
   try{
     var j=JSON.parse(b.value);
-    if(j&&j.own){ st={own:j.own||{},cards:j.cards||{},pick:j.pick||{},cur:CUR}; save(); index(); render(); b.value=''; b.hidden=true; }
+    if(j&&j.own){ st={own:j.own||{},cards:j.cards||{},pick:j.pick||{},wish:j.wish||{},cur:CUR}; save(); index(); render(); b.value=''; b.hidden=true; }
   }catch(e){ b.value='That text could not be read as a backup.'; }
 });
 

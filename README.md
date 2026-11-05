@@ -17,8 +17,8 @@ Open http://localhost:8080 (or the server's address on your network).
 - **Pokémon.** One entry per dex number. The LED shows your state: red = nothing yet, yellow = you have a card, green = you have the art card. Filter by what you are missing, jump to a generation, or sort by price: **Owned: price high → low** / **low → high** shows only the Pokémon you own a card of, ranked by the most expensive card you own of each (owned cards without a price last).
 - **Main picture.** The most expensive card you own; otherwise the card on your wish list, else the cheapest art card. If a Pokémon has no art card, a regular card is shown instead.
 - **Any card / Art card buttons.** "Art card" checks the art card that counts for that Pokémon (the one on your wish list, else the cheapest). It is the same check you see in the Sets view.
-- **Wish list.** Under **view** on a Pokémon, **☆ Wish for this one** makes a card you do not own the main picture and puts it on your wish list (the tile shows ★ WISH). **★ On wish list** takes it off again. For cards you own, **Use as main** only changes the picture.
-- **Wish list & trades.** Shows the wish list of the dex you are looking at, with which other trainers own each card, and below it the cards this dex owns that are on another trainer's wish list.
+- **Wish list.** Under **view** on a Pokémon, **☆ Wish for this one** makes a card you do not own the main picture and puts it on your wish list (the tile shows ★ WISH). Cards in the Sets and Trainers views have a **☆ Wish** button too: a Pokémon card becomes that Pokémon's main picture (one wish per Pokémon), a trainer card simply goes on the list. **★ On wish list** takes a card off again. For cards you own, **Use as main** only changes the picture.
+- **Wish list & trades.** Shows the wish list of the dex you are looking at with its total price, which other trainers own each card, and below it the cards this dex owns that are on another trainer's wish list.
 - **History.** The cards most recently ticked in this dex, newest first and grouped by day (the last 300 are kept). Unticking a card takes it off the list. Restoring a backup is not counted.
 - **Sets.** Every scanned set, with progress (cards owned / cards in the set). Open a set to see all its cards, tick the ones you own, and filter by All / Missing / Owned / Art cards. The summary shows the main set, the secret cards and the art cards separately.
 - **Worth of owned art** is the price of the art cards you checked. **Left to spend** is the cheapest art card (or the one you picked) for every Pokémon you have no art card for yet.
@@ -38,7 +38,11 @@ The data cannot tell every art card apart (for example an older alternate art su
 
 Sets show their logo (then their symbol) from TCGdex, with pokemontcg.io and Scrydex as backups and the set's id as text if nothing loads. For cards:
 
-Pictures come from TCGdex. Brand new cards and many promos have no picture there yet. In that case the page tries pokemontcg.io and then Scrydex, and finally shows a Poké Ball placeholder with the card's name and number.
+Pictures come from TCGdex. Brand new cards and many promos have no picture there yet. For those:
+
+- **Automatic lookup.** The server asks the pokemontcg.io card search for the exact picture of every English card the page shows that has no TCGdex picture, promo sets first. It searches by set and number, and if the set is named differently there, by name and number, only taking an unambiguous match. Found pictures are stored for good; a card without a result is asked about again after 30 days. It runs in the background at the usual pace, at most 200 cards per hour and `PICTURES_PER_DAY` per day. The status line shows how many cards are still to look up. Japanese cards are not on pokemontcg.io.
+- **By hand.** The main admin sees a **Picture…** button on every card (Sets view and a Pokémon's card list). Paste the address of a picture of that card (for example "Copy image address" on a shop or card site); a preview shows whether it works. Save an empty address to go back to the automatic picture.
+- Otherwise the page still tries pokemontcg.io and Scrydex addresses based on the set id, and finally shows a Poké Ball placeholder with the card's name and number.
 
 ## Other languages (check first)
 
@@ -56,7 +60,7 @@ Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokea
 
 1. **Sets.** The set list is checked when the container starts and then once a day. Each new set is fetched once. A set request lists all its cards by name and image, so regular cards are stored from that alone, with no price and no further requests. They are matched to Pokémon by name. Pokémon TCG Pocket sets are ignored.
 2. **Art candidates.** Cards numbered above the official set size (for example 199/198) and every card in a promo set get a request of their own, to read rarity, dex number and price. Candidates whose name contains no Pokémon name (trainers, energy) are skipped. The result is stored for good. Newest sets are done first.
-3. **Prices.** The cheapest 2 art cards per Pokémon are re-priced when older than 30 days, oldest first. Cards and Pokémon (art card owned) are only skipped when every account owns them.
+3. **Prices.** The cheapest 2 art cards per Pokémon, and every card on someone's wish list, are re-priced when older than 30 days, oldest first. Cards and Pokémon (art card owned) are only skipped when every account owns them.
 4. **Pace.** No daily limit, one request every 2 seconds (`REQUEST_DELAY_MS`), so the server never hammers TCGdex. The full database takes days to complete, and cards appear as they are fetched. The first build of the database runs in one go unless you set `STAGGER_INITIAL`. Cards that are still waiting for their details are shown on the status line and appear as the server works through them.
 
 "Refresh prices" in the page fetches at most 25 cards (missing ones first, then the oldest prices), once per 10 minutes.
@@ -89,7 +93,7 @@ One port, one page. Every account (trainer) has its own dex with its own ticks; 
 - **Login:** open your own dex and click the blue lens at the top left. A login only opens the dex it was made on: on someone else's dex you are view-only (and the lens logs you in to *that* dex). After logging in you get the full page with the tick buttons, Refresh, Trainer name and Log out. The login lasts 30 days on that device.
 - **Main admin:** the original owner account. Its password is `ADMIN_PASSWORD`; if you do not set it, a random one is generated, printed in the container log (look for `OWNER PASSWORD`) and saved as `admin.json` in the data folder. Its ticks stay in `state.json`, so an existing install keeps everything.
 - **Adding accounts:** logged in as the main admin, open the **Dex of** menu and choose **+ Add account…**. Enter a trainer name and a password (or leave it empty and one is made up). The password is shown once. **Manage accounts…** in the same menu gives an account a new password (this logs them out) or deletes it (its ticks are kept as `states/<id>.deleted-….json`).
-- **Trainer name:** every account owner can rename their own dex with the **Trainer name** button.
+- **Trainer name and password:** every account owner can rename their own dex with the **Trainer name** button and change their password with **Password** (the current password is asked first; other devices logged in to that dex are logged out). The main admin can do this too, unless the password is set with `ADMIN_PASSWORD`: then change it there. A password changed on the page is stored as a salted hash in `admin.json`.
 - **Shared art list:** "Count as art card" / "Not an art card" change the art list for every dex, so only the main admin sees them. Other accounts can tick cards, use Get price and Refresh prices.
 - Background re-pricing only skips a card or Pokémon when every account owns it.
 - **No login link at all:** share `http://yourserver:8080/view/`. It is the same view-only page and it never shows a login option, even to you.
@@ -133,6 +137,9 @@ Saved on the server (`state.json` for the main admin, `states/<id>.json` for oth
 | `LANGUAGES` | en,ja | `en` = English only |
 | `REGULAR_PRICES_PER_DAY` | 0 | Most requests per day spent on regular-card prices, 0 = no limit |
 | `ADMIN_PASSWORD` | random | Password of the main admin account |
+| `PICTURE_LOOKUP` | 1 | 0 = do not look up missing pictures on pokemontcg.io |
+| `PICTURES_PER_DAY` | 500 | Most picture lookups per day, 0 = no limit (each card takes one or two requests) |
+| `PTCG_API_KEY` | (none) | Optional free pokemontcg.io API key, for a higher request limit there |
 | `PRICE_SOURCE` | cardmarket | Prices shown on the page for every dex: `cardmarket` (€) or `tcgplayer` ($) |
 | `SHOW_VALUE_PUBLIC` | 0 | 1 = visitors also see the money totals |
 | `TRUST_PROXY` | 1 | Use the reverse proxy's forwarded address and https. 0 = off |
