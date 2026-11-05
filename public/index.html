@@ -128,10 +128,22 @@ dialog::backdrop{background:#000b}
 @media (prefers-reduced-motion:reduce){.lens{animation:none}.bar i{transition:none}}
 @media (max-width:520px){h1{font-size:1.1rem}.legend{margin-left:0}}
 .ro-mode [data-do="any"],.ro-mode [data-do="art"],.ro-mode [data-do="have"]{pointer-events:none}
-.ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn{display:none!important}
+.ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn,.ro-mode #nameBtn{display:none!important}
 .ro-mode button:disabled{opacity:1}
 #roTag{display:none;margin-left:10px;padding:2px 9px;border-radius:99px;background:var(--screen);color:var(--lcd);font:700 .7rem var(--head);letter-spacing:.08em;text-transform:uppercase;vertical-align:middle}
 .ro-mode #roTag{display:inline-block}
+.trainer{display:flex;align-items:center;gap:8px;background:#0003;border-radius:999px;padding:4px 6px 4px 12px;font:700 .72rem var(--head);letter-spacing:.1em;text-transform:uppercase}
+.trainer select{padding:4px 10px;border-radius:999px;font:600 .9rem var(--head);letter-spacing:0;text-transform:none;max-width:230px}
+#meTag{font:500 .78rem system-ui,sans-serif;letter-spacing:0;text-transform:none;color:#fff}
+#meTag a{color:#fff}
+.no-admin [data-do="mark"]{display:none!important}
+.accrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.accrow b{flex:1 1 140px}
+.accrow span{color:var(--muted);font-size:.8rem}
+#accdlg,#namedlg,#lgdlg{max-width:min(560px,95vw)}
+#accForm,#nameForm{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+#accForm input,#nameForm input{flex:1 1 180px;background:var(--screen);color:var(--lcd)}
+.pwshow{font:600 .95rem var(--mono);color:var(--lcd);background:var(--screen);padding:2px 8px;border-radius:6px;user-select:all}
 #lgdlg input{width:100%;box-sizing:border-box;padding:8px;margin:8px 0;background:var(--screen);color:var(--lcd);border:1px solid var(--line);border-radius:6px;font:.85rem monospace}
 
 a{color:var(--lcd)}
@@ -151,6 +163,7 @@ a{color:var(--lcd)}
     <div class="lens" aria-hidden="true"></div>
     <div class="leds" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
     <h1>Dex Art Tracker<span id="roTag">View only</span></h1>
+    <div class="trainer"><label for="dexSel">Dex of</label><select id="dexSel"></select><span id="meTag" hidden></span></div>
     <div class="legend" aria-label="Legend">
       <span><i class="dot r"></i>nothing yet</span><span><i class="dot y"></i>have a card</span><span><i class="dot g"></i>have the art card</span>
     </div>
@@ -195,7 +208,8 @@ a{color:var(--lcd)}
     <option value="us">$ TCGplayer</option>
   </select>
   <button id="refresh" type="button" title="Checks up to 25 missing cards or the oldest prices">Refresh prices</button>
-  <button id="logoutBtn" type="button" title="Log out of the owner account">Log out</button>
+  <button id="nameBtn" type="button" title="Change the name of your dex">Trainer name</button>
+  <button id="logoutBtn" type="button" title="Log out of this dex">Log out</button>
 </div>
 <div id="gens"></div>
 <div id="status">Loading…</div>
@@ -217,7 +231,7 @@ a{color:var(--lcd)}
 </dialog>
 <dialog id="lgdlg">
   <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
-    <strong style="font:800 1.05rem var(--head)">Owner login</strong>
+    <strong id="lgTitle" style="font:800 1.05rem var(--head)">Log in</strong>
     <button id="lgClose" type="button">Close</button>
   </div>
   <form id="lgForm" style="margin-top:8px">
@@ -225,15 +239,46 @@ a{color:var(--lcd)}
     <div style="display:flex;gap:8px;align-items:center"><button id="lgGo" type="submit">Log in</button><span id="lgMsg" style="color:var(--muted);font-size:.85rem"></span></div>
   </form>
 </dialog>
+<dialog id="namedlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong style="font:800 1.05rem var(--head)">Trainer name</strong>
+    <button id="nameClose" type="button">Close</button>
+  </div>
+  <form id="nameForm">
+    <input id="nameIn" maxlength="30" autocomplete="off" aria-label="Trainer name">
+    <button type="submit">Save</button>
+  </form>
+  <div id="nameMsg" style="color:var(--muted);font-size:.85rem;margin-top:6px"></div>
+</dialog>
+<dialog id="accdlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong style="font:800 1.05rem var(--head)">Accounts</strong>
+    <button id="accClose" type="button">Close</button>
+  </div>
+  <p style="color:var(--muted);font-size:.85rem;margin:8px 0 0">Every account has its own dex. Give the trainer their password; they log in by opening their dex and clicking the blue lens, and can change their trainer name themselves.</p>
+  <form id="accForm">
+    <input id="accName" maxlength="30" autocomplete="off" placeholder="Trainer name" aria-label="Trainer name">
+    <input id="accPw" autocomplete="new-password" placeholder="Password (empty = make one up)" aria-label="Password">
+    <button type="submit">Add account</button>
+  </form>
+  <div id="accMsg" style="font-size:.85rem;margin-top:8px" aria-live="polite"></div>
+  <div id="accList" style="margin-top:6px"></div>
+</dialog>
 <dialog id="lb"><div id="lbBody"></div><button id="lbClose" type="button">Close</button></dialog>
 
 <script>
 (function(){
 var RO=!!window.DEX_READONLY, HIDEV=!!window.DEX_HIDE_VALUE, LOGIN=!!window.DEX_LOGIN, AUTH=!!window.DEX_AUTH;
+var CFG=window.DEX_CFG||{dex:'main',accounts:[{id:'main',name:'Owner'}],me:null};
+var DEX=CFG.dex, ME=CFG.me, ADMIN=!!(ME&&ME.admin);
+function accName(id){ for(var i=0;i<CFG.accounts.length;i++) if(CFG.accounts[i].id===id) return CFG.accounts[i].name; return id; }
+var DEXNAME=accName(DEX);
+if(!ADMIN) document.body.classList.add('no-admin');
+document.title=DEXNAME+"'s dex · Dex Art Tracker";
 if(RO){
   document.body.classList.add('ro-mode');
-  document.title='Pokémon art card collection (view only)';
-  if(LOGIN){ var lens=document.querySelector('.lens'); lens.removeAttribute('aria-hidden'); lens.setAttribute('role','button'); lens.setAttribute('tabindex','0'); lens.setAttribute('aria-label','Owner login'); lens.style.cursor='pointer'; }
+  document.title=DEXNAME+"'s dex (view only)";
+  if(LOGIN){ var lens=document.querySelector('.lens'); lens.removeAttribute('aria-hidden'); lens.setAttribute('role','button'); lens.setAttribute('tabindex','0'); lens.setAttribute('aria-label','Log in to '+DEXNAME+"'s dex"); lens.title='Log in to '+DEXNAME+"'s dex"; lens.style.cursor='pointer'; }
   if(HIDEV){ ['roWorth','roCost'].forEach(function(i){ var e=document.getElementById(i); if(e) e.style.display='none'; }); }
 }
 'use strict';
@@ -340,7 +385,7 @@ async function loadData(){
 }
 async function loadState(){
   var s=null;
-  try{ s=await getJSON('api/state'); }catch(e){}
+  try{ s=await getJSON('api/state?dex='+encodeURIComponent(DEX)); }catch(e){}
   if(s&&s.own) st={own:s.own,cards:s.cards||{},pick:s.pick||{},cur:s.cur||'eu'};
   $('cur').value=st.cur;
 }
@@ -349,7 +394,7 @@ function save(){
   if(RO) return;
   clearTimeout(saveTimer);
   saveTimer=setTimeout(function(){
-    fetch('api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(st)}).then(function(r){ if(r.status===401) location.reload(); }).catch(function(){});
+    fetch('api/state?dex='+encodeURIComponent(DEX),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(st)}).then(function(r){ if(r.status===401||r.status===403) location.reload(); }).catch(function(){});
   },400);
 }
 
@@ -725,6 +770,7 @@ document.addEventListener('click',function(e){
   var t=e.target.closest('[data-do]'); if(!t) return;
   var a=t.dataset.do, n=+t.dataset.n, id=t.dataset.id;
   if(RO&&/^(any|art|have|main|mark|getp)$/.test(a)) return;
+  if(!ADMIN&&a==='mark') return;
   if(a==='any'){
     if(artOwned(n)) return;
     if(anyOwned(n)){
@@ -820,7 +866,7 @@ $('refresh').addEventListener('click',async function(){
   }
   pollRefresh();
 });
-function openLogin(){ $('lgMsg').textContent=''; $('lgPw').value=''; $('lgdlg').showModal(); $('lgPw').focus(); }
+function openLogin(){ $('lgTitle').textContent='Log in to '+DEXNAME+"'s dex"; $('lgMsg').textContent=''; $('lgPw').value=''; $('lgdlg').showModal(); $('lgPw').focus(); }
 if(LOGIN){
   var lensEl=document.querySelector('.lens');
   lensEl.addEventListener('click',openLogin);
@@ -829,10 +875,76 @@ if(LOGIN){
 $('lgClose').addEventListener('click',function(){ $('lgdlg').close(); });
 $('lgForm').addEventListener('submit',async function(e){
   e.preventDefault(); $('lgMsg').textContent='…';
-  try{ await post('api/login',{password:$('lgPw').value}); location.reload(); }
+  try{ await post('api/login',{dex:DEX,password:$('lgPw').value}); location.reload(); }
   catch(err){ $('lgMsg').textContent=err.status===429?'Too many tries. Wait 15 minutes.':'Wrong password.'; }
 });
 $('logoutBtn').addEventListener('click',async function(){ try{ await post('api/logout'); }catch(e){} location.reload(); });
+
+/* ---------- dex picker, trainer name, accounts ---------- */
+function dexUrl(id){ return location.pathname+'?dex='+encodeURIComponent(id)+location.hash; }
+function fillDexSel(){
+  var h=CFG.accounts.map(function(a){ return '<option value="'+esc(a.id)+'">'+esc(a.name)+(ME&&ME.id===a.id?' (you)':'')+'</option>'; });
+  if(ADMIN) h.push('<option disabled>──────────</option><option value="__add">+ Add account…</option><option value="__manage">Manage accounts…</option>');
+  $('dexSel').innerHTML=h.join(''); $('dexSel').value=DEX;
+}
+fillDexSel();
+if(ME&&ME.id!==DEX){ $('meTag').hidden=false; $('meTag').innerHTML='Logged in as '+esc(ME.name)+' · <a href="'+esc(dexUrl(ME.id))+'">your dex</a>'; }
+$('dexSel').addEventListener('change',function(){
+  var v=$('dexSel').value;
+  if(v==='__add'||v==='__manage'){ $('dexSel').value=DEX; openAccounts(v==='__add'); return; }
+  if(v!==DEX) location.href=dexUrl(v);
+});
+$('nameBtn').addEventListener('click',function(){ $('nameIn').value=ME?ME.name:''; $('nameMsg').textContent=''; $('namedlg').showModal(); $('nameIn').focus(); });
+$('nameClose').addEventListener('click',function(){ $('namedlg').close(); });
+$('nameForm').addEventListener('submit',async function(e){
+  e.preventDefault(); $('nameMsg').textContent='…';
+  try{ await post('api/account/name',{name:$('nameIn').value}); location.reload(); }
+  catch(err){ if(err.status===401){ location.reload(); return; } $('nameMsg').textContent=err.message; }
+});
+var accDirty=false, accArmed=null;
+function accSay(html){ $('accMsg').innerHTML=html; }
+async function loadAccounts(){
+  var list;
+  try{ list=await getJSON('api/admin/accounts'); }catch(e){ accSay(esc(e.message)); return; }
+  $('accList').innerHTML=list.map(function(a){
+    var del=accArmed&&accArmed.key==='del:'+a.id&&Date.now()-accArmed.t<4000;
+    return '<div class="accrow"><b>'+esc(a.name)+'</b>'+
+      (a.main?'<span>main admin</span>':
+      '<span>added '+esc(new Date(a.created).toLocaleDateString())+'</span>'+
+      '<button type="button" class="mini" data-acc="pw" data-id="'+esc(a.id)+'" data-name="'+esc(a.name)+'">New password</button>'+
+      '<button type="button" class="mini'+(del?' arm':'')+'" data-acc="del" data-id="'+esc(a.id)+'" data-name="'+esc(a.name)+'">'+(del?'Really delete?':'Delete')+'</button>')+
+      '<a class="mini" href="'+esc(dexUrl(a.id))+'">open dex</a></div>';
+  }).join('');
+}
+function openAccounts(add){
+  accSay(''); $('accName').value=''; $('accPw').value='';
+  $('accdlg').showModal(); loadAccounts();
+  if(add) $('accName').focus();
+}
+$('accClose').addEventListener('click',function(){ $('accdlg').close(); });
+$('accdlg').addEventListener('close',function(){ if(accDirty) location.reload(); });
+$('accForm').addEventListener('submit',async function(e){
+  e.preventDefault(); accSay('…');
+  try{
+    var r=await post('api/admin/accounts',{name:$('accName').value,password:$('accPw').value});
+    accDirty=true; $('accName').value=''; $('accPw').value='';
+    accSay('Added <b>'+esc(r.name)+'</b>. Password: <span class="pwshow">'+esc(r.password)+'</span> (write it down, it is not shown again).');
+    loadAccounts();
+  }catch(err){ accSay(esc(err.message)); }
+});
+$('accList').addEventListener('click',async function(e){
+  var b=e.target.closest('[data-acc]'); if(!b) return;
+  var id=b.dataset.id, nm=b.dataset.name;
+  if(b.dataset.acc==='del'){
+    if(!(accArmed&&accArmed.key==='del:'+id&&Date.now()-accArmed.t<4000)){ accArmed={key:'del:'+id,t:Date.now()}; loadAccounts(); setTimeout(loadAccounts,4100); return; }
+    accArmed=null;
+    try{ await post('api/admin/accounts/delete',{id:id}); accDirty=true; accSay('Deleted <b>'+esc(nm)+'</b>.'); }catch(err){ accSay(esc(err.message)); }
+    loadAccounts();
+  } else if(b.dataset.acc==='pw'){
+    try{ var r=await post('api/admin/accounts/password',{id:id}); accSay('New password for <b>'+esc(nm)+'</b>: <span class="pwshow">'+esc(r.password)+'</span> (they are logged out everywhere).'); }
+    catch(err){ accSay(esc(err.message)); }
+  }
+});
 $('exp').addEventListener('click',function(){
   var b=$('bk'); b.hidden=false; b.value=JSON.stringify(st); b.select();
 });
