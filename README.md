@@ -203,6 +203,7 @@ Saved on the server (`state.json` for the main admin, `states/<id>.json` for oth
 | `SCAN_AI_MODEL` | per service | Model to use (must understand images) |
 | `SCAN_AI_URL` | per service | Address of a local AI server (or another endpoint), including `/v1` |
 | `SCAN_AI_TIMEOUT` | 45 | Seconds to wait for the AI |
+| `SCAN_AI_BACKUP_MODEL` | `gemini-flash-lite-latest` for Gemini, none for others | Model to use when the main one is busy or out of quota (comma-separated for more, `none` to switch off). A busy model is tried 3 times first. |
 | `SCAN_DEBUG` | 0 | 1 = log what each scan found and read |
 
 ## Limits

@@ -149,7 +149,9 @@ dialog::backdrop{background:#000b}
 #bk{width:100%;min-height:90px;font:12px var(--mono);background:var(--screen);border:1px solid var(--line);color:var(--lcd);border-radius:8px;padding:8px}
 @media (prefers-reduced-motion:reduce){.lens{animation:none}.bar i{transition:none}}
 @media (max-width:520px){h1{font-size:1.1rem}.legend{margin-left:0}}
-.ro-mode [data-do="any"],.ro-mode [data-do="art"],.ro-mode [data-do="have"]{pointer-events:none}
+.ro-mode [data-do="any"],.ro-mode [data-do="art"],.ro-mode [data-do="have"]{opacity:.75}
+#toast{position:fixed;inset:auto 0 18px 0;margin:0 auto;width:max-content;max-width:min(92vw,460px);padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text);font-size:.92rem;box-shadow:0 6px 24px #0008;text-align:center}
+#toast:not(:popover-open):not(.show){display:none}
 .ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode [data-do="unwish"],.ro-mode [data-do="wish"],.ro-mode #pwBtn,.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn,.ro-mode #nameBtn{display:none!important}
 /* scanning */
 /* logged in to your own dex: the lens opens the scanner (small camera mark on it) */
@@ -538,6 +540,7 @@ a{color:var(--lcd)}
 </dialog>
 <dialog id="lb"><div id="lbBody"></div><button id="lbClose" type="button">Close</button></dialog>
 
+<div id="toast" popover="manual" role="status"></div>
 <script>
 (function(){
 var RO=!!window.DEX_READONLY, HIDEV=!!window.DEX_HIDE_VALUE, LOGIN=!!window.DEX_LOGIN, AUTH=!!window.DEX_AUTH;
@@ -1176,10 +1179,23 @@ async function markArt(id,art){
   if(curSet) await openSet(curSet,true);
   refresh();
 }
+var toastTimer=null;
+function toast(t){ // shown above everything, the card dialog included
+  var el=$('toast'); el.textContent=t; clearTimeout(toastTimer);
+  try{ el.hidePopover(); el.showPopover(); }catch(e){ el.classList.add('show'); }
+  toastTimer=setTimeout(function(){ try{ el.hidePopover(); }catch(e){} el.classList.remove('show'); },4500);
+}
+// Clicking Have it / Any card / Art card on a dex you are not logged in to: say why nothing changes.
+function readOnlyHint(){
+  if(ME&&ME.id!==DEX) toast('This is '+DEXNAME+"'s dex. Switch to your own dex under \"Dex of\" to mark cards.");
+  else if(LOGIN){ toast('Log in to '+DEXNAME+"'s dex to mark cards."); openLogin(); }
+  else toast(DEXNAME+"'s dex is view-only on this address. Open it without /view/ and log in to mark cards.");
+}
 document.addEventListener('click',function(e){
   var t=e.target.closest('[data-do]'); if(!t) return;
   var a=t.dataset.do, n=+t.dataset.n, id=t.dataset.id;
-  if(RO&&/^(any|art|have|main|unwish|wish|mark|getp)$/.test(a)) return;
+  if(RO&&/^(any|art|have)$/.test(a)){ readOnlyHint(); return; }
+  if(RO&&/^(main|unwish|wish|mark|getp)$/.test(a)) return;
   if(!ADMIN&&(a==='mark'||a==='pic')) return;
   if(a==='any'){
     if(artOwned(n)) return;
@@ -1380,7 +1396,7 @@ function reviewItemHTML(it){
   var state=it.error?'none':(!c?'none':(it.sure?'sure':'check'));
   var chip=it.error?'Scan failed':(!c?'No match':(it.sure?'Sure':'Check this'));
   var rd=it.read||{}, said=[rd.name?'"'+rd.name+'"':'',rd.number||''].filter(Boolean).join(' · ');
-  var h='<div class="rv-item rv-'+state+(it.include?'':' rv-off')+'" data-key="'+esc(it.key)+'">'+
+  var h='<div class="rv-item rv-'+state+'" data-key="'+esc(it.key)+'">'+
     '<div class="rv-photo">'+(it.thumb?'<img src="'+esc(it.thumb)+'" alt="Your photo">':'<div class="ph"><i class="ball"></i></div>')+'<span>Photo '+esc(it.photo||'')+'</span></div>'+
     '<div class="rv-arrow">→</div>'+
     '<div class="rv-card">'+(c?'<div class="pic">'+picHTML(c,false)+'</div>':'<div class="pic"><div class="ph"><i class="ball"></i><span>'+esc(it.error||it.note||'No match')+'</span></div></div>')+'</div>'+
@@ -1389,7 +1405,7 @@ function reviewItemHTML(it){
       (said?'<span class="rv-said">Read: '+esc(said)+(it.ai?' (AI)':'')+'</span>':'')+
     '</div>'+
     '<div class="rv-actions">'+
-      (c?'<button type="button" data-rv="inc" class="'+(it.include?'on':'')+'">'+(it.include?'✓ Add':'Skip')+'</button>':'')+
+      (c?'<button type="button" data-rv="add" class="on">'+(owned(c.id)?'Got it, remove':'Add to my dex')+'</button>':'')+
       '<button type="button" data-rv="chg"'+(open?' class="on"':'')+'>'+(c?'Change':'Pick card')+'</button>'+
       '<button type="button" data-rv="del" title="Remove from the list">✕</button>'+
     '</div>';
@@ -1418,9 +1434,9 @@ function searchHTML(q){
   return out.length?out.slice(0,24).map(altHTML).join('')+(out.length>24?'<p class="rv-hint">'+out.length+' found: type more to narrow it down.</p>':''):'<p class="rv-hint">No card found.</p>';
 }
 function renderReview(){
-  var add=review.filter(function(it){ return it.include&&it.chosen; }).length, check=review.filter(function(it){ return it.chosen&&!it.sure; }).length;
+  var add=review.filter(function(it){ return it.chosen; }).length, check=review.filter(function(it){ return it.chosen&&!it.sure; }).length;
   $('rvHead').textContent=review.length?(review.length+' scanned card'+(review.length===1?'':'s')+(check?' · '+check+' to check':'')):'Nothing scanned yet.';
-  $('rvAdd').textContent='Add '+add+' to my dex'; $('rvAdd').disabled=!add;
+  $('rvAdd').textContent=add>1?'Add all '+add+' to my dex':'Add '+add+' to my dex'; $('rvAdd').disabled=!add;
   $('rvClear').hidden=!review.length;
   var scroll=$('rvList').scrollTop;
   $('rvList').innerHTML=review.length?review.slice().reverse().map(reviewItemHTML).join(''):'<p class="rv-hint">Take photos with the lens; the cards found appear here to check.</p>';
@@ -1434,7 +1450,14 @@ $('rvList').addEventListener('click',function(e){
   var b=e.target.closest('[data-rv]'); if(!b) return;
   var row=b.closest('.rv-item'), it=row&&review.find(function(x){ return x.key===row.dataset.key; }); if(!it) return;
   var a=b.dataset.rv;
-  if(a==='inc') it.include=!it.include;
+  if(a==='add'){ // this one card: into the dex now, off the list
+    var had=owned(it.chosen), cn=(cardFor(it.chosen)||{}).n||'Card';
+    if(!had) st.cards[it.chosen]=1;
+    review=review.filter(function(x){ return x!==it; }); if(rvOpen===it.key) rvOpen=null;
+    if(!had){ save(); refresh(); }
+    var m=had?cn+' was already in your dex.':cn+' added to your dex.';
+    $('rvMsg').textContent=m; toast(m);
+  }
   else if(a==='chg'){ rvOpen=rvOpen===it.key?null:it.key; rvQuery=''; }
   else if(a==='del'){ review=review.filter(function(x){ return x!==it; }); if(rvOpen===it.key) rvOpen=null; }
   else if(a==='pick'){ it.chosen=b.dataset.id; it.include=true; it.sure=true; it.picked=true; it.error=null; rvOpen=null; } // picked by hand: counts as sure
@@ -1446,10 +1469,11 @@ $('rvList').addEventListener('input',function(e){
 });
 $('rvAdd').addEventListener('click',function(){
   var n=0, had=0;
-  review.forEach(function(it){ if(it.include&&it.chosen){ if(owned(it.chosen)) had++; else { st.cards[it.chosen]=1; n++; } it.done=true; } });
+  review.forEach(function(it){ if(it.chosen){ if(owned(it.chosen)) had++; else { st.cards[it.chosen]=1; n++; } it.done=true; } });
   review=review.filter(function(it){ return !it.done; });
   save(); saveReview(); refresh(); renderReview(); queueStatus();
-  $('rvMsg').textContent=n+' card'+(n===1?'':'s')+' added to your dex'+(had?' ('+had+' you already had)':'')+'.';
+  var m=n+' card'+(n===1?'':'s')+' added to your dex'+(had?' ('+had+' you already had)':'')+'.';
+  $('rvMsg').textContent=m; toast(m);
 });
 $('rvClear').addEventListener('click',function(){
   if(!$('rvClear').classList.contains('arm')){ $('rvClear').classList.add('arm'); $('rvClear').textContent='Really clear the list?'; setTimeout(function(){ $('rvClear').classList.remove('arm'); $('rvClear').textContent='Clear list'; },4000); return; }

@@ -918,7 +918,7 @@ async function ocrWorker() {
   const { createWorker } = require('tesseract.js');
   const langPath = path.join(path.dirname(require.resolve('@tesseract.js-data/eng/package.json')), '4.0.0_best_int');
   ocr = await createWorker('eng', 1, { langPath, cacheMethod: 'none', gzip: true });
-  await ocr.setParameters({ tessedit_pageseg_mode: '11' }); // sparse text: lines anywhere in the area
+  await ocr.setParameters({ tessedit_pageseg_mode: '11', user_defined_dpi: '300' }); // sparse text: lines anywhere in the area
   return ocr;
 }
 function ocrRelease() { // free the reader's memory again after 10 quiet minutes
@@ -1156,7 +1156,7 @@ async function readCard(card) {
 // SCAN_AI_MODEL the model (it must understand images), SCAN_AI_URL the address of a local server.
 // The AI only reads what is printed on the card; finding the card in the database stays on this server.
 const AI_DEFAULTS = {
-  gemini: { model: 'gemini-flash-latest', url: 'https://generativelanguage.googleapis.com/v1beta' },
+  gemini: { model: 'gemini-flash-latest', backup: 'gemini-flash-lite-latest', url: 'https://generativelanguage.googleapis.com/v1beta' },
   openai: { model: 'gpt-5-mini', url: 'https://api.openai.com/v1' },
   claude: { model: 'claude-haiku-5-5', url: 'https://api.anthropic.com/v1' },
   mistral: { model: 'mistral-small-latest', url: 'https://api.mistral.ai/v1' },
@@ -1172,7 +1172,9 @@ const AI = AI_NAME ? {
   url: String(process.env.SCAN_AI_URL || AI_DEFAULTS[AI_NAME].url || '').replace(/\/+$/, ''),
   timeout: (+process.env.SCAN_AI_TIMEOUT || 45) * 1000,
 } : null;
-if (AI) log('scanning: cards are read by ' + AI.name + ' (' + AI.model + ')' + (AI.key || AI.name === 'local' ? '' : ' - SCAN_AI_KEY is not set'));
+// a second model to use when the first is busy or out of quota (comma-separated for more; "none" for none)
+if (AI) AI.backup = String(process.env.SCAN_AI_BACKUP_MODEL || AI_DEFAULTS[AI.name].backup || '').split(',').map(x => x.trim()).filter(x => x && x !== 'none' && x !== AI.model);
+if (AI) log('scanning: cards are read by ' + AI.name + ' (' + AI.model + (AI.backup.length ? ', backup ' + AI.backup.join(', ') : '') + ')' + (AI.key || AI.name === 'local' ? '' : ' - SCAN_AI_KEY is not set'));
 
 const AI_FIELDS = '"name": the card name exactly as printed at the top, with suffixes like ex, V, VMAX, VSTAR or GX (for a Trainer or Energy card: its title); '
   + '"number": the collector number exactly as printed, usually small at the bottom left or bottom right, for example "201/198", "TG05/TG30", "GG09/GG70", "SWSH050" or "050", or null if you cannot read it; '
@@ -1189,33 +1191,61 @@ function aiJson(text) {
   if (a < 0 || b <= a) throw new Error('the AI did not answer with JSON');
   return JSON.parse(t.slice(a, b + 1));
 }
-async function aiAsk(jpeg, prompt) {
+async function aiAskOnce(jpeg, prompt, model) {
   const b64 = jpeg.toString('base64'), dataUrl = 'data:image/jpeg;base64,' + b64;
   const opts = (headers, body) => ({ method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json', 'User-Agent': 'dex-art-tracker' }, headers), body: JSON.stringify(body), signal: AbortSignal.timeout(AI.timeout) });
   let r, j;
   if (AI.name === 'gemini') {
-    r = await fetch(AI.url + '/models/' + encodeURIComponent(AI.model) + ':generateContent', opts({ 'x-goog-api-key': AI.key },
+    r = await fetch(AI.url + '/models/' + encodeURIComponent(model) + ':generateContent', opts({ 'x-goog-api-key': AI.key },
       { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: 'image/jpeg', data: b64 } }] }], generationConfig: { responseMimeType: 'application/json' } }));
     j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error('Gemini: ' + ((j.error && j.error.message) || 'HTTP ' + r.status));
+    if (!r.ok) throw aiErr(r.status, 'Gemini: ' + ((j.error && j.error.message) || 'HTTP ' + r.status));
     return ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('');
   }
   if (AI.name === 'claude') {
     r = await fetch(AI.url + '/messages', opts({ 'x-api-key': AI.key, 'anthropic-version': '2023-06-01' },
-      { model: AI.model, max_tokens: 600, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } }, { type: 'text', text: prompt }] }] }));
+      { model, max_tokens: 600, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } }, { type: 'text', text: prompt }] }] }));
     j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error('Claude: ' + ((j.error && j.error.message) || 'HTTP ' + r.status));
+    if (!r.ok) throw aiErr(r.status, 'Claude: ' + ((j.error && j.error.message) || 'HTTP ' + r.status));
     return (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
   }
   // OpenAI, OpenRouter, Mistral and local servers: the OpenAI-style chat completions request
   const image = AI.name === 'mistral' ? dataUrl : { url: dataUrl };
   const headers = AI.key ? { Authorization: 'Bearer ' + AI.key } : {};
   if (AI.name === 'openrouter') Object.assign(headers, { 'X-Title': 'Dex Art Tracker' });
-  r = await fetch(AI.url + '/chat/completions', opts(headers, { model: AI.model, messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: image }] }] }));
+  r = await fetch(AI.url + '/chat/completions', opts(headers, { model, messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: image }] }] }));
   j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(AI.name + ': ' + ((j.error && (j.error.message || j.error)) || 'HTTP ' + r.status));
+  if (!r.ok) throw aiErr(r.status, AI.name + ': ' + ((j.error && (j.error.message || j.error)) || 'HTTP ' + r.status));
   const c = ((j.choices || [])[0] || {}).message || {};
   return Array.isArray(c.content) ? c.content.map(p => p.text || '').join('') : String(c.content || '');
+}
+function aiErr(status, msg) {
+  const e = new Error(msg); e.status = status;
+  // busy for a moment (worth trying again) versus out of quota for the day (try the backup model straight away)
+  e.busy = (status === 429 || status >= 500 || /high demand|overloaded|unavailable|try again/i.test(msg)) && !/quota|exhausted|per day|billing/i.test(msg);
+  e.quota = status === 429 && !e.busy;
+  return e;
+}
+// Asks the chosen model; when it is busy it tries again twice (after 2 and 5 seconds),
+// then the backup model(s) from SCAN_AI_BACKUP_MODEL.
+async function aiAsk(jpeg, prompt) {
+  let last;
+  for (const model of [AI.model, ...AI.backup]) {
+    for (const wait of [0, 2000, 5000]) {
+      if (wait) await sleep(wait);
+      try {
+        const out = await aiAskOnce(jpeg, prompt, model);
+        if (model !== AI.model) slog('AI: answered by backup model', model);
+        return out;
+      } catch (e) {
+        last = e;
+        if (!e.busy) break; // a wrong key, unknown model or used-up quota: waiting will not help
+        slog('AI:', model, 'is busy', wait ? '(again)' : '');
+      }
+    }
+    if (last && !last.busy && !last.quota && !(last.status === 404)) throw last; // e.g. a wrong key: the backup would fail too
+  }
+  throw last;
 }
 // What the AI read, in the same shape as the built-in reader's result.
 function aiRead(o) {

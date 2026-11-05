@@ -43,6 +43,13 @@ services:
       # PROXY_HOPS: "1"
       # Card scanning in the app (reads the card with Tesseract on this server). "0" switches it off.
       # SCAN: "1"
+      # Let an AI read the cards (much better than the built-in reader): gemini, openai, claude, mistral, openrouter or local.
+      # SCAN_AI: "gemini"
+      # SCAN_AI_KEY: "your-api-key"
+      # SCAN_AI_MODEL: "gemini-flash-latest"
+      # SCAN_AI_BACKUP_MODEL: "gemini-flash-lite-latest"   # used when the main model is busy
+      # For a local model (Ollama, LM Studio, llama.cpp), the address including /v1:
+      # SCAN_AI_URL: "http://host.docker.internal:11434/v1"
       # TRUST_PROXY: "0"
       # Extra rarities that count as art cards in every language (Japanese cards numbered above the set size always count too).
       # EXTRA_RARITIES: "Mega Hyper Rare,Ultra Rare,Holo Rare"
