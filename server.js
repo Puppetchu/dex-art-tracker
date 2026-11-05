@@ -1102,7 +1102,15 @@ async function cardOutlines(rgba, W, H) {
 }
 // The card inside four corners, straightened to CARD_W x CARD_H (with 4.5% room around it).
 async function straighten(rgba, W, H, q, grow) {
-  const { cv } = await cvReady();
+  let cv;
+  try { ({ cv } = await cvReady()); }
+  catch (e) { // no OpenCV: cut the (upright) box out without correcting perspective
+    const xs = q.pts.map(z => z.x), ys = q.pts.map(z => z.y);
+    const left = Math.max(0, Math.floor(Math.min(...xs))), top = Math.max(0, Math.floor(Math.min(...ys)));
+    const width = Math.min(W - left, Math.ceil(Math.max(...xs)) - left), height = Math.min(H - top, Math.ceil(Math.max(...ys)) - top);
+    return sharp(Buffer.from(rgba.buffer, rgba.byteOffset, rgba.byteLength), { raw: { width: W, height: H, channels: 4 } })
+      .extract({ left, top, width, height }).resize(CARD_W, CARD_H, { fit: 'fill' }).removeAlpha().png().toBuffer();
+  }
   let p = q.pts; if (q.landscape) p = [p[3], p[0], p[1], p[2]]; // lying sideways: turn upright
   const cx = p.reduce((s, z) => s + z.x, 0) / 4, cy = p.reduce((s, z) => s + z.y, 0) / 4;
   p = p.map(z => ({ x: cx + (z.x - cx) * grow, y: cy + (z.y - cy) * grow }));
@@ -1293,6 +1301,7 @@ function matchOut(x, best, second) {
   });
 }
 const useful = m => m.list.length && (m.list[0].numHit || m.list[0].nameHit >= 0.6 || m.list[0].dexHit >= 0.6 || (m.list[0].pic != null && m.list[0].pic > 0.6));
+let cvMissingLogged = false;
 async function scanPhoto(buf) {
   const base = await checkedImage(buf);
   // find the cards on a 1400 px copy; straighten them from a sharper copy
@@ -1301,7 +1310,9 @@ async function scanPhoto(buf) {
   const k = big.info.width / small.info.width, bigData = new Uint8ClampedArray(big.data);
   const scaleQ = q => ({ landscape: q.landscape, pts: q.pts.map(p => ({ x: p.x * k, y: p.y * k })) });
   let t0 = Date.now();
-  let groups = await cardOutlines(new Uint8ClampedArray(small.data), small.info.width, small.info.height);
+  let groups = [];
+  try { groups = await cardOutlines(new Uint8ClampedArray(small.data), small.info.width, small.info.height); }
+  catch (e) { if (!cvMissingLogged) { cvMissingLogged = true; log('card finder unavailable (' + e.message.split('\n')[0] + '); reading the middle of the photo instead. Rebuild the container with the current package.json.'); } }
   slog('outlines:', groups.length, 'groups', groups.map(g => g.length).join(','), Date.now() - t0, 'ms');
   const found = [];
   if (!groups.length) { // no outline found: the middle of the photo, card-shaped (as framed by the camera guide)
@@ -1852,7 +1863,7 @@ const server = http.createServer(async (req, res) => {
       const buf = Buffer.from(m[1], 'base64');
       if (buf.length > 6 * 1024 * 1024) return sendJSON(res, 400, { error: 'The photo is too large' });
       try { return sendJSON(res, 200, await runScan(buf)); }
-      catch (e) { log('scan failed:', e.message); return sendJSON(res, 400, { error: /tesseract|Cannot find module/i.test(e.message) ? 'Scanning is not installed on this server (rebuild the container)' : 'Could not read that photo: ' + e.message }); }
+      catch (e) { log('scan failed:', e.message); return sendJSON(res, 400, { error: /Cannot find module/i.test(e.message) ? 'Scanning is not fully installed on this server (' + (e.message.match(/'([^']+)'/) || [, 'a module'])[1] + ' is missing): rebuild the container with the current package.json' : 'Could not read that photo: ' + e.message.split('\n')[0] }); }
     }
     // Set a card's picture by hand (main admin): a picture address, or empty to go back to automatic.
     if (req.method === 'POST' && p === '/api/card/picture') {
