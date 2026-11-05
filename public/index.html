@@ -168,6 +168,46 @@ dialog::backdrop{background:#000b}
 .shutter:active{transform:scale(.92)}
 .shutter:disabled{opacity:.5;animation:none}
 #scanMsg{text-align:center;color:var(--muted);font-size:.86rem;margin-top:8px;min-height:1.2em}
+/* scan queue and check screen */
+.cam.flash::after{content:"";position:absolute;inset:0;background:#fff;animation:camflash .35s ease-out forwards;pointer-events:none}
+@keyframes camflash{from{opacity:.8}to{opacity:0}}
+.queuebar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;min-height:38px}
+#queueMsg{color:var(--lcd);font:600 .82rem var(--mono)}
+#reviewBtn{background:var(--shell);border-color:var(--shell-hi);color:#fff;border-radius:999px;padding:8px 16px;white-space:nowrap;flex:none}
+.rv-top{display:flex;gap:10px;align-items:center}
+.rv-bar{display:flex;gap:8px;align-items:center;margin:10px 0 6px}
+#rvAdd{flex:1;background:#17794a;border-color:var(--green);color:#fff;padding:10px}
+#rvAdd:disabled{background:var(--panel2);border-color:var(--line);color:var(--muted)}
+#rvClear.arm{background:var(--shell);color:#fff;border-color:var(--shell-hi)}
+#rvMsg{color:var(--lcd);font-size:.85rem;min-height:1.1em;margin-bottom:6px}
+#rvList{display:flex;flex-direction:column;gap:10px}
+.rv-item{display:grid;grid-template-columns:76px 14px 76px 1fr;gap:8px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-left:5px solid var(--yellow);border-radius:10px;padding:8px}
+.rv-item.rv-sure{border-left-color:var(--green)}.rv-item.rv-none{border-left-color:var(--red)}
+.rv-item.rv-off{opacity:.55}
+.rv-photo{display:flex;flex-direction:column;gap:2px;align-items:center}
+.rv-photo img{width:76px;aspect-ratio:5/7;object-fit:cover;border-radius:6px;display:block}
+.rv-photo span{font:.6rem var(--mono);color:var(--muted)}
+.rv-photo .ph,.rv-card .ph{padding:4px;font-size:.6rem}.rv-photo .ball,.rv-card .ball{width:24px;height:24px}
+.rv-arrow{color:var(--muted);text-align:center}
+.rv-card .pic{width:76px}
+.rv-info{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:.78rem}
+.rv-info b{font:700 .9rem var(--head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rv-info span{color:var(--muted)}
+.rv-chip{align-self:flex-start;font:700 .62rem var(--head)!important;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:#8a6d0c;color:#fff!important}
+.rv-sure .rv-chip{background:#17794a}.rv-none .rv-chip{background:#a11a2a}
+.rv-own{color:var(--lcd)!important}.rv-said{font:.68rem var(--mono)}
+.rv-info .price{font-size:.8rem}
+.rv-actions{grid-column:1/-1;display:flex;gap:6px}
+.rv-actions button{flex:1;padding:6px 4px;font-size:.78rem}
+.rv-actions button.on{background:#17794a;border-color:var(--green);color:#fff}
+.rv-actions [data-rv="del"]{flex:0 0 44px}
+.rv-change{grid-column:1/-1;border-top:1px solid var(--line);padding-top:6px}
+.rv-search{width:100%;margin:4px 0 6px;background:var(--screen);color:var(--lcd)}
+.rv-alts{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px}
+.rv-alt{display:flex;flex-direction:column;gap:3px;padding:5px;text-align:left;font-weight:500;font-size:.66rem;min-width:0}
+.rv-alt b{font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rv-alt span{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rv-alt .pic img{cursor:pointer}
+.rv-hint{grid-column:1/-1;color:var(--muted);font-size:.8rem;margin:4px 0}
 #scanRes .tile.best{border-color:var(--lens);box-shadow:0 0 0 1px var(--lens),0 0 14px #38bdf855}
 .why{display:flex;gap:4px;flex-wrap:wrap}.why span{font:600 .66rem var(--head);letter-spacing:.06em;text-transform:uppercase;background:var(--screen);color:var(--lcd);border-radius:999px;padding:2px 7px}
 .ro-mode button:disabled{opacity:1}
@@ -433,18 +473,29 @@ a{color:var(--lcd)}
   <div id="nameMsg" style="color:var(--muted);font-size:.85rem;margin-top:6px"></div>
 </dialog>
 <dialog id="scandlg">
-  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
-    <strong style="font:800 1.05rem var(--head)">Scan a card</strong>
-    <button id="scanClose" type="button">Close</button>
+  <div id="scanCam">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+      <strong style="font:800 1.05rem var(--head)">Scan cards</strong>
+      <button id="scanClose" type="button">Close</button>
+    </div>
+    <div id="camBox" class="cam"><video id="camVid" playsinline muted autoplay></video><div class="guide"></div></div>
+    <div class="scanbar">
+      <label class="mini" style="display:inline-flex;align-items:center;cursor:pointer">Use photos<input id="scanFile" type="file" accept="image/*" multiple hidden></label>
+      <button id="scanShot" type="button" class="shutter" aria-label="Take the picture" title="Take the picture"></button>
+      <button id="scanTorch" type="button" class="mini" hidden>Light</button>
+    </div>
+    <div id="scanMsg"></div>
+    <div class="queuebar"><span id="queueMsg" aria-live="polite"></span><button id="reviewBtn" type="button" hidden>Check →</button></div>
   </div>
-  <div id="camBox" class="cam"><video id="camVid" playsinline muted autoplay></video><div class="guide"></div></div>
-  <div class="scanbar">
-    <button id="scanShot" type="button" class="shutter" aria-label="Take the picture" title="Take the picture"></button>
-    <label class="mini" style="display:inline-flex;align-items:center;cursor:pointer">Use a photo<input id="scanFile" type="file" accept="image/*" capture="environment" hidden></label>
-    <button id="scanTorch" type="button" class="mini" hidden>Light</button>
+  <div id="scanReview" hidden>
+    <div class="rv-top">
+      <button id="rvBack" type="button">← Camera</button>
+      <strong id="rvHead" style="flex:1;font:800 1rem var(--head)"></strong>
+    </div>
+    <div class="rv-bar"><button id="rvAdd" type="button">Add to my dex</button><button id="rvClear" type="button" class="mini">Clear list</button></div>
+    <div id="rvMsg" aria-live="polite"></div>
+    <div id="rvList"></div>
   </div>
-  <div id="scanMsg">Hold one card in the frame, or lay several cards side by side. Straight on, without glare, so the card numbers are readable. Tap the lens to take the picture.</div>
-  <div id="scanRes" class="cgrid" style="margin-top:10px"></div>
 </dialog>
 <dialog id="picdlg">
   <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
@@ -730,7 +781,7 @@ function isArmed(key){ return armed&&armed.key===key&&Date.now()-armed.t<4000; }
 function arm(key){ armed={key:key,t:Date.now()}; setTimeout(function(){ if(armed&&armed.key===key) refresh(); },4100); }
 
 /* ---------- Pokémon view ---------- */
-function refresh(){ render(); if(dexOpen) fillDex(); if(scanLast&&$('scandlg').open) showScan(); }
+function refresh(){ render(); if(dexOpen) fillDex(); if(reviewOpen&&$('scandlg').open) renderReview(); }
 var GENS=[null,[1,151,'I','Kanto'],[152,251,'II','Johto'],[252,386,'III','Hoenn'],[387,493,'IV','Sinnoh'],[494,649,'V','Unova'],[650,721,'VI','Kalos'],[722,809,'VII','Alola'],[810,905,'VIII','Galar & Hisui'],[906,1025,'IX','Paldea']];
 function genOf(n){ for(var g=1;g<GENS.length;g++) if(n<=GENS[g][1]) return g; return GENS.length-1; }
 function render(){
@@ -1239,12 +1290,25 @@ $('lgForm').addEventListener('submit',async function(e){
   try{ await post('api/login',{dex:DEX,password:$('lgPw').value}); location.reload(); }
   catch(err){ $('lgMsg').textContent=err.status===429?'Too many tries. Wait 15 minutes.':'Wrong password.'; }
 });
-/* ---------- scanning ---------- */
-var scanStream=null, scanLast=null, scanMap={}, scanBusy=false;
+/* ---------- scanning: a queue of photos, then a screen to check what was found ---------- */
+// Every tap of the lens adds a photo to the queue; the photos are scanned one by one in the background while you
+// take the next. Every card found goes on the check list (kept on this device), where you confirm, change or skip
+// it, and then add the confirmed cards to your dex in one go.
+var scanStream=null, scanMap={}, scanJobs=[], jobSeq=0, jobsRunning=false, review=[], reviewOpen=false, rvOpen=null, rvQuery='';
+var reviewKey='dexScanReview:'+DEX;
+function loadReview(){
+  try{ review=JSON.parse(localStorage.getItem(reviewKey)||'[]'); }catch(e){ review=[]; }
+  if(!Array.isArray(review)) review=[];
+  review.forEach(function(it){ (it.matches||[]).forEach(function(m){ scanMap[m.id]=m; }); });
+}
+function saveReview(){
+  try{ localStorage.setItem(reviewKey,JSON.stringify(review)); }
+  catch(e){ try{ localStorage.setItem(reviewKey,JSON.stringify(review.map(function(it){ return Object.assign({},it,{thumb:null}); }))); }catch(e2){} } // full: keep the list without photos
+}
 async function startCam(){
   if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.isSecureContext)){
     $('camBox').hidden=true; $('scanShot').hidden=true;
-    $('scanMsg').textContent='The camera only works when this page is opened over https (your Pangolin address). You can still scan a photo with "Use a photo".';
+    $('scanMsg').textContent='The camera only works when this page is opened over https (your Pangolin address). You can still scan photos with "Use photos".';
     return;
   }
   try{
@@ -1252,56 +1316,153 @@ async function startCam(){
     $('camVid').srcObject=scanStream; $('camBox').hidden=false; $('scanShot').hidden=false;
     var tr=scanStream.getVideoTracks()[0], caps=tr&&tr.getCapabilities?tr.getCapabilities():{};
     $('scanTorch').hidden=!caps.torch;
-  }catch(e){ $('camBox').hidden=true; $('scanShot').hidden=true; $('scanMsg').textContent='No camera access ('+e.name+'). Allow the camera for this site, or scan a photo with "Use a photo".'; }
+  }catch(e){ $('camBox').hidden=true; $('scanShot').hidden=true; $('scanMsg').textContent='No camera access ('+e.name+'). Allow the camera for this site, or scan photos with "Use photos".'; }
 }
 function stopCam(){ if(scanStream){ scanStream.getTracks().forEach(function(t){ t.stop(); }); scanStream=null; } $('camVid').srcObject=null; }
 // The whole camera picture (the server finds the cards on it), at most 2000 px on the longest side.
-function grabFrame(){ var v=$('camVid'); if(!v.videoWidth) return null; return toJpeg(v,v.videoWidth,v.videoHeight); }
-function toJpeg(src,W,H){
-  var k=Math.min(1,2000/Math.max(W,H)), c=document.createElement('canvas'); c.width=Math.round(W*k); c.height=Math.round(H*k);
+function grabFrame(){ var v=$('camVid'); if(!v.videoWidth) return null; return toJpeg(v,v.videoWidth,v.videoHeight,2000,0.9); }
+function toJpeg(src,W,H,max,q){
+  var k=Math.min(1,max/Math.max(W,H)), c=document.createElement('canvas'); c.width=Math.round(W*k); c.height=Math.round(H*k);
   c.getContext('2d').drawImage(src,0,0,c.width,c.height);
-  return c.toDataURL('image/jpeg',0.9);
+  return c.toDataURL('image/jpeg',q);
 }
-function photoToJpeg(file){ // a photo taken earlier, as it is
-  return new Promise(function(ok,fail){
-    var im=new Image(), u=URL.createObjectURL(file);
-    im.onload=function(){ URL.revokeObjectURL(u); ok(toJpeg(im,im.naturalWidth,im.naturalHeight)); };
-    im.onerror=function(){ URL.revokeObjectURL(u); fail(new Error('That file is not a picture')); };
-    im.src=u;
+function loadImg(url){ return new Promise(function(ok,fail){ var im=new Image(); im.onload=function(){ ok(im); }; im.onerror=function(){ fail(new Error('That file is not a picture')); }; im.src=url; }); }
+async function photoToJpeg(file){ var u=URL.createObjectURL(file); try{ var im=await loadImg(u); return toJpeg(im,im.naturalWidth,im.naturalHeight,2000,0.9); } finally{ URL.revokeObjectURL(u); } }
+async function smallThumb(data){ try{ var im=await loadImg(data); return toJpeg(im,im.naturalWidth,im.naturalHeight,240,0.7); }catch(e){ return null; } }
+
+function queuePhoto(data){
+  if(!data) return;
+  scanJobs.push({n:++jobSeq,data:data,status:'waiting'});
+  var box=$('camBox'); box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash'); // a short flash: the photo was taken
+  queueStatus(); processJobs();
+}
+async function processJobs(){
+  if(jobsRunning) return; jobsRunning=true;
+  try{
+    for(;;){
+      var j=scanJobs.find(function(x){ return x.status==='waiting'; }); if(!j) break;
+      j.status='scanning'; queueStatus();
+      try{ await addResults(j,await post('api/scan',{data:j.data})); j.status='done'; }
+      catch(e){
+        if(e.status===401){ location.reload(); return; }
+        if(e.status===429){ j.status='waiting'; queueStatus(); await sleep(2500); continue; } // the server is busy with someone else's scan
+        j.status='done';
+        review.push({key:'e'+Date.now()+'-'+j.n,photo:j.n,thumb:await smallThumb(j.data),matches:[],chosen:null,include:false,error:e.message});
+      }
+      j.data=null; saveReview(); queueStatus(); if(reviewOpen) renderReview();
+    }
+  } finally { jobsRunning=false; queueStatus(); }
+}
+async function addResults(j,r){
+  var cards=r.cards||[], photoThumb=null;
+  if(!cards.length||cards.some(function(c){ return !c.thumb; })) photoThumb=await smallThumb(j.data);
+  if(!cards.length){ review.push({key:'n'+Date.now()+'-'+j.n,photo:j.n,thumb:photoThumb,matches:[],chosen:null,include:false,note:r.aiProblem?'The AI could not be reached, the built-in reader found no card':'No card found on this photo'}); return; }
+  cards.forEach(function(c,i){
+    (c.matches||[]).forEach(function(m){ m.a=m.a?1:0; scanMap[m.id]=m; });
+    var best=c.matches[0];
+    review.push({key:'c'+Date.now()+'-'+j.n+'-'+i,photo:j.n,thumb:c.thumb||photoThumb,read:c.read,matches:c.matches,chosen:best?best.id:null,include:!!best,sure:!!(best&&best.sure),ai:r.reader==='ai'});
   });
 }
-async function sendScan(data){
-  if(!data||scanBusy) return;
-  scanBusy=true; $('scanShot').disabled=true; $('scanMsg').textContent='Reading the cards…'; $('scanRes').innerHTML='';
-  try{
-    scanLast=await post('api/scan',{data:data});
-    scanLast.cards.forEach(function(c){ c.matches.forEach(function(m){ m.a=m.a?1:0; scanMap[m.id]=m; }); });
-    showScan();
-  }catch(e){ if(e.status===401){ location.reload(); return; } $('scanMsg').textContent=e.message; }
-  finally{ scanBusy=false; $('scanShot').disabled=false; }
+function queueStatus(){
+  var w=scanJobs.filter(function(x){ return x.status==='waiting'; }).length, s=scanJobs.filter(function(x){ return x.status==='scanning'; }).length;
+  var toCheck=review.length, parts=[];
+  if(s) parts.push('scanning a photo'); if(w) parts.push(w+' waiting');
+  $('queueMsg').textContent=parts.length?parts.join(' · '):(toCheck?'All photos scanned.':'');
+  $('reviewBtn').textContent='Check '+toCheck+' card'+(toCheck===1?'':'s')+' →';
+  $('reviewBtn').hidden=!toCheck&&!s&&!w;
+  $('reviewBtn').disabled=!toCheck;
 }
-function scanTile(m,best){
-  var c=byId[m.id]||m, o=owned(m.id), n=c.d&&c.d[0];
-  return '<div class="tile '+(o?'s-g':'s-r')+(best?' best':'')+'"><div class="no"><span>'+esc(m.k||'')+'</span><i class="led"></i></div>'+
-    '<div class="pic">'+picHTML(c,false)+(m.a?'<span class="badge">ART</span>':'')+'</div>'+
-    '<div class="name" title="'+esc(m.n)+'">'+esc(m.n)+'</div><div class="meta">'+esc(m.set||setName(c))+(m.r?' · '+esc(m.r):'')+'</div>'+
-    (m.why&&m.why.length?'<div class="why">'+m.why.map(function(w){ return '<span>'+esc(w)+'</span>'; }).join('')+'</div>':'')+
-    priceHTML(c)+
-    '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(m.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div>'+
-    wishBtn(c)+(n?'<button type="button" class="mini" data-do="scanview" data-n="'+n+'">Open #'+n+' '+esc(names[n]||'')+'</button>':'')+'</div>';
+
+/* the check screen */
+function cardFor(id){ return byId[id]||scanMap[id]||null; }
+function reviewItemHTML(it){
+  var c=it.chosen?cardFor(it.chosen):null, open=rvOpen===it.key;
+  var state=it.error?'none':(!c?'none':(it.sure?'sure':'check'));
+  var chip=it.error?'Scan failed':(!c?'No match':(it.sure?'Sure':'Check this'));
+  var rd=it.read||{}, said=[rd.name?'"'+rd.name+'"':'',rd.number||''].filter(Boolean).join(' · ');
+  var h='<div class="rv-item rv-'+state+(it.include?'':' rv-off')+'" data-key="'+esc(it.key)+'">'+
+    '<div class="rv-photo">'+(it.thumb?'<img src="'+esc(it.thumb)+'" alt="Your photo">':'<div class="ph"><i class="ball"></i></div>')+'<span>Photo '+esc(it.photo||'')+'</span></div>'+
+    '<div class="rv-arrow">→</div>'+
+    '<div class="rv-card">'+(c?'<div class="pic">'+picHTML(c,false)+'</div>':'<div class="pic"><div class="ph"><i class="ball"></i><span>'+esc(it.error||it.note||'No match')+'</span></div></div>')+'</div>'+
+    '<div class="rv-info"><span class="rv-chip">'+chip+'</span>'+
+      (c?'<b>'+esc(c.n)+'</b><span>'+esc(setName(c)||c.set||'')+' · '+esc(c.k||'')+(c.r?' · '+esc(c.r):'')+'</span>'+priceHTML(c)+(owned(c.id)?'<span class="rv-own">Already in your dex</span>':''):'')+
+      (said?'<span class="rv-said">Read: '+esc(said)+(it.ai?' (AI)':'')+'</span>':'')+
+    '</div>'+
+    '<div class="rv-actions">'+
+      (c?'<button type="button" data-rv="inc" class="'+(it.include?'on':'')+'">'+(it.include?'✓ Add':'Skip')+'</button>':'')+
+      '<button type="button" data-rv="chg"'+(open?' class="on"':'')+'>'+(c?'Change':'Pick card')+'</button>'+
+      '<button type="button" data-rv="del" title="Remove from the list">✕</button>'+
+    '</div>';
+  if(open){
+    var alts=(it.matches||[]).filter(function(m){ return m.id!==it.chosen; });
+    h+='<div class="rv-change">'+
+      (alts.length?'<div class="sec">Other suggestions</div><div class="rv-alts">'+alts.map(function(m){ return altHTML(cardFor(m.id)||m); }).join('')+'</div>':'')+
+      '<div class="sec">Search all cards</div><input type="search" class="rv-search" placeholder="Name and/or number, e.g. toxtricity gg09" value="'+esc(rvQuery)+'">'+
+      '<div class="rv-alts rv-found">'+searchHTML(rvQuery)+'</div></div>';
+  }
+  return h+'</div>';
 }
-function showScan(){
-  var r=scanLast, cards=r.cards||[];
-  if(!cards.length){ $('scanMsg').textContent='No card found'+(r.text?' (read: "'+r.text.slice(0,80)+'")':'')+'. Try again with more light and less glare, or closer so the card number is readable.'; $('scanRes').innerHTML=''; return; }
-  var sure=cards.filter(function(c){ return c.matches[0].sure; }).length;
-  $('scanMsg').textContent=(cards.length===1?(sure?'Found it':'Best guesses'):(cards.length+' cards found'+(sure?', '+sure+' for sure':'')))+(r.turned?' (photo was turned)':'')+'. Tap the right card'+(cards.length>1?' in each row':'')+'.';
-  $('scanRes').innerHTML=cards.map(function(c,i){
-    var rd=c.read||{}, said=[rd.name?'"'+rd.name+'"':'',rd.number||''].filter(Boolean).join(' · ');
-    return (cards.length>1?'<div class="sec">Card '+(i+1)+(said?' · read '+esc(said):'')+'</div>':'')+
-      c.matches.map(function(m,j){ return scanTile(m,j===0&&m.sure); }).join('');
-  }).join('');
+function altHTML(c){
+  return '<button type="button" class="rv-alt" data-rv="pick" data-id="'+esc(c.id)+'"><div class="pic">'+picHTML(c,false).replace(' data-do="zoom"','')+'</div><b>'+esc(c.n)+'</b><span>'+esc(setName(c)||c.set||'')+' · '+esc(c.k||'')+'</span></button>';
 }
-function openScanner(){ scanLast=null; $('scanRes').innerHTML=''; $('scanMsg').textContent='Hold one card in the frame, or lay several cards side by side. Straight on, without glare, so the card numbers are readable. Tap the lens to take the picture.'; $('scandlg').showModal(); startCam(); }
+function searchHTML(q){
+  q=String(q||'').trim().toLowerCase(); if(q.length<2) return '<p class="rv-hint">Type at least 2 letters.</p>';
+  var words=q.split(/\s+/).filter(Boolean), out=[];
+  var num=function(k){ return String(k||'').toLowerCase().replace(/^([a-z]*)0+(\d)/,'$1$2'); };
+  for(var id in byId){
+    var c=byId[id], name=String(c.n||'').toLowerCase(), k=num(c.k), set=setName(c).toLowerCase();
+    if(words.every(function(w){ return name.indexOf(w)>=0||k===num(w)||set.indexOf(w)>=0; })) out.push(c);
+    if(out.length>=400) break;
+  }
+  out.sort(function(a,b){ return String(setDate(b)).localeCompare(String(setDate(a))); });
+  return out.length?out.slice(0,24).map(altHTML).join('')+(out.length>24?'<p class="rv-hint">'+out.length+' found: type more to narrow it down.</p>':''):'<p class="rv-hint">No card found.</p>';
+}
+function renderReview(){
+  var add=review.filter(function(it){ return it.include&&it.chosen; }).length, check=review.filter(function(it){ return it.chosen&&!it.sure; }).length;
+  $('rvHead').textContent=review.length?(review.length+' scanned card'+(review.length===1?'':'s')+(check?' · '+check+' to check':'')):'Nothing scanned yet.';
+  $('rvAdd').textContent='Add '+add+' to my dex'; $('rvAdd').disabled=!add;
+  $('rvClear').hidden=!review.length;
+  var scroll=$('rvList').scrollTop;
+  $('rvList').innerHTML=review.length?review.slice().reverse().map(reviewItemHTML).join(''):'<p class="rv-hint">Take photos with the lens; the cards found appear here to check.</p>';
+  $('rvList').scrollTop=scroll;
+}
+function showReview(on){
+  reviewOpen=on; $('scanCam').hidden=on; $('scanReview').hidden=!on;
+  if(on){ stopCam(); renderReview(); } else startCam();
+}
+$('rvList').addEventListener('click',function(e){
+  var b=e.target.closest('[data-rv]'); if(!b) return;
+  var row=b.closest('.rv-item'), it=row&&review.find(function(x){ return x.key===row.dataset.key; }); if(!it) return;
+  var a=b.dataset.rv;
+  if(a==='inc') it.include=!it.include;
+  else if(a==='chg'){ rvOpen=rvOpen===it.key?null:it.key; rvQuery=''; }
+  else if(a==='del'){ review=review.filter(function(x){ return x!==it; }); if(rvOpen===it.key) rvOpen=null; }
+  else if(a==='pick'){ it.chosen=b.dataset.id; it.include=true; it.sure=true; it.picked=true; it.error=null; rvOpen=null; } // picked by hand: counts as sure
+  saveReview(); renderReview(); queueStatus();
+});
+$('rvList').addEventListener('input',function(e){
+  if(!e.target.classList.contains('rv-search')) return;
+  rvQuery=e.target.value; var box=e.target.parentNode.querySelector('.rv-found'); if(box) box.innerHTML=searchHTML(rvQuery);
+});
+$('rvAdd').addEventListener('click',function(){
+  var n=0, had=0;
+  review.forEach(function(it){ if(it.include&&it.chosen){ if(owned(it.chosen)) had++; else { st.cards[it.chosen]=1; n++; } it.done=true; } });
+  review=review.filter(function(it){ return !it.done; });
+  save(); saveReview(); refresh(); renderReview(); queueStatus();
+  $('rvMsg').textContent=n+' card'+(n===1?'':'s')+' added to your dex'+(had?' ('+had+' you already had)':'')+'.';
+});
+$('rvClear').addEventListener('click',function(){
+  if(!$('rvClear').classList.contains('arm')){ $('rvClear').classList.add('arm'); $('rvClear').textContent='Really clear the list?'; setTimeout(function(){ $('rvClear').classList.remove('arm'); $('rvClear').textContent='Clear list'; },4000); return; }
+  review=[]; rvOpen=null; saveReview(); renderReview(); queueStatus();
+});
+$('reviewBtn').addEventListener('click',function(){ showReview(true); });
+$('rvBack').addEventListener('click',function(){ $('rvMsg').textContent=''; showReview(false); });
+
+function openScanner(){
+  loadReview(); rvOpen=null;
+  $('scanMsg').textContent='Hold one or more cards in view, straight on and without glare, and tap the lens. Keep going: photos are scanned in the background.';
+  $('scandlg').showModal(); showReview(false); queueStatus();
+}
 if(AUTH){ // your own dex: the lens is the camera button
   var lensCam=document.querySelector('.lens');
   lensCam.classList.add('scan'); lensCam.removeAttribute('aria-hidden'); lensCam.setAttribute('role','button'); lensCam.setAttribute('tabindex','0');
@@ -1310,11 +1471,11 @@ if(AUTH){ // your own dex: the lens is the camera button
   lensCam.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openScanner(); } });
 }
 $('scanClose').addEventListener('click',function(){ $('scandlg').close(); });
-$('scandlg').addEventListener('close',stopCam);
-$('scanShot').addEventListener('click',function(){ sendScan(grabFrame()); });
+$('scandlg').addEventListener('close',function(){ stopCam(); reviewOpen=false; });
+$('scanShot').addEventListener('click',function(){ queuePhoto(grabFrame()); });
 $('scanFile').addEventListener('change',async function(){
-  var f=$('scanFile').files[0]; $('scanFile').value=''; if(!f) return;
-  try{ sendScan(await photoToJpeg(f)); }catch(e){ $('scanMsg').textContent=e.message; }
+  var files=[].slice.call($('scanFile').files); $('scanFile').value='';
+  for(var i=0;i<files.length;i++){ try{ queuePhoto(await photoToJpeg(files[i])); }catch(e){ $('scanMsg').textContent=e.message; } }
 });
 $('scanTorch').addEventListener('click',function(){
   var tr=scanStream&&scanStream.getVideoTracks()[0]; if(!tr) return;

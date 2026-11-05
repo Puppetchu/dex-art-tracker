@@ -97,9 +97,10 @@ APP AND SCANNING
 On an Android phone, open the page over https (your reverse proxy address) in
 Chrome and press "Install app" at the top right. Log in to your dex, tap the
 blue lens at the top left, hold a card in view (or lay several side by side)
-and tap the big lens under the picture: the
-best matches appear for every card, tap "Have it" or "Wish" on the right one.
-"Use a photo" scans a saved picture.
+and tap the big lens under the picture. Keep taking photos: they are scanned
+in the background. Then tap "Check N cards": every card is shown next to what
+it was recognised as. Change or skip the wrong ones and tap "Add to my dex".
+"Use photos" scans saved pictures.
 
 
 STOPPING AND STARTING AGAIN

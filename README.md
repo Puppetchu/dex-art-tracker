@@ -130,12 +130,32 @@ On phones the page is compact: two cards per row (three on wider phones), a smal
 
 The page can be installed as an app on Android (and iPhone): open it in Chrome over https, then use **Install app** at the top right (or Chrome's menu → *Install app* / *Add to home screen*). It gets its own icon and opens full screen. The app is the same page, so it updates with the server. Without a connection it still shows the cards, ticks and pictures it loaded last.
 
-**Scanning.** When you are logged in to your own dex, the blue Pokédex lens at the top left (with the small camera mark) opens the camera. Hold one card in view, or lay several cards side by side (up to 12), and tap the big lens below the picture to take it. The server reads all the text on the photo, wherever it is: every card number (for example `201/198`, `TG05/TG30` or a promo number) is paired with the large name above it, and each pair is one card. A card whose number cannot be read is still found by its name, and a photo taken sideways or upside down is turned and read again. For every card found, the server looks up the cards that fit and ranks them, also comparing that part of the photo with the stored pictures. The best guesses appear per card with their picture and price: tap **Have it** or **☆ Wish** on the right one, then scan the next cards. **Use a photo** scans a picture taken earlier (this also works without https).
+**Scanning.** When you are logged in to your own dex, the blue Pokédex lens at the top left (with the small camera mark) opens the camera. Hold one card in view, or lay several cards side by side (up to 12), and tap the big lens below the picture to take it. The server reads all the text on the photo, wherever it is: every card number (for example `201/198`, `TG05/TG30` or a promo number) is paired with the large name above it, and each pair is one card. A card whose number cannot be read is still found by its name, and a photo taken sideways or upside down is turned and read again. For every card found, the server looks up the cards that fit and ranks them, also comparing that part of the photo with the stored pictures.
+
+**Scanning a pile: the queue and the check screen.** Every tap of the lens adds the photo to a queue and the camera stays ready for the next one; the photos are scanned one by one in the background (the line under the camera shows how many are waiting). **Use photos** adds several saved pictures at once (this also works without https). **Check N cards →** opens the check screen: every card found is shown as your photo of it next to the card it was recognised as, marked *Sure*, *Check this* or *No match*.
+- **✓ Add / Skip** decides whether the card is added; **✕** removes it from the list.
+- **Change** shows the other suggestions and a search over all cards (name and/or number, for example `toxtricity gg09`); tapping one picks it.
+- **Add N to my dex** ticks all approved cards at once (they appear in History); skipped cards stay on the list.
+- The list is kept on the phone (per dex), so you can scan now and check later; **Clear list** empties it.
 
 - The camera only works on an https address (your reverse proxy), not on `http://<ip>:8080`.
-- Reading the cards runs on your server with Tesseract and its own English language data: nothing is sent anywhere else. A scan takes about a second (a few seconds when the photo has to be turned); the reader is unloaded again after 10 quiet minutes.
+- How a scan works: the server finds every card's outline on the photo (OpenCV), straightens the card, and compares it with the stored pictures of all cards (a small colour fingerprint per picture, built in the background and kept in `fingerprints.bin`), which works even when no text can be read. It also reads the name and card number: with an AI model if you connect one (below), otherwise with Tesseract on the server itself. Text is matched tolerantly ("Toxtr" still finds Toxtricity), and a card in a sleeve, lying sideways or upside down is handled.
+- Without an AI everything runs on your server and nothing is sent anywhere. A scan takes one to a few seconds.
 - Results are best with good light and the card numbers sharp; with several cards, get close enough that the small numbers stay readable. Holo glare or tiny print can need a second try; if nothing fits, the page says what it read. Japanese cards are found by their number and set size (the Japanese name cannot be read).
-- Only logged-in trainers can scan, one scan at a time on the server. `SCAN=0` switches scanning off.
+- Only logged-in trainers can scan, one scan at a time on the server. `SCAN=0` switches scanning off; `SCAN_DEBUG=1` writes what every scan found and read to the log.
+
+**Reading cards with an AI.** An AI model that understands pictures reads names and card numbers far better than Tesseract, also on shiny cards, in sleeves and in Japanese (it also names the Pokémon in English). Set `SCAN_AI` to the service, `SCAN_AI_KEY` to its API key and optionally `SCAN_AI_MODEL`:
+
+| `SCAN_AI` | Service | Default model |
+|---|---|---|
+| `gemini` | Google Gemini | `gemini-flash-latest` |
+| `openai` | OpenAI (GPT) | `gpt-5-mini` |
+| `claude` | Anthropic Claude | `claude-haiku-5-5` |
+| `mistral` | Mistral | `mistral-small-latest` |
+| `openrouter` | OpenRouter (many models with one key) | `openrouter/auto` |
+| `local` | Your own model: Ollama, LM Studio, llama.cpp or any server with an OpenAI-style `/v1/chat/completions` | `llama3.2-vision` |
+
+For `local`, set `SCAN_AI_URL` to the server's address including `/v1` (default `http://host.docker.internal:11434/v1`, Ollama on the machine running Docker; add `extra_hosts: ["host.docker.internal:host-gateway"]` to the service on Linux). The model must understand images (for example `llama3.2-vision`, `gemma3`, `qwen2.5vl`). The AI only reads what is printed on each card; finding the card in your database stays on your server. Each card on a photo is one request (straightened, about 770 px wide). If the AI cannot be reached the built-in reader takes over and the scan says so. With a cloud service the card photos go to that service.
 - Through a reverse proxy with login rules (for example Pangolin), the app works for trainers on the `/view/` path: let `/view` and `/view/*` through.
 
 ## Android app
@@ -178,6 +198,12 @@ Saved on the server (`state.json` for the main admin, `states/<id>.json` for oth
 | `TRUST_PROXY` | 1 | Use the reverse proxy's forwarded address and https. 0 = off |
 | `PROXY_HOPS` | 1 | Number of reverse proxies in a row in front of the server |
 | `SCAN` | 1 | 0 = switch card scanning off |
+| `SCAN_AI` | (none) | Read cards with an AI: `gemini`, `openai`, `claude`, `mistral`, `openrouter` or `local` |
+| `SCAN_AI_KEY` | (none) | API key for that service |
+| `SCAN_AI_MODEL` | per service | Model to use (must understand images) |
+| `SCAN_AI_URL` | per service | Address of a local AI server (or another endpoint), including `/v1` |
+| `SCAN_AI_TIMEOUT` | 45 | Seconds to wait for the AI |
+| `SCAN_DEBUG` | 0 | 1 = log what each scan found and read |
 
 ## Limits
 
