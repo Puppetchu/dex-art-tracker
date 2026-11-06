@@ -125,6 +125,10 @@ h1{margin:0;font:800 1.45rem/1 var(--head);letter-spacing:.14em;text-transform:u
 .mbar{height:7px;border-radius:5px;background:#04121c;overflow:hidden}
 .mbar i{display:block;height:100%;background:var(--green)}
 .sethead{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.wishbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+.wishbar select{margin:0;width:auto}
+.wmax{display:flex;flex-wrap:wrap;gap:5px}
+.wshown{color:var(--muted);font-size:.85rem;margin:0 0 10px}
 .sethead h2{margin:0;font:800 1.2rem var(--head);letter-spacing:.04em}
 .sethead span{color:var(--muted);font-size:.82rem}
 .sethead .sp{flex:1 1 40px}
@@ -1039,6 +1043,26 @@ async function loadTrades(){
   try{ trades=await getJSON('api/trades'); }catch(e){ trades=[]; }
   if(view==='wish') renderWish();
 }
+// Wish list order and price limit, remembered on this device (handy at a card show: cheapest first, up to what you want to pay).
+var wishSort='cheap', wishMax=0;
+try{ wishSort=localStorage.getItem('dexWishSort')||'cheap'; wishMax=+localStorage.getItem('dexWishMax')||0; }catch(e){}
+var WISH_MAX=[0,1,2,5,10,25,50,100];
+function wishSorted(list){
+  var cmpP=function(a,b,dir){ var pa=price(byId[a.id]), pb=price(byId[b.id]); if(pa==null&&pb==null) return 0; if(pa==null) return 1; if(pb==null) return -1; return dir*(pa-pb); };
+  var byName=function(a,b){ return String(byId[a.id].n).localeCompare(byId[b.id].n); };
+  return list.slice().sort(function(a,b){
+    if(wishSort==='cheap') return cmpP(a,b,1)||byName(a,b);
+    if(wishSort==='dear') return cmpP(a,b,-1)||byName(a,b);
+    if(wishSort==='name') return byName(a,b);
+    if(wishSort==='set') return String(setDate(byId[b.id])).localeCompare(String(setDate(byId[a.id])))||byName(a,b);
+    return (a.dex==null)-(b.dex==null)||(a.dex||0)-(b.dex||0)||byName(a,b); // Pokédex order
+  });
+}
+function wishHit(w,q){
+  if(!q) return true;
+  var c=byId[w.id], hay=[c.n,setName(c),c.k,w.dex?names[w.dex]:'',w.dex?'#'+w.dex:''].join(' ').toLowerCase();
+  return q.split(/\s+/).every(function(x){ return hay.indexOf(x)>=0; });
+}
 function renderWish(){
   if(!trades){ $('wishView').innerHTML='<p>Loading…</p>'; loadTrades(); return; }
   var others=trades.filter(function(t){ return t.id!==DEX; });
@@ -1050,6 +1074,17 @@ function renderWish(){
   mine.forEach(function(w){ var p=price(byId[w.id]); if(p==null) noPrice++; else total+=p; });
   var h=['<div class="sethead"><h2>'+esc(DEXNAME)+'\'s wish list</h2><span class="wtot">'+pl(mine.length,'card')+(HIDEV?'':' · '+S+total.toFixed(2)+(noPrice?' (+'+noPrice+' without a price)':''))+'</span><span>'+match+' owned by another trainer</span></div>'];
   if(!mine.length) h.push('<p>Nothing on the wish list yet. Use "☆ Wish" on a card in the Sets or Trainers view, or "☆ Wish for this one" in a Pokémon\'s card list (that card also becomes the main picture).</p>');
+  var q=$('q').value.trim().toLowerCase(), all=mine.length;
+  if(all){
+    h.push('<div class="wishbar"><select data-ws="sort" aria-label="Order of the wish list">'+
+      [['cheap','Cheapest first'],['dear','Most expensive first'],['dex','Pokédex order'],['name','Name'],['set','Newest set first']].map(function(o){ return '<option value="'+o[0]+'"'+(wishSort===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('')+'</select>'+
+      (HIDEV?'':'<span class="wmax">'+WISH_MAX.map(function(m){ return '<button type="button" class="chip'+(wishMax===m?' on':'')+'" data-wmax="'+m+'">'+(m?'≤ '+S+m:'Any price')+'</button>'; }).join('')+'</span>')+'</div>');
+    mine=wishSorted(mine.filter(function(w){ var p=price(byId[w.id]); return wishHit(w,q)&&(!wishMax||(p!=null&&p<=wishMax)); }));
+    if(mine.length<all){
+      var sub=0; mine.forEach(function(w){ var p=price(byId[w.id]); if(p!=null) sub+=p; });
+      h.push('<p class="wshown">Showing '+mine.length+' of '+all+(q?' matching "'+esc(q)+'"':'')+(wishMax?' up to '+S+wishMax:'')+(HIDEV?'':' · together '+S+sub.toFixed(2))+'. <button type="button" class="mini" data-wmax="reset">Show all</button></p>');
+    }
+  }
   h.push('<div class="cgrid">');
   mine.forEach(function(w){
     var c=byId[w.id], who=holders[c.id];
@@ -1067,8 +1102,18 @@ function renderWish(){
   });
   h.push('</div>');
   $('wishView').innerHTML=h.join('');
-  setStatus(mine.length+' on the wish list · '+wantedIds.length+' wanted by others.');
+  setStatus(all+' on the wish list'+(mine.length<all?' ('+mine.length+' shown)':'')+' · '+wantedIds.length+' wanted by others.');
 }
+
+$('wishView').addEventListener('change',function(e){
+  if(e.target.dataset.ws!=='sort') return;
+  wishSort=e.target.value; try{ localStorage.setItem('dexWishSort',wishSort); }catch(x){} renderWish();
+});
+$('wishView').addEventListener('click',function(e){
+  var b=e.target.closest('[data-wmax]'); if(!b) return;
+  if(b.dataset.wmax==='reset'){ wishMax=0; $('q').value=''; } else wishMax=+b.dataset.wmax;
+  try{ localStorage.setItem('dexWishMax',String(wishMax)); }catch(x){} renderWish();
+});
 
 /* ---------- history: cards added most recently ---------- */
 function renderHist(){
