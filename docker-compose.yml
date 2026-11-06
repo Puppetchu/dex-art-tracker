@@ -36,6 +36,9 @@ services:
       # the trainers' accounts and changes the settings on the page. Without this setting it can also change the password there.
       # Most settings below can also be chosen on the Admin settings page, which wins over what is written here.
       # ADMIN_PASSWORD: "choose-a-long-password"
+      # The Android app download (website button and the app's update check): 0 = off. ANDROID_RELEASE is the folder
+      # with dex-art.apk and version.json (default: the android-latest release of the GitHub repository).
+      # ANDROID_APP: "1"
       # Set to "1" so visitors who are not logged in also see "worth" and "left to spend".
       # SHOW_VALUE_PUBLIC: "1"
       # On by default: logins use the visitor's real address from the reverse proxy (X-Forwarded-For).

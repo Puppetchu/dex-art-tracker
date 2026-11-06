@@ -163,6 +163,8 @@ For `local`, set `SCAN_AI_URL` to the server's address including `/v1` (default 
 
 The `android/` folder holds a small Android app that opens your server's page full screen and uses the server for everything. It starts as a closed Pokédex: pick a trainer and either tap **View dex** to look at their dex without logging in (the lens leads back), or enter the password and it opens on your own dex (inside the app you only see your own dex; the web page is unchanged). Scanning, wish lists and history work as on the web page. See `android/README.md` for installing and building; GitHub builds the APK with `.github/workflows/android.yml`.
 
+**Getting and updating the app.** Every GitHub build is also published as the release `android-latest` (`dex-art.apk` plus `version.json`). On an Android phone the website shows an **Android app** button that downloads the newest build (through `<server>/android.apk`). The app asks the server (`<server>/android.json`) once a day whether a newer build exists and then offers to download it; **Check for updates** in the app's back-button menu asks right away. Android always asks before installing, and installing over the old app keeps the login. The download address is the `ANDROID_RELEASE` setting (Admin settings → Android app); `ANDROID_APP=0` hides the button and the update check.
+
 ## Wish list at a card show
 
 The wish list can be ordered **cheapest first** (the default), most expensive first, by Pokédex, name or newest set, and the price buttons (**≤ €1** … **≤ €100**) hide everything above what you want to pay. The search box at the top filters it too (name, set, number or Pokémon), so at a stand you can type a name and see your card and its price. The order and price limit are remembered on that device; **Show all** clears them.
@@ -198,6 +200,8 @@ Most of these can also be chosen on the **Admin settings** page; a choice saved 
 | `LANGUAGES` | en,ja | `en` = English only |
 | `REGULAR_PRICES_PER_DAY` | 0 | Most requests per day spent on regular-card prices, 0 = no limit |
 | `ADMIN_PASSWORD` | random | The admin password (log in on `/admin/`) |
+| `ANDROID_APP` | 1 | Offer the Android app: the website button and the app's update check (0 = off) |
+| `ANDROID_RELEASE` | this repository's `releases/latest/download/` | Folder with `dex-art.apk` and `version.json` |
 | `IMAGE_CACHE` | 1 | 0 = do not store pictures on the server (the page then loads them from the picture sites) |
 | `IMAGE_HIGH` | all | Which cards also get a high resolution copy: `all`, `art` (art, owned and wished cards) or `none` |
 | `IMAGE_DELAY_MS` | 1000 | Pause between two picture downloads, in milliseconds |

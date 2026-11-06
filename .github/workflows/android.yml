@@ -1,4 +1,6 @@
-# Builds the Android app (android/dist/dex-art.apk) on every change to android/, or by hand from the Actions tab.
+# Builds the Android app (android/dist/dex-art.apk) on every change to android/, or by hand from the Actions tab,
+# and publishes it as the GitHub release "android-latest" (dex-art.apk + version.json). The website's "Android app"
+# button and the app's own update check use that release (the ANDROID_RELEASE setting of the server).
 # Needs two repository secrets (Settings -> Secrets and variables -> Actions):
 #   ANDROID_KEYSTORE_B64   the signing key file (dex-art-signing-key.jks) as base64 text
 #   ANDROID_KEYSTORE_PASS  its password
@@ -11,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # to publish the release
 
 jobs:
   build:
@@ -57,3 +59,14 @@ jobs:
         with:
           name: dex-art-apk
           path: android/dist/dex-art.apk
+
+      - name: Publish as the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CODE=$(git rev-list --count HEAD)
+          printf '{"code":%s,"name":"1.0","built":"%s"}\n' "$CODE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > android/dist/version.json
+          # one release that is replaced every time, so .../releases/latest/download/dex-art.apk is always the newest
+          gh release delete android-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create android-latest android/dist/dex-art.apk android/dist/version.json \
+            --title "Android app (build $CODE)" --notes "Install dex-art.apk on your phone. The app checks for updates by itself." --latest

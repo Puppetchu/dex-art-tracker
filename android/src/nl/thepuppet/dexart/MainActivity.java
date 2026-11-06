@@ -6,6 +6,7 @@ import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
@@ -18,6 +19,11 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import org.json.JSONObject;
 import android.webkit.WebViewClient;
 
 /**
@@ -72,7 +78,69 @@ public class MainActivity extends Activity {
 
     @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); if (web != null) web.saveState(out); }
     @Override protected void onPause() { super.onPause(); if (web != null) web.onPause(); CookieManager.getInstance().flush(); }
-    @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); }
+    @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); checkUpdate(false); }
+
+    // ---- updates: the server tells the newest build (<server>/android.json); a newer one is offered once a day ----
+    private SharedPreferences updPrefs() { return getSharedPreferences("updates", MODE_PRIVATE); }
+    private int myBuild() {
+        try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode; }
+        catch (PackageManager.NameNotFoundException e) { return 0; }
+    }
+    /** manual: asked from the menu (always checks, also says when there is nothing new). */
+    private void checkUpdate(final boolean manual) {
+        if (base == null) return;
+        final SharedPreferences sp = updPrefs();
+        if (!manual && System.currentTimeMillis() - sp.getLong("checked", 0) < 24L * 3600 * 1000) return;
+        sp.edit().putLong("checked", System.currentTimeMillis()).apply();
+        final String server = base;
+        new Thread(new Runnable() { @Override public void run() {
+            int code = 0;
+            try {
+                HttpURLConnection c = (HttpURLConnection) new URL(server + "/android.json").openConnection();
+                c.setConnectTimeout(8000); c.setReadTimeout(8000);
+                c.setRequestProperty("User-Agent", "DexArtApp/1.0");
+                if (c.getResponseCode() == 200) {
+                    InputStream in = c.getInputStream(); ByteArrayOutputStream out = new ByteArrayOutputStream();
+                    byte[] buf = new byte[1024]; int n;
+                    while ((n = in.read(buf)) > 0 && out.size() < 8192) out.write(buf, 0, n);
+                    in.close();
+                    code = new JSONObject(out.toString("UTF-8")).optInt("code", 0);
+                }
+                c.disconnect();
+            } catch (Exception e) { code = -1; }
+            final int newest = code;
+            runOnUiThread(new Runnable() { @Override public void run() { updateResult(newest, manual); } });
+        } }).start();
+    }
+    private void updateResult(final int newest, boolean manual) {
+        if (isFinishing()) return;
+        final int mine = myBuild();
+        if (newest > mine && (manual || newest != updPrefs().getInt("skip", 0))) {
+            if (dialogOpen) return;
+            dialogOpen = true;
+            new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+                .setTitle("New version of the app")
+                .setMessage("Build " + newest + " is ready (you have build " + mine + "). Download it, open the file and tap Install. "
+                        + "Android may ask you once to allow installing apps from your browser. Your login and settings stay.")
+                .setPositiveButton("Download", new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) { openOutside(Uri.parse(base + "/android.apk")); }
+                })
+                .setNeutralButton("Skip this one", new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) { updPrefs().edit().putInt("skip", newest).apply(); }
+                })
+                .setNegativeButton("Later", null)
+                .setOnDismissListener(new DialogInterface.OnDismissListener() {
+                    @Override public void onDismiss(DialogInterface d) { dialogOpen = false; }
+                })
+                .show();
+        } else if (manual) {
+            new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+                .setTitle("Dex Art")
+                .setMessage(newest < 0 ? "Could not ask the server for updates. Check the connection." : newest == 0 ? "This server does not offer the app for download." : "You have the newest version (build " + mine + ").")
+                .setPositiveButton("OK", null)
+                .show();
+        }
+    }
     @Override protected void onDestroy() { if (web != null) web.destroy(); super.onDestroy(); }
 
     /** Same server (scheme, host, port) and not the admin pages. */
@@ -195,10 +263,11 @@ public class MainActivity extends Activity {
         if (web != null && web.canGoBack()) { web.goBack(); return; }
         new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
             .setTitle("Dex Art")
-            .setItems(new CharSequence[] { "Reload", "Change server", "Close the app" }, new DialogInterface.OnClickListener() {
+            .setItems(new CharSequence[] { "Reload", "Check for updates", "Change server", "Close the app" }, new DialogInterface.OnClickListener() {
                 @Override public void onClick(DialogInterface d, int which) {
                     if (which == 0) web.loadUrl(home());
-                    else if (which == 1) startActivity(new Intent(MainActivity.this, SetupActivity.class));
+                    else if (which == 1) checkUpdate(true);
+                    else if (which == 2) startActivity(new Intent(MainActivity.this, SetupActivity.class));
                     else finish();
                 }
             })

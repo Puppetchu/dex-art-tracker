@@ -428,6 +428,7 @@ a{color:var(--lcd)}
         <button id="pwBtn" type="button" class="mini" title="Change your password">Password</button>
         <button id="logoutBtn" type="button" class="mini" title="Log out of this dex">Log out</button>
         <button id="installBtn" type="button" class="mini" title="Install this page as an app on this device" hidden>Install app</button>
+        <button id="apkBtn" type="button" class="mini" title="Download the Android app (it scans cards and updates itself)" hidden>Android app</button>
       </div>
     </div>
   </div>
@@ -1637,6 +1638,14 @@ var installEvt=null;
 window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); installEvt=e; $('installBtn').hidden=false; });
 window.addEventListener('appinstalled',function(){ installEvt=null; $('installBtn').hidden=true; });
 $('installBtn').addEventListener('click',function(){ if(!installEvt) return; installEvt.prompt(); installEvt.userChoice.then(function(){ installEvt=null; $('installBtn').hidden=true; }); });
+// The Android app download, offered on Android phones (not inside the app itself)
+if(window.DEX_APK&&/Android/i.test(navigator.userAgent)&&!APP){
+  $('apkBtn').hidden=false;
+  $('apkBtn').addEventListener('click',function(){
+    toast('Downloading the app… Open the file when it is done. Android may ask you to allow installing apps from your browser.');
+    location.href='android.apk';
+  });
+}
 $('logoutBtn').addEventListener('click',async function(){ try{ await post('api/logout'); }catch(e){} location.reload(); });
 
 /* ---------- dex picker, trainer name, accounts ---------- */

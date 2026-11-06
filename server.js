@@ -54,6 +54,9 @@ const SETTINGS = [
   { group: 'Scanning', key: 'SCAN_AI_URL', label: 'Address of the AI server', type: 'url', def: '(the service\'s own address)', help: 'Only for a local AI, including /v1, for example http://192.168.1.20:11434/v1' },
   { group: 'Scanning', key: 'SCAN_AI_TIMEOUT', label: 'Wait for the AI at most', def: '45', options: [['30', '30 seconds'], ['45', '45 seconds'], ['60', '1 minute'], ['120', '2 minutes'], ['180', '3 minutes']] },
   { group: 'Scanning', key: 'SCAN_DEBUG', label: 'Write scan details to the log', def: '0', options: yesNo() },
+  { group: 'Android app', key: 'ANDROID_APP', label: 'Offer the Android app (a button on the website, update check in the app)', def: '1', options: yesNo() },
+  { group: 'Android app', key: 'ANDROID_RELEASE', label: 'Where the app is downloaded from', type: 'url', def: 'https://github.com/Puppetchu/dex-art-tracker/releases/latest/download/',
+    help: 'The address of the folder with dex-art.apk and version.json: the "android-latest" release that GitHub builds for your repository.' },
   { group: 'Network', key: 'TRUST_PROXY', label: 'Behind a reverse proxy (use X-Forwarded-For)', def: '1', options: yesNo() },
   { group: 'Network', key: 'PROXY_HOPS', label: 'Proxies in a row in front of the server', def: '1', options: [['1', '1'], ['2', '2'], ['3', '3']] },
 ];
@@ -124,7 +127,9 @@ const PICTURE_LOOKUP = process.env.PICTURE_LOOKUP !== '0';
 const PTCG_API = (process.env.PTCG_API || 'https://api.pokemontcg.io/v2').replace(/\/$/, '');
 const PTCG_API_KEY = process.env.PTCG_API_KEY || '';
 const PICTURES_PER_DAY = process.env.PICTURES_PER_DAY !== undefined ? +process.env.PICTURES_PER_DAY : 500; // 0 = no limit
-const TRUST_PROXY = process.env.TRUST_PROXY !== '0'; // on by default (reverse proxy: use X-Forwarded-For / -Proto). 0 = off
+const TRUST_PROXY = process.env.TRUST_PROXY !== '0';
+// The Android app: /android.apk sends the phone to the newest build, /android.json tells the app the newest version.
+const APK_BASE = process.env.ANDROID_APP === '0' ? '' : String(process.env.ANDROID_RELEASE || 'https://github.com/Puppetchu/dex-art-tracker/releases/latest/download/').replace(/\/*$/, '/'); // on by default (reverse proxy: use X-Forwarded-For / -Proto). 0 = off
 
 const CARDS_FILE = path.join(DATA_DIR, 'cards.json');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -1883,6 +1888,17 @@ const blocked = ip => { const f = fails.get(ip); return !!f && Date.now() - f.t 
 const hits = new Map();
 const limited = ip => { const n = Date.now(), h = hits.get(ip); if (!h || n - h.t > 60000) { hits.set(ip, { t: n, n: 1 }); return false; } return ++h.n > 600; };
 
+let apkInfo = null, apkAt = 0;
+async function apkVersion() { // version.json of the release, read at most every 30 minutes
+  if (apkInfo && Date.now() - apkAt < 30 * 60000) return apkInfo;
+  try {
+    const r = await fetch(APK_BASE + 'version.json', { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'dex-art-tracker' } });
+    const j = r.ok ? JSON.parse((await r.text()).slice(0, 2000)) : null;
+    if (j && Number.isInteger(j.code) && j.code > 0) apkInfo = { code: j.code, name: String(j.name || '').slice(0, 20), built: String(j.built || '').slice(0, 30) };
+  } catch (e) { log('android app version not readable:', e.message); }
+  apkAt = Date.now();
+  return apkInfo;
+}
 // mode: 'full' (logged in to this dex), 'ro' (view only, with a login link), 'admin' (the admin: views every dex,
 // owns none), 'adminlogin' (/admin/ before the admin logged in)
 function indexHtml(mode, dexId, sess) {
@@ -1891,7 +1907,7 @@ function indexHtml(mode, dexId, sess) {
   const me = sess ? (sess.acc === ADMIN_ID ? { id: ADMIN_ID, name: 'Admin', admin: true } : accById(sess.acc)) : null;
   const cfg = { dex: dexId, accounts: publicAccounts(), me: me ? { id: me.id, name: me.name, admin: me.id === ADMIN_ID } : null };
   const inj = 'window.DEX_CUR=' + JSON.stringify(PRICE_CUR) + ';' + (mode === 'full' ? 'window.DEX_AUTH=true;' : 'window.DEX_READONLY=true;' + hide + (mode === 'ro' || mode === 'adminlogin' ? 'window.DEX_LOGIN=true;' : ''))
-    + (mode === 'admin' || mode === 'adminlogin' ? 'window.DEX_ADMINPATH=true;' : '')
+    + (mode === 'admin' || mode === 'adminlogin' ? 'window.DEX_ADMINPATH=true;' : '') + (APK_BASE ? 'window.DEX_APK=true;' : '')
     + 'window.DEX_CFG=' + JSON.stringify(cfg).replace(/</g, '\\u003c') + ';';
   return h.replace('<!--DEX_MODE-->', '<script>' + inj + '</script>');
 }
@@ -1954,6 +1970,13 @@ const server = http.createServer(async (req, res) => {
       const rec = id && (m[1] === 'c' ? imgs.c[id] : imgs.s[id]);
       if (!rec || !Object.prototype.hasOwnProperty.call(m[1] === 'c' ? imgs.c : imgs.s, id)) { res.writeHead(404); return res.end('Not found'); }
       return sendImage(res, m[1] === 'c' ? imgPath('c', id, m[3] === 'high' && rec.h ? 'high' : 'low') : imgPath('s', id));
+    }
+    // The Android app: the download (the newest release build) and the newest version number for the app's update check.
+    if (req.method === 'GET' && (p === '/android.apk' || p === '/android.json')) {
+      if (!APK_BASE) return sendJSON(res, 404, { error: 'The Android app is not offered on this server' });
+      if (p === '/android.apk') { res.writeHead(302, { Location: APK_BASE + 'dex-art.apk', 'Cache-Control': 'no-cache' }); return res.end(); }
+      const v = await apkVersion();
+      return v ? sendJSON(res, 200, Object.assign({ apk: 'android.apk' }, v)) : sendJSON(res, 503, { error: 'The newest app version could not be read' });
     }
     // App files for installing the page as an app (fixed list, read from the public folder).
     if (req.method === 'GET' && APP_FILES[p]) {

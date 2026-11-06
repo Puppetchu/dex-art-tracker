@@ -27,3 +27,9 @@ Every version must be signed with the same key (`dex-art-signing-key.jks`), othe
 GitHub can build it for you: `.github/workflows/android.yml` runs on every change to `android/` (or by hand from the Actions tab) and offers the APK as a download on the run's page. It needs two repository secrets: `ANDROID_KEYSTORE_B64` (the key file as base64: `base64 -w0 dex-art-signing-key.jks`) and `ANDROID_KEYSTORE_PASS`.
 
 The app targets Android 14 (API 34) and runs on Android 7 and newer. It is built against the API 23 library that Ubuntu ships, which is all a web view app like this needs.
+
+## Getting it on a phone, and updates
+
+- Every GitHub build is published as the release **android-latest** of the repository. On an Android phone, open your Dex Art Tracker website and tap **Android app** at the top: it downloads the newest build. Open the file and tap Install (Android asks once to allow installing apps from your browser).
+- The app checks your server for a newer build once a day and offers it (**Download**, **Later**, **Skip this one**). The back-button menu has **Check for updates**. Updates install over the old app because every build is signed with the same key.
+- If the "Publish as the latest release" step fails with a permission error, set the repository's Settings → Actions → General → Workflow permissions to **Read and write permissions**.
