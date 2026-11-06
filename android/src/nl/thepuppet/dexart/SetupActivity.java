@@ -27,14 +27,14 @@ public class SetupActivity extends Activity {
     private EditText input;
     private TextView message;
 
-    /** "dex.example.com", "https://dex.example.com/view/" -> "https://dex.example.com" (null when unusable). */
+    /** "dex.example.com", "https://dex.example.com/view/" or ".../admin/" -> "https://dex.example.com" (null when unusable). */
     static String cleanServer(String raw) {
         if (raw == null) return null;
         String s = raw.trim();
         if (s.isEmpty()) return null;
         if (!s.matches("(?i)^https?://.*")) s = "https://" + s;
         s = s.replaceAll("/+$", "");
-        s = s.replaceAll("(?i)/view$", "");
+        s = s.replaceAll("(?i)/(view|admin)$", "");
         s = s.replaceAll("/+$", "");
         android.net.Uri u = android.net.Uri.parse(s);
         if (u.getHost() == null || u.getHost().isEmpty() || u.getHost().contains(" ")) return null;
@@ -69,7 +69,7 @@ public class SetupActivity extends Activity {
 
         TextView help = new TextView(this);
         help.setText("Enter the address of your Dex Art Tracker server, for example dex.example.com. "
-                + "The app opens its /view/ page: log in to your own dex with the blue lens there. "
+                + "Pick your trainer and log in; the app then shows only your own dex. "
                 + "Use the https address (your reverse proxy) so the camera can scan cards.");
         help.setTextColor(Color.parseColor("#8fa6c0"));
         help.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);

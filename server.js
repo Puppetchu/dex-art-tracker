@@ -1747,14 +1747,15 @@ function importMatch(text) {
 
 // ---------- accounts and login ----------
 // Every account (trainer) has its own dex; its ticks are stored in states/<id>.json. A login only opens the
-// dex it was made on. The admin is not a trainer and has no dex: it logs in on the normal address (never on
-// /view/) by typing *admin-<admin password> in any login box. Its password is ADMIN_PASSWORD, or the one in
-// admin.json. The admin adds trainers, changes the settings and the shared card list (art cards, pictures).
+// dex it was made on. The admin is not a trainer and has no dex: it logs in on /admin/ only, with its own
+// cookie that is only sent to /admin/ (so a reverse proxy can put /admin/ behind its own login). Its password
+// is ADMIN_PASSWORD, or the one in admin.json. The admin adds trainers, changes the settings and the shared
+// card list (art cards, pictures).
 const ADMIN_FILE = path.join(DATA_DIR, 'admin.json');
 const SESS_FILE = path.join(DATA_DIR, 'sessions.json');
 const ACC_FILE = path.join(DATA_DIR, 'accounts.json');
 const STATES_DIR = path.join(DATA_DIR, 'states');
-const ADMIN_ID = '@admin', ADMIN_PREFIX = '*admin-';
+const ADMIN_ID = '@admin';
 fs.mkdirSync(STATES_DIR, { recursive: true });
 const sha = x => crypto.createHash('sha256').update(String(x)).digest();
 const sameText = (a, b) => crypto.timingSafeEqual(sha(a), sha(b));
@@ -1762,14 +1763,14 @@ const sameText = (a, b) => crypto.timingSafeEqual(sha(a), sha(b));
 // first a generated password in plain text, and once changed on the page a salted hash ({salt, hash}).
 const ADMIN_FIXED = !!process.env.ADMIN_PASSWORD;
 let adminPw = String(process.env.ADMIN_PASSWORD || ''), adminHash = null;
-if (ADMIN_FIXED) log('admin password: set by ADMIN_PASSWORD (log in with ' + ADMIN_PREFIX + '<password>)');
+if (ADMIN_FIXED) log('admin password: set by ADMIN_PASSWORD (log in on /admin/)');
 else {
   const a = readJSON(ADMIN_FILE) || {};
-  if (a.hash && a.salt) { adminHash = { salt: a.salt, hash: a.hash }; log('admin password: changed on the page (stored hashed in admin.json); log in with ' + ADMIN_PREFIX + '<password>'); }
+  if (a.hash && a.salt) { adminHash = { salt: a.salt, hash: a.hash }; log('admin password: changed on the page (stored hashed in admin.json); log in on /admin/'); }
   else {
     adminPw = a.password || '';
     if (!adminPw) { adminPw = crypto.randomBytes(9).toString('base64url'); writeJSON(ADMIN_FILE, { password: adminPw }); }
-    log('ADMIN PASSWORD (generated; also saved in admin.json in the data folder; set ADMIN_PASSWORD to choose your own):', adminPw, '- log in with ' + ADMIN_PREFIX + adminPw);
+    log('ADMIN PASSWORD (generated; also saved in admin.json in the data folder; set ADMIN_PASSWORD to choose your own):', adminPw, '- log in on /admin/');
   }
 }
 const accounts = readJSON(ACC_FILE) || {};
@@ -1852,15 +1853,22 @@ function cleanName(n, selfId) {
 
 const sessions = readJSON(SESS_FILE) || {}; // sha256(token) -> {exp, acc}
 for (const k of Object.keys(sessions)) if (typeof sessions[k] !== 'object' || sessions[k].acc === 'main') delete sessions[k]; // logins of the old Owner dex end
+if (!fs.existsSync(path.join(DATA_DIR, '.admin-path'))) { // one-time: admin logins from before /admin/ end (log in again on /admin/)
+  for (const k of Object.keys(sessions)) if (sessions[k].acc === ADMIN_ID) delete sessions[k];
+  fs.writeFileSync(path.join(DATA_DIR, '.admin-path'), '1'); saveSessions();
+}
 const SESSION_MS = 30 * 86400000;
 function saveSessions() { const n = Date.now(); Object.keys(sessions).forEach(k => { if (sessions[k].exp < n) delete sessions[k]; }); writeJSON(SESS_FILE, sessions); }
 function dropSessions(acc) { Object.keys(sessions).forEach(k => { if (sessions[k].acc === acc) delete sessions[k]; }); saveSessions(); }
-const tokenOf = req => { const m = String(req.headers.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith('dex_session=')); return m ? m.slice(12) : ''; };
+// Two cookies: dex_session (a trainer, every page) and dex_admin (the admin, only sent to /admin/).
+const cookieName = admin => admin ? 'dex_admin' : 'dex_session';
+const tokenOf = (req, admin) => { const n = cookieName(admin) + '='; const m = String(req.headers.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith(n)); return m ? m.slice(n.length) : ''; };
 const hashTok = t => crypto.createHash('sha256').update(t).digest('hex');
-function sessionOf(req) {
-  const t = tokenOf(req); if (!t) return null;
+function sessionOf(req, admin) {
+  const t = tokenOf(req, admin); if (!t) return null;
   const s = sessions[hashTok(t)];
-  return s && s.exp > Date.now() && (s.acc === ADMIN_ID || accById(s.acc)) ? s : null;
+  if (!s || s.exp <= Date.now()) return null;
+  return (admin ? s.acc === ADMIN_ID : !!accById(s.acc)) ? s : null;
 }
 // Behind a reverse proxy the visitor's address is the one the proxy adds at the END of X-Forwarded-For:
 // anything before it was sent by the visitor and can be made up (which would get around the
@@ -1869,19 +1877,21 @@ const PROXY_HOPS = Math.max(1, +process.env.PROXY_HOPS || 1);
 function fromProxy(v) { const l = String(v || '').split(',').map(x => x.trim()).filter(Boolean); return l.length >= PROXY_HOPS ? l[l.length - PROXY_HOPS] : ''; }
 function clientIp(req) { const f = TRUST_PROXY && fromProxy(req.headers['x-forwarded-for']); return f || req.socket.remoteAddress || ''; }
 const isHttps = req => TRUST_PROXY && fromProxy(req.headers['x-forwarded-proto']) === 'https';
-const cookie = (req, v, age) => 'dex_session=' + v + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=' + age + (isHttps(req) ? '; Secure' : '');
+const cookie = (req, admin, v, age) => cookieName(admin) + '=' + v + '; HttpOnly; SameSite=Strict; Path=' + (admin ? '/admin/' : '/') + '; Max-Age=' + age + (isHttps(req) ? '; Secure' : '');
 const fails = new Map(); // ip -> {n, t}: wrong passwords
 const blocked = ip => { const f = fails.get(ip); return !!f && Date.now() - f.t < 15 * 60000 && f.n >= 8; };
 const hits = new Map();
 const limited = ip => { const n = Date.now(), h = hits.get(ip); if (!h || n - h.t > 60000) { hits.set(ip, { t: n, n: 1 }); return false; } return ++h.n > 600; };
 
-// mode: 'full' (logged in to this dex), 'ro' (view only, with a login link), 'admin' (the admin: views every dex, owns none)
+// mode: 'full' (logged in to this dex), 'ro' (view only, with a login link), 'admin' (the admin: views every dex,
+// owns none), 'adminlogin' (/admin/ before the admin logged in)
 function indexHtml(mode, dexId, sess) {
   let h = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
   const hide = 'window.DEX_HIDE_VALUE=' + (mode !== 'admin' && !SHOW_VALUE_PUBLIC) + ';';
   const me = sess ? (sess.acc === ADMIN_ID ? { id: ADMIN_ID, name: 'Admin', admin: true } : accById(sess.acc)) : null;
   const cfg = { dex: dexId, accounts: publicAccounts(), me: me ? { id: me.id, name: me.name, admin: me.id === ADMIN_ID } : null };
-  const inj = 'window.DEX_CUR=' + JSON.stringify(PRICE_CUR) + ';' + (mode === 'full' ? 'window.DEX_AUTH=true;' : 'window.DEX_READONLY=true;' + hide + (mode === 'ro' ? 'window.DEX_LOGIN=true;' : ''))
+  const inj = 'window.DEX_CUR=' + JSON.stringify(PRICE_CUR) + ';' + (mode === 'full' ? 'window.DEX_AUTH=true;' : 'window.DEX_READONLY=true;' + hide + (mode === 'ro' || mode === 'adminlogin' ? 'window.DEX_LOGIN=true;' : ''))
+    + (mode === 'admin' || mode === 'adminlogin' ? 'window.DEX_ADMINPATH=true;' : '')
     + 'window.DEX_CFG=' + JSON.stringify(cfg).replace(/</g, '\\u003c') + ';';
   return h.replace('<!--DEX_MODE-->', '<script>' + inj + '</script>');
 }
@@ -1929,12 +1939,14 @@ function readBody(req, limit) {
 
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
-  let p = u.pathname, viewPath = false;
+  let p = u.pathname, adminPath = false;
   try {
-    // /view/ is the same page, but the admin can never log in or use a login there: only the other
-    // trainers can. Publishing only /view/ keeps the admin login unreachable from outside.
-    if (p === '/view') { res.writeHead(301, { Location: '/view/' + u.search }); return res.end(); }
-    if (p.startsWith('/view/')) { p = p.slice(5); viewPath = true; }
+    // / is the page for everyone (trainers log in there). /admin/ is the same page for the admin: the only place
+    // where the admin can log in, so a reverse proxy can put /admin/ behind its own login.
+    // /view/ is the old address of the main page (the first Android app opens it): it still works the same as /.
+    if (p === '/admin' || p === '/view') { res.writeHead(301, { Location: p + '/' + u.search }); return res.end(); }
+    if (p.startsWith('/view/')) p = p.slice(5);
+    else if (p.startsWith('/admin/')) { p = p.slice(6); adminPath = true; }
     // Stored pictures: /img/c/<card id>/<low|high> and /img/s/<set id>. Looked up in the index, never by path.
     if (req.method === 'GET' && p.startsWith('/img/')) {
       const m = /^\/img\/(c|s)\/([^/]{1,200})(?:\/(low|high))?$/.exec(p);
@@ -1952,8 +1964,7 @@ const server = http.createServer(async (req, res) => {
         res.end(buf);
       });
     }
-    let sess = sessionOf(req);
-    if (viewPath && sess && sess.acc === ADMIN_ID) sess = null; // an admin login counts as a visitor on /view/
+    const sess = sessionOf(req, adminPath); // on /admin/ only the admin login counts, elsewhere only trainers
     const authed = !!sess, isAdmin = !!sess && sess.acc === ADMIN_ID;
     const ip = clientIp(req);
     if (!authed && limited(ip)) { res.writeHead(429); return res.end('Slow down'); }
@@ -1962,7 +1973,7 @@ const server = http.createServer(async (req, res) => {
     const dexId = accById(dexQ) ? dexQ : (sess && accById(sess.acc) ? sess.acc : firstDex());
     if (req.method === 'GET' && (p === '/' || p === '/index.html')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Vary': 'Cookie', 'X-Content-Type-Options': 'nosniff' });
-      return res.end(indexHtml(isAdmin ? 'admin' : (sess && dexId && sess.acc === dexId ? 'full' : 'ro'), dexId, sess));
+      return res.end(indexHtml(adminPath ? (isAdmin ? 'admin' : 'adminlogin') : (sess && dexId && sess.acc === dexId ? 'full' : 'ro'), dexId, sess));
     }
     if (req.method === 'GET' && p === '/api/accounts') return sendJSON(res, 200, publicAccounts());
     // Every dex's owned cards and wish list, for the trade matches.
@@ -2009,11 +2020,10 @@ const server = http.createServer(async (req, res) => {
       if (blocked(ip)) return sendJSON(res, 429, { error: 'Too many wrong passwords. Try again in 15 minutes.' });
       const b = JSON.parse(await readBody(req, 1e4));
       const given = String(b.password || '');
-      // *admin-<password> in any login box on the normal address: the admin login (never on /view/)
-      const asAdmin = !viewPath && given.startsWith(ADMIN_PREFIX);
+      const asAdmin = adminPath; // the login box on /admin/ is the admin login; everywhere else a trainer's
       const acc = asAdmin ? null : accById(b.dex);
       if (!asAdmin && !acc) return sendJSON(res, 404, { error: 'That dex does not exist' });
-      if (asAdmin ? !checkAdmin(given.slice(ADMIN_PREFIX.length)) : !checkPw(acc, given)) {
+      if (asAdmin ? !checkAdmin(given) : !checkPw(acc, given)) {
         const f = fails.get(ip); fails.set(ip, f && Date.now() - f.t < 15 * 60000 ? { n: f.n + 1, t: Date.now() } : { n: 1, t: Date.now() });
         await sleep(1000);
         return sendJSON(res, 401, { error: 'Wrong password' });
@@ -2022,12 +2032,12 @@ const server = http.createServer(async (req, res) => {
       const tok = crypto.randomBytes(24).toString('base64url');
       sessions[hashTok(tok)] = { exp: Date.now() + SESSION_MS, acc: asAdmin ? ADMIN_ID : acc.id }; saveSessions();
       if (asAdmin) log('admin logged in');
-      res.setHeader('Set-Cookie', cookie(req, tok, SESSION_MS / 1000));
+      res.setHeader('Set-Cookie', cookie(req, asAdmin, tok, SESSION_MS / 1000));
       return sendJSON(res, 200, { ok: true, admin: asAdmin });
     }
     if (req.method === 'POST' && p === '/api/logout') {
-      const t = tokenOf(req); if (t) { delete sessions[hashTok(t)]; saveSessions(); }
-      res.setHeader('Set-Cookie', cookie(req, '', 0));
+      const t = tokenOf(req, adminPath); if (t) { delete sessions[hashTok(t)]; saveSessions(); }
+      res.setHeader('Set-Cookie', cookie(req, adminPath, '', 0));
       return sendJSON(res, 200, { ok: true });
     }
     if (!authed) return sendJSON(res, 401, { error: 'login required' });
@@ -2058,7 +2068,7 @@ const server = http.createServer(async (req, res) => {
       const acc = isAdmin ? null : accById(sess.acc);
       if (isAdmin && ADMIN_FIXED) return sendJSON(res, 409, { error: 'The admin password is set with ADMIN_PASSWORD in the container settings. Change it there.' });
       if (blocked(ip)) return sendJSON(res, 429, { error: 'Too many wrong passwords. Try again in 15 minutes.' });
-      if (isAdmin ? !checkAdmin(String(b.old || '').replace(ADMIN_PREFIX, '')) : !checkPw(acc, String(b.old || ''))) {
+      if (isAdmin ? !checkAdmin(String(b.old || '')) : !checkPw(acc, String(b.old || ''))) {
         const f = fails.get(ip); fails.set(ip, f && Date.now() - f.t < 15 * 60000 ? { n: f.n + 1, t: Date.now() } : { n: 1, t: Date.now() });
         await sleep(1000);
         return sendJSON(res, 401, { error: 'The current password is wrong' });
@@ -2066,7 +2076,7 @@ const server = http.createServer(async (req, res) => {
       const pw = String(b.password || '');
       if (pw.length < 8) return sendJSON(res, 400, { error: 'A password needs at least 8 characters' });
       if (isAdmin) setAdminPw(pw); else { setPw(acc, pw); saveAccounts(); }
-      const mine = hashTok(tokenOf(req)), who = isAdmin ? ADMIN_ID : acc.id;
+      const mine = hashTok(tokenOf(req, adminPath)), who = isAdmin ? ADMIN_ID : acc.id;
       Object.keys(sessions).forEach(k => { if (sessions[k].acc === who && k !== mine) delete sessions[k]; }); saveSessions();
       log('password changed:', isAdmin ? 'admin' : acc.name);
       return sendJSON(res, 200, { ok: true });

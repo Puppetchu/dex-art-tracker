@@ -1,17 +1,17 @@
 # Dex Art for Android
 
-A small Android app around your Dex Art Tracker server. It opens `<your server>/view/` full screen and uses the server for everything (logins, ticks, wish lists, pictures and card scanning), so it updates whenever the server does.
+A small Android app around your Dex Art Tracker server. It opens `<your server>/` full screen and uses the server for everything (logins, ticks, wish lists, pictures and card scanning), so it updates whenever the server does.
 
 ## Using it
 
 1. Install `dex-art.apk` on the phone (allow "install unknown apps" for the browser or file manager you open it with).
 2. On first start, enter the server address, for example `dex.example.com`. Use the https address of your reverse proxy: the camera only works over https. The address can be changed later: press Back on the main page and choose **Change server**.
-3. The app starts as a **closed Pokédex**: pick your trainer, enter your password and it opens. Inside the app you only see your own dex. **Log out** closes it again.
+3. The app starts as a **closed Pokédex**: pick your trainer, enter your password and it opens. Inside the app you only see your own dex. **Log out** closes it again. **View dex** (under the password) opens that trainer's dex without logging in, to look around; tap the lens there to go back to the trainer list.
 
-- The admin cannot log in on `/view/`, so the app is for the trainer accounts. The admin uses the web page (normal address).
-- Pages under `/view/` on your server open inside the app; other links (Cardmarket, TCGplayer) open in the phone's browser.
+- The app is for the trainer accounts. The admin uses `/admin/` in a web browser; the app never opens it.
+- Pages of your server (except `/admin/`) open inside the app; other links (Cardmarket, TCGplayer) open in the phone's browser.
 - The camera is only handed to pages of your own server. Android asks once for camera permission.
-- If a reverse proxy with login (for example Pangolin) sits in front of the server, let `/view` and `/view/*` through without login, otherwise the app reports that it was sent to a login page.
+- If a reverse proxy with login (for example Pangolin) sits in front of the server, let everything except `/admin/` through without login, otherwise the app reports that it was sent to a login page. (App builds from before this change open `/view/`, which the server still answers.)
 
 ## Building
 

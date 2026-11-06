@@ -31,7 +31,7 @@ services:
       # PICTURES_PER_DAY: "500"
       # Prices shown on the page: "cardmarket" (euro, default) or "tcgplayer" (dollar).
       # PRICE_SOURCE: "cardmarket"
-      # The admin password (log in by typing *admin-<password> in any login box; never on /view/). Without it a random
+      # The admin password (log in on http://<address>:8080/admin/, the only place for it). Without it a random
       # one is generated and printed in the container log (also saved as admin.json in the data folder). The admin adds
       # the trainers' accounts and changes the settings on the page. Without this setting it can also change the password there.
       # Most settings below can also be chosen on the Admin settings page, which wins over what is written here.

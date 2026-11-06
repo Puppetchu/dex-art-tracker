@@ -48,9 +48,9 @@ Everyone who opens the page sees a view-only version. Every trainer has their
 own dex: pick it in the "Dex of" menu at the top right, then click the blue lens
 at the top left and enter that dex's password. A login only works on that dex.
 
-You are the admin. The admin has no dex of its own: to log in as admin, click
-the blue lens and type *admin- followed by the admin password, for example
-*admin-MySecret123 (this never works on the /view/ address). The admin password
+You are the admin. The admin has no dex of its own and its own address:
+http://<address>:8080/admin/ . Click the blue lens there and enter the admin
+password (the admin cannot log in anywhere else). The admin password
 is printed in the container log (look for ADMIN PASSWORD) and saved as admin.json
 in the data folder. Or choose your own with the ADMIN_PASSWORD setting in
 docker-compose.yml.
@@ -61,8 +61,9 @@ and choose "+ Add account...". "Manage accounts..." gives a new password or
 deletes one.
 Everyone can rename their own dex with the "Trainer name" button and change
 their own password with the "Password" button.
-Friends can use http://<address>:8080/view/ : other trainers can log in to their
-own dex there, but the admin login never works on that address.
+Friends use the normal address http://<address>:8080/ and log in to their own
+dex there. If you publish the page online, keep /admin/ behind your reverse
+proxy's own login (or do not publish it).
 
 
 USING IT

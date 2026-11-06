@@ -309,6 +309,7 @@ a{color:var(--lcd)}
 #dlMsg{min-height:1.2em;font-size:.82rem;color:#ff8a8a}
 .dl-row{display:flex;gap:8px}.dl-row button{flex:1;white-space:nowrap;padding:9px 6px;background:#0d2536;border-color:#1e4a64;color:var(--lcd);font-family:var(--mono)}
 #dlGo{background:#17794a;border-color:var(--green);color:#fff}
+#dlView{background:transparent;border-style:dashed}
 .dl-frame-foot{display:flex;gap:5px;justify-content:flex-end;margin-top:4%}.dl-spk{width:22px;height:3px;border-radius:2px;background:#9aa3b1}
 .dl-controls{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:6%}
 .dl-btn{width:16%;aspect-ratio:1;border-radius:50%;background:#1d2230;box-shadow:inset 0 -4px 0 #0008}
@@ -391,6 +392,7 @@ a{color:var(--lcd)}
           <input id="dlPw" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
           <div id="dlMsg" aria-live="polite"></div>
           <div class="dl-row"><button type="button" id="dlBack">◀ Back</button><button type="submit" id="dlGo">Open ▶</button></div>
+          <div class="dl-row"><button type="button" id="dlView">View dex</button></div>
         </form>
       </div>
       <div class="dl-frame-foot"><i class="dl-spk"></i><i class="dl-spk"></i><i class="dl-spk"></i></div>
@@ -604,6 +606,7 @@ a{color:var(--lcd)}
 <script>
 (function(){
 var RO=!!window.DEX_READONLY, HIDEV=!!window.DEX_HIDE_VALUE, LOGIN=!!window.DEX_LOGIN, AUTH=!!window.DEX_AUTH;
+var ADMINPATH=!!window.DEX_ADMINPATH; // the /admin/ address: the admin logs in here, trainers on the normal address
 var CFG=window.DEX_CFG||{dex:null,accounts:[],me:null};
 var DEX=CFG.dex, ME=CFG.me, ADMIN=!!(ME&&ME.admin);
 function accName(id){ for(var i=0;i<CFG.accounts.length;i++) if(CFG.accounts[i].id===id) return CFG.accounts[i].name; return id; }
@@ -613,9 +616,12 @@ if(!ADMIN) document.body.classList.add('no-admin');
 // Inside the Android app (it adds "DexArtApp" to every request) the page is one trainer's dex only:
 // a closed Pokédex to log in, no switching to other dexes. The web page itself is unchanged.
 var APP=/\bDexArtApp\//.test(navigator.userAgent), LOCKED=false;
+// "View dex" on the closed Pokédex: someone's dex without logging in (?look=1). The lens leads back to the Pokédex.
+var LOOK=APP&&!ME&&!!DEX&&/[?&]look=1(&|$)/.test(location.search);
 if(APP){
   document.body.classList.add('app-mode');
-  if(!ME) LOCKED=true;
+  if(LOOK) document.body.classList.add('look-mode');
+  else if(!ME) LOCKED=true;
   else if(DEX!==ME.id){ location.replace(location.pathname+'?dex='+encodeURIComponent(ME.id)+location.hash); LOCKED=true; }
 }
 document.title=DEX?DEXNAME+"'s dex · Dex Art Tracker":'Dex Art Tracker';
@@ -625,8 +631,10 @@ if(ADMIN){
   document.title='Admin · Dex Art Tracker';
 } else if(RO){
   document.body.classList.add('ro-mode');
-  document.title=DEX?DEXNAME+"'s dex (view only)":'Dex Art Tracker';
-  if(LOGIN){ var lens=document.querySelector('.lens'); lens.removeAttribute('aria-hidden'); lens.setAttribute('role','button'); lens.setAttribute('tabindex','0'); lens.setAttribute('aria-label',DEX?'Log in to '+DEXNAME+"'s dex":'Log in'); lens.title=DEX?'Log in to '+DEXNAME+"'s dex":'Log in'; lens.style.cursor='pointer'; }
+  document.title=ADMINPATH?'Admin login · Dex Art Tracker':(DEX?DEXNAME+"'s dex"+(LOOK?'':' (view only)'):'Dex Art Tracker');
+  if(ADMINPATH) document.getElementById('roTag').textContent='Admin login';
+  if(LOOK) document.getElementById('roTag').textContent=DEXNAME; // whose dex this is (the app hides the "Dex of" menu)
+  if(LOGIN){ var lens=document.querySelector('.lens'); lens.removeAttribute('aria-hidden'); lens.setAttribute('role','button'); lens.setAttribute('tabindex','0'); var lt=LOOK?'Back to the trainers':ADMINPATH?'Admin login':(DEX?'Log in to '+DEXNAME+"'s dex":'Log in'); lens.setAttribute('aria-label',lt); lens.title=lt; lens.style.cursor='pointer'; }
   if(HIDEV){ ['roWorth','roCost'].forEach(function(i){ var e=document.getElementById(i); if(e) e.style.display='none'; }); }
 }
 'use strict';
@@ -1298,10 +1306,12 @@ function toast(t){ // shown above everything, the card dialog included
 }
 // Clicking Have it / Any card / Art card on a dex you are not logged in to: say why nothing changes.
 function readOnlyHint(){
-  if(ADMIN) toast('The admin has no dex. Log out and log in to a trainer\'s dex to mark cards.');
+  if(ADMIN) toast('The admin has no dex. To mark cards, log in to a trainer\'s dex on the normal address (without /admin/).');
   else if(ME&&ME.id!==DEX) toast('This is '+DEXNAME+"'s dex. Switch to your own dex under \"Dex of\" to mark cards.");
-  else if(LOGIN){ toast('Log in to '+DEXNAME+"'s dex to mark cards."); openLogin(); }
-  else toast(DEXNAME+"'s dex is view-only on this address. Open it without /view/ and log in to mark cards.");
+  else if(LOOK) toast('Tap the lens to log in to your own dex.');
+  else if(LOGIN&&!ADMINPATH){ toast('Log in to '+DEXNAME+"'s dex to mark cards."); openLogin(); }
+  else if(ADMINPATH){ toast('This is the admin address. Trainers log in on the normal address, without /admin/.'); }
+  else toast(DEXNAME+"'s dex is view-only here.");
 }
 document.addEventListener('click',function(e){
   var t=e.target.closest('[data-do]'); if(!t) return;
@@ -1407,11 +1417,12 @@ $('refresh').addEventListener('click',async function(){
   }
   pollRefresh();
 });
-function openLogin(){ $('lgTitle').textContent=DEX?'Log in to '+DEXNAME+"'s dex":'Log in'; $('lgMsg').textContent=''; $('lgPw').value=''; $('lgdlg').showModal(); $('lgPw').focus(); }
+function openLogin(){ $('lgTitle').textContent=ADMINPATH?'Admin login':(DEX?'Log in to '+DEXNAME+"'s dex":'Log in'); $('lgMsg').textContent=''; $('lgPw').value=''; $('lgdlg').showModal(); $('lgPw').focus(); }
+function backToLock(){ location.replace(location.pathname); } // the app's closed Pokédex: pick a trainer again
 if(LOGIN){
-  var lensEl=document.querySelector('.lens');
-  lensEl.addEventListener('click',openLogin);
-  lensEl.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openLogin(); } });
+  var lensEl=document.querySelector('.lens'), lensGo=LOOK?backToLock:openLogin;
+  lensEl.addEventListener('click',lensGo);
+  lensEl.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); lensGo(); } });
 }
 $('lgClose').addEventListener('click',function(){ $('lgdlg').close(); });
 $('lgForm').addEventListener('submit',async function(e){
@@ -1807,7 +1818,7 @@ async function renderAdmin(){
   var groups=[], by={};
   setInfo.fields.forEach(function(f){ if(!by[f.group]){ by[f.group]=[]; groups.push(f.group); } by[f.group].push(f); });
   v.innerHTML='<h2>Admin</h2>'+
-    '<p class="intro">The admin has no dex of its own. Log in to a trainer\'s dex to tick cards.</p>'+
+    '<p class="intro">The admin has no dex of its own. To tick cards, log in to a trainer\'s dex on the normal address (without /admin/).</p>'+
     '<div class="abtns"><button type="button" id="admAcc">Trainers…</button><button type="button" id="admPw">Change admin password</button></div>'+
     '<h2>Settings</h2><p class="intro">Choices made here win over the container\'s settings. <b>Default</b> uses the container\'s value (or the built-in one). '+
     (setInfo.restarts?'Saving restarts the server for a few seconds.':'After saving, restart the container to apply the changes.')+'</p>'+
@@ -1948,6 +1959,7 @@ function pickTrainer(id){
 }
 $('dlList').addEventListener('click',function(e){ var b=e.target.closest('button[data-id]'); if(b) pickTrainer(b.dataset.id); });
 $('dlBack').addEventListener('click',function(){ $('dlForm').hidden=true; $('dlPick').hidden=false; });
+$('dlView').addEventListener('click',function(){ location.replace(location.pathname+'?dex='+encodeURIComponent(dlId)+'&look=1'); });
 $('dlForm').addEventListener('submit',async function(e){
   e.preventDefault(); $('dlMsg').textContent='…'; $('dlGo').disabled=true;
   try{

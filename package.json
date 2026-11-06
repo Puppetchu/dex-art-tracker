@@ -1,6 +1,6 @@
 {
   "name": "dex-art-tracker",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "private": true,
   "description": "Self-hosted Pok\u00e9dex-style art card tracker",
   "main": "server.js",

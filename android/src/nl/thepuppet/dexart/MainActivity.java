@@ -21,9 +21,9 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 /**
- * Shows <server>/view/ full screen. The server does everything: login, ticks, pictures and card scanning.
- * Only pages under /view/ on that server open inside the app; other links (Cardmarket, TCGplayer ...) open
- * in the phone's browser. The camera is only handed to pages from your server.
+ * Shows <server>/ full screen. The server does everything: login, ticks, pictures and card scanning.
+ * Only pages of that server open inside the app (except /admin/, which is for the web browser); other links
+ * (Cardmarket, TCGplayer ...) open in the phone's browser. The camera is only handed to pages from your server.
  */
 public class MainActivity extends Activity {
     private static final int REQ_CAMERA = 1, REQ_FILE = 2;
@@ -33,7 +33,7 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private boolean dialogOpen;
 
-    private String home() { return base + "/view/"; }
+    private String home() { return base + "/"; }
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -75,7 +75,7 @@ public class MainActivity extends Activity {
     @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); }
     @Override protected void onDestroy() { if (web != null) web.destroy(); super.onDestroy(); }
 
-    /** Same server (scheme, host, port) and a path under /view/. */
+    /** Same server (scheme, host, port) and not the admin pages. */
     private boolean inApp(Uri u) {
         if (u == null || base == null) return false;
         Uri b = Uri.parse(base);
@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
         return b.getScheme() != null && b.getScheme().equalsIgnoreCase(u.getScheme())
                 && b.getHost() != null && b.getHost().equalsIgnoreCase(u.getHost())
                 && b.getPort() == u.getPort()
-                && (path.equals("/view") || path.startsWith("/view/"));
+                && !(path.equals("/admin") || path.startsWith("/admin/"));
     }
     private boolean sameServer(Uri u) {
         Uri b = Uri.parse(base);
@@ -122,7 +122,7 @@ public class MainActivity extends Activity {
             if (req.isForMainFrame() && !req.hasGesture() && !sameServer(u)) {
                 // the server (or the proxy in front of it) sent the app to another site: usually a login page
                 problem("The server sent the app to " + u.getHost() + ", probably a login page of your reverse proxy. "
-                        + "Let /view and /view/* through without login (for example a Pangolin \"Bypass Auth\" rule), then try again.");
+                        + "Let everything except /admin/ through without login (for example a Pangolin \"Bypass Auth\" rule), then try again.");
                 return true;
             }
             openOutside(u);
@@ -143,7 +143,7 @@ public class MainActivity extends Activity {
         public void onReceivedHttpError(WebView view, WebResourceRequest req, WebResourceResponse res) {
             if (!req.isForMainFrame()) return;
             int code = res.getStatusCode();
-            if (code == 401 || code == 403) problem("The server refused the page (HTTP " + code + "). If a reverse proxy with login is in front of it, let /view and /view/* through without login.");
+            if (code == 401 || code == 403) problem("The server refused the page (HTTP " + code + "). If a reverse proxy with login is in front of it, let everything except /admin/ through without login.");
             else if (code >= 500) problem("The server is not answering properly (HTTP " + code + "). Is it running?");
         }
     }
@@ -153,7 +153,7 @@ public class MainActivity extends Activity {
         public void onPermissionRequest(PermissionRequest req) {
             boolean camera = false;
             for (String r : req.getResources()) if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r)) camera = true;
-            if (!camera || !inApp(Uri.parse(req.getOrigin().toString() + "view/"))) { req.deny(); return; }
+            if (!camera || !inApp(Uri.parse(req.getOrigin().toString()))) { req.deny(); return; }
             if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                 req.grant(new String[] { PermissionRequest.RESOURCE_VIDEO_CAPTURE });
             } else {
