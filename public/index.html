@@ -172,6 +172,9 @@ dialog::backdrop{background:#000b}
 #impdlg{width:min(680px,94vw)}
 .impform{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .impform input[type=file]{flex:1 1 220px;margin:0}
+#impPasteBox{margin:8px 0 0;font-size:.85rem}
+#impPasteBox summary{cursor:pointer;color:var(--muted)}
+#impText{width:100%;margin:6px 0;font:.8rem var(--mono);resize:vertical}
 .impform select{flex:0 0 auto;margin:0}
 #impMsg{font-size:.88rem;margin:10px 0 6px;color:var(--lcd);min-height:1.1em}
 .implist{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:10px;margin:6px 0}
@@ -565,11 +568,15 @@ a{color:var(--lcd)}
     <strong style="font:800 1.05rem var(--head)">Import from another site</strong>
     <button id="impClose" type="button">Close</button>
   </div>
-  <p style="color:var(--muted);font-size:.85rem;margin:8px 0">Choose a CSV export of your collection, for example from Collectr (your portfolio → Export). Every row is matched to a card by its number, name and set. Nothing is added until you confirm.</p>
+  <p style="color:var(--muted);font-size:.85rem;margin:8px 0">Choose a file or paste the text: a CSV export of your collection (for example from Collectr: your portfolio → Export), or a card list with set codes like <code>1 Pikachu ex MEW 25</code> (Pokémon TCG Live, Limitless and other deck builders). Every card is matched by its number, name and set. Nothing is added until you confirm.</p>
   <div class="impform">
-    <input id="impFile" type="file" accept=".csv,.txt,text/csv,text/plain" aria-label="CSV file">
+    <input id="impFile" type="file" accept=".csv,.txt,text/csv,text/plain" aria-label="File to import">
     <select id="impTo" aria-label="Add the cards to"><option value="own">Add to my owned cards</option><option value="wish">Add to my wish list</option></select>
   </div>
+  <details id="impPasteBox"><summary>…or paste the list</summary>
+    <textarea id="impText" rows="6" placeholder="Paste a card list or CSV here" aria-label="Card list to import"></textarea>
+    <button type="button" id="impRead" class="mini">Read pasted list</button>
+  </details>
   <div id="impMsg" aria-live="polite"></div>
   <div id="impRes"></div>
 </dialog>
@@ -1817,7 +1824,7 @@ $('adminView').addEventListener('click',async function(e){
 /* ---------- importing a collection export from another site (Collectr and the like) ---------- */
 var impData=null;
 $('impTop').addEventListener('click',function(){ $('impSite').click(); });
-$('impSite').addEventListener('click',function(){ $('impFile').value=''; $('impMsg').textContent=''; $('impRes').innerHTML=''; impData=null; $('impdlg').showModal(); });
+$('impSite').addEventListener('click',function(){ $('impFile').value=''; $('impText').value=''; $('impMsg').textContent=''; $('impRes').innerHTML=''; impData=null; $('impdlg').showModal(); });
 $('impClose').addEventListener('click',function(){ $('impdlg').close(); });
 $('impFile').addEventListener('change',function(){
   var f=$('impFile').files[0]; impData=null; $('impRes').innerHTML='';
@@ -1825,15 +1832,20 @@ $('impFile').addEventListener('change',function(){
   if(f.size>5*1024*1024){ $('impMsg').textContent='That file is larger than 5 MB.'; return; }
   $('impMsg').textContent='Reading '+f.name+'…';
   var rd=new FileReader();
-  rd.onload=async function(){
-    try{ impData=await post('api/import',{csv:String(rd.result)}); }
-    catch(err){ if(err.status===401){ location.reload(); return; } $('impMsg').textContent=err.message; return; }
-    impData.found.forEach(function(x){ x.pick=true; });
-    renderImport();
-  };
+  rd.onload=function(){ readImport(String(rd.result)); };
   rd.onerror=function(){ $('impMsg').textContent='That file could not be read.'; };
   rd.readAsText(f);
 });
+async function readImport(text){
+  impData=null; $('impRes').innerHTML='';
+  if(!text.trim()){ $('impMsg').textContent='Nothing to read.'; return; }
+  $('impMsg').textContent='Matching the cards…';
+  try{ impData=await post('api/import',{csv:text}); }
+  catch(err){ if(err.status===401){ location.reload(); return; } $('impMsg').textContent=err.message; return; }
+  impData.found.forEach(function(x){ x.pick=true; });
+  renderImport();
+}
+$('impRead').addEventListener('click',function(){ $('impFile').value=''; readImport($('impText').value); });
 $('impTo').addEventListener('change',function(){ if(impData) renderImport(); });
 function impHas(id){ return $('impTo').value==='own'?owned(id):(owned(id)||wished(id)); }
 function renderImport(){
