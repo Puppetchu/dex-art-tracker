@@ -6,7 +6,7 @@ A small Android app around your Dex Art Tracker server. It opens `<your server>/
 
 1. Install `dex-art.apk` on the phone (allow "install unknown apps" for the browser or file manager you open it with).
 2. On first start, enter the server address, for example `dex.example.com`. Use the https address of your reverse proxy: the camera only works over https. The address can be changed later: press Back on the main page and choose **Change server**.
-3. The app starts as a **closed Pokédex**: pick your trainer, enter your password and it opens. Inside the app you only see your own dex. **Log out** closes it again. **View dex** (under the password) opens that trainer's dex without logging in, to look around; tap the lens there to go back to the trainer list.
+3. The app starts as a **closed Pokédex**: pick your trainer, enter your password and it opens. Inside the app you only see your own dex. **Log out** closes it again. **View dex** (under the password) opens that trainer's dex without logging in, to look around; tap the lens there to go back to the trainer list. **＋ New trainer** (under the list) makes a new dex with your own trainer name and password, when the server allows signing up.
 
 - The app is for the trainer accounts. The admin uses `/admin/` in a web browser; the app never opens it.
 - Pages of your server (except `/admin/`) open inside the app; other links (Cardmarket, TCGplayer) open in the phone's browser.

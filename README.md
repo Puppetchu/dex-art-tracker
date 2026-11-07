@@ -36,6 +36,8 @@ The data cannot tell every art card apart (for example an older alternate art su
 
 ## Pictures
 
+**Set pictures by hand.** On a set's own page the admin has a **Set picture…** button: paste a picture address or choose a file, the same way as for cards. The picture is checked, re-encoded and stored on the server; save with nothing filled in to go back to the automatic picture.
+
 Sets show their logo (then their symbol) from TCGdex, with pokemontcg.io and Scrydex as backups and the set's id as text if nothing loads. For cards:
 
 ### Pictures stored on the server
@@ -56,15 +58,11 @@ Pictures come from TCGdex. Brand new cards and many promos have no picture there
 - **By hand.** The admin sees a **Picture…** button on every card (Sets view and a Pokémon's card list). Paste the address of a picture of that card (for example "Copy image address" on a shop or card site) or choose a picture file from your computer; a preview shows it first. The server downloads or reads it once, checks it and stores a low and a high resolution copy, so the original site is not needed afterwards. Save with nothing filled in to go back to the automatic picture.
 - Otherwise the page still tries pokemontcg.io and Scrydex addresses based on the set id, and finally shows a Poké Ball placeholder with the card's name and number.
 
-## Other languages (check first)
+## Other languages
 
-Japanese and Chinese sets, and cheaper copies in other languages, are not part of the database yet. TCGdex lists them, but its documentation does not say whether those cards carry prices. To find out on your own server, open these in a browser (one at a time, 20 seconds apart):
+English sets are always read. Japanese and **Chinese (Simplified)** sets are added with the `LANGUAGES` setting (Admin settings → Card database → Languages; default English and Japanese). Their cards get a **JA** or **ZH** tag, their names are matched to Pokémon through the Japanese and Chinese Pokémon names from PokeAPI, and cards numbered past the set size count as art cards. Searching for an English name (for example "pikachu") also finds the Japanese and Chinese cards of that Pokémon, and the Sets list has a language menu (English, Japanese or Chinese sets) when more than one language is read.
 
-- `http://<server>:8080/api/lang-check?lang=ja`
-- `http://<server>:8080/api/lang-check?lang=zh-tw`
-- `http://<server>:8080/api/lang-check?lang=zh-cn`
-
-Each check reads the newest set of that language and reports, for four of its newest cards, the rarity name, the dex number and whether a price exists. It costs about 8 requests.
+To see what another language offers before switching it on, open `http://<server>:8080/api/lang-check?lang=zh-cn` (or `ja`, `zh-tw`, ...): it reads the newest set of that language and reports, for four of its newest cards, the rarity name, the dex number and whether a price exists (about 8 requests).
 
 ## How the local database works
 
@@ -91,6 +89,9 @@ Data comes from [TCGdex](https://tcgdex.dev) (free, no key) and names from pokea
 ## Prices for every card, and shop links
 
 - Art cards are priced as before. Regular cards get their price too: the server fills them in slowly in the background (newest sets first), and opening a Pokémon or a set fetches up to 6 missing prices straight away. Prices are stored locally and shown as "price not loaded yet" until then.
+- **Every printing has its own price.** Cardmarket gives two prices per card, the card itself (standard print) and its reverse holo; TCGplayer gives one per printing (normal, holo, reverse holo, 1st edition, unlimited ...). The card shows its main price (the standard print; the reverse holo only for cards without one) and, under it, each printing with its own price. Older cards with 1st edition and unlimited prints show those separately.
+- **Up or down:** next to a Cardmarket price, **▲ +12%** or **▼ −8%** compares the day price (the average of yesterday's sales) with the 30-day average.
+- **Price graphs for the wish list:** cards on someone's wish list are priced again every day, and every price the server fetches is noted in `price-history.json` in the data folder. Each card on the wish list shows a small graph of its price; tap it for a larger graph with the lowest and highest price, Cardmarket's 1, 7 and 30-day averages (the 30-day average is the dashed line) and the price of every printing. A graph starts with the first daily price and grows from there.
 - Every card has a **Cardmarket** and a **TCGplayer** link. If TCGdex supplies Cardmarket's product number the Cardmarket link opens that exact card, otherwise it opens a search for the card name, set and number.
 
 ## Trainers tab
@@ -105,6 +106,7 @@ One port, one page. Every account (trainer) has its own dex with its own ticks; 
 - **Login:** open your own dex and click the blue lens at the top left. A login only opens the dex it was made on: on someone else's dex you are view-only (and the lens logs you in to *that* dex). After logging in you get the full page with the tick buttons, Refresh, Trainer name, Password and Log out, and the lens becomes the camera button for scanning. The login lasts 30 days on that device.
 - **Admin:** the admin is not a trainer and has no dex. The admin has its own address: `http://yourserver:8080/admin/`. Click the blue lens there and enter the admin password; this is the only place the admin can log in, and its login cookie is only sent to `/admin/`, so a trainer login and the admin login in the same browser never mix. The admin password is `ADMIN_PASSWORD`; if you do not set it, a random one is generated, printed in the container log (look for `ADMIN PASSWORD`) and saved as `admin.json` in the data folder. The admin sees every dex as a visitor does, plus **Admin settings** (in the view menu, or click the lens), Refresh prices, the art-card and Picture… buttons, and the account menu. (Older installs: the admin's own "Owner" dex is removed on the first start; its ticks are kept as `removed-owner-dex.json`.)
 - **Admin settings:** a page with a dropdown for most settings below (prices, which sets to read, languages, pictures, scanning and the AI reader with its model and key, proxy). Choices made there are saved in `settings.json` in the data folder and win over the container's settings; **Default** uses the container's value or the built-in one. Saving restarts the server by itself in a few seconds. AI keys are never shown again on the page.
+- **Signing up:** visitors can make their own dex: **Create your own dex** in the login box on the website, or **＋ New trainer** on the app's closed Pokédex (a trainer name and a password of at least 8 characters; they are logged in right away). The admin switches this on or off and sets the limits under Admin settings → Trainers (`SIGNUP`, `SIGNUP_PER_DAY`, `MAX_TRAINERS`); at most 3 sign-ups per internet address per day. Accounts made this way show "signed up" in the admin's account list.
 - **Adding accounts:** logged in as the admin, open the **Dex of** menu and choose **+ Add account…**. Enter a trainer name and a password (or leave it empty and one is made up). The password is shown once. **Manage accounts…** in the same menu gives an account a new password (this logs them out) or deletes it (its ticks are kept as `states/<id>.deleted-….json`).
 - **Trainer name and password:** every account owner can rename their own dex with the **Trainer name** button and change their password with **Password** (the current password is asked first; other devices logged in to that dex are logged out). The admin changes the admin password with the same button, unless it is set with `ADMIN_PASSWORD`: then change it there. An admin password changed on the page is stored as a salted hash in `admin.json`.
 - **Shared art list:** "Count as art card" / "Not an art card" change the art list for every dex, so only the admin sees them. Other accounts can tick cards, use Get price and Refresh prices.
@@ -144,6 +146,8 @@ The page can be installed as an app on Android (and iPhone): open it in Chrome o
 - Without an AI everything runs on your server and nothing is sent anywhere. A scan takes one to a few seconds.
 - Results are best with good light and the card numbers sharp; with several cards, get close enough that the small numbers stay readable. Holo glare or tiny print can need a second try; if nothing fits, the page says what it read. Japanese cards are found by their number and set size (the Japanese name cannot be read).
 - Only logged-in trainers can scan, one scan at a time on the server. `SCAN=0` switches scanning off; `SCAN_DEBUG=1` writes what every scan found and read to the log.
+
+**Better AI readings.** The AI is also asked for the set code printed at the bottom of newer cards ("PAL", "SVI", "MEW" ...) and the card's language; a matching set and language count heavily, so the same card number in another set, or the Japanese print of an English card, no longer wins. OpenAI gets the card in high detail and must answer in JSON. When the card finder sees one or two card shapes, the AI also looks at the whole photo and decides how many cards there are: a single card then gives one result, read from the whole photo, even if the finder only caught the card's picture or half of it; cards cut off at the edge of the photo are left out.
 
 **Reading cards with an AI.** An AI model that understands pictures reads names and card numbers far better than Tesseract, also on shiny cards, in sleeves and in Japanese (it also names the Pokémon in English). Set `SCAN_AI` to the service, `SCAN_AI_KEY` to its API key and optionally `SCAN_AI_MODEL`:
 
@@ -190,14 +194,17 @@ Most of these can also be chosen on the **Admin settings** page; a choice saved 
 | `DAILY_REQUESTS` | 0 | Most requests per day, 0 = no limit |
 | `REQUEST_DELAY_MS` | 2000 | Pause between requests in milliseconds |
 | `PRICE_MAX_AGE_DAYS` | 30 | Re-price candidates older than this |
-| `SETS_CHECK_DAYS` | 1 | The set list is checked at start and then every this many days |
+| `SETS_CHECK_HOURS` | 6 | The set list is checked at start and then every this many hours (the older `SETS_CHECK_DAYS` still works) |
 | `PRICE_CANDIDATES` | 2 | Cheapest art cards per Pokémon kept up to date |
 | `MIN_SET_DATE` | any | Only sets released on or after this date (YYYY-MM-DD) are read; `any` reads every set, including the 1999 Base Set |
 | `RARITIES` | Illustration Rare,Special Illustration Rare,Promo | Art card rarities, case-insensitive |
 | `PROMO_AS_ART` | 1 | 0 = promo cards only count when their rarity is listed above |
 | `DISABLE_REFRESH` | 0 | 1 = never contact the APIs |
 | `EXTRA_RARITIES` | Mega Hyper Rare,Ultra Rare,Holo Rare | Extra rarities that count as art cards in every language (comma separated) |
-| `LANGUAGES` | en,ja | `en` = English only |
+| `LANGUAGES` | en,ja | Languages whose sets are read: `en`, `ja` (Japanese), `zh-cn` (Chinese Simplified), for example `en,ja,zh-cn` |
+| `SIGNUP` | 1 | Visitors can sign up for their own dex (0 = only the admin adds trainers) |
+| `SIGNUP_PER_DAY` | 20 | Sign-ups per day for the whole server |
+| `MAX_TRAINERS` | 200 | No more sign-ups beyond this many trainers |
 | `REGULAR_PRICES_PER_DAY` | 0 | Most requests per day spent on regular-card prices, 0 = no limit |
 | `ADMIN_PASSWORD` | random | The admin password (log in on `/admin/`) |
 | `ANDROID_APP` | 1 | Offer the Android app: the website button and the app's update check (0 = off) |

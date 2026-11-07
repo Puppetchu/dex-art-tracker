@@ -103,6 +103,17 @@ h1{margin:0;font:800 1.45rem/1 var(--head);letter-spacing:.14em;text-transform:u
 .name{font:700 1rem var(--head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .meta{font-size:.76rem;color:var(--muted);min-height:2.3em}
 .price{font:600 .95rem var(--mono);color:var(--lcd);font-variant-numeric:tabular-nums}
+.chg{font-size:.72rem;font-weight:700;padding:0 4px;border-radius:5px;white-space:nowrap}
+.chg.up{color:var(--green);background:#3ddc8418}.chg.down{color:#ff8a8a;background:#ff4d6318}.chg.flat{color:var(--muted)}
+.prints{display:flex;flex-wrap:wrap;gap:2px 10px;font-size:.72rem;color:var(--muted);margin:1px 0 3px}
+.prints b{color:var(--ink);font-weight:600;font-family:var(--mono)}
+.spark{display:block;width:100%;height:40px;margin:4px 0 2px;cursor:pointer;background:none;border:0;padding:0}
+.spark svg{width:100%;height:100%;display:block}
+.sparknote{font-size:.72rem;color:var(--muted);display:block;margin:2px 0;text-align:left;white-space:normal}
+#chartdlg{width:min(720px,95vw)}
+#chartBody svg{width:100%;height:auto;display:block;margin:8px 0}
+.chartstats{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.82rem;color:var(--muted)}
+.chartstats b{color:var(--ink);font-family:var(--mono)}
 .row{display:flex;gap:6px}
 .row button{flex:1;padding:6px 4px;font-size:.78rem}
 .row button.on{background:#17794a;border-color:var(--green);color:#fff}
@@ -194,9 +205,8 @@ dialog::backdrop{background:#000b}
 #toast:not(:popover-open):not(.show){display:none}
 .ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode [data-do="unwish"],.ro-mode [data-do="wish"],.ro-mode #pwBtn,.ro-mode #impTop,.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn,.ro-mode #nameBtn{display:none!important}
 /* scanning */
-/* logged in to your own dex: the lens opens the scanner (small camera mark on it) */
+/* logged in to your own dex: the lens opens the scanner */
 .lens.scan{cursor:pointer;position:relative}
-.lens.scan::after{content:"";position:absolute;right:-6px;bottom:-4px;width:24px;height:24px;border-radius:50%;background:#10131a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23e9f1fb' d='M9 4 7.2 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.2L15 4H9zm3 4.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z'/%3E%3C/svg%3E") center/15px no-repeat;border:2px solid #f5f7fb}
 .lens.scan:active{transform:scale(.94)}
 #scandlg{max-width:min(560px,100vw);padding:12px}
 @media (max-width:600px){#scandlg{width:100vw;max-height:100dvh;margin:0;border-radius:0}}
@@ -304,11 +314,15 @@ a{color:var(--lcd)}
 #dlList button{text-align:left;background:#0d2536;border:1px solid #1e4a64;color:var(--lcd);font:600 1rem var(--mono);padding:10px 12px;border-radius:6px;text-shadow:0 0 8px #3ddc8455}
 #dlList button::before{content:"▸ ";color:var(--lens)}
 #dlList button.last{border-color:var(--lens)}
-#dlForm{display:flex;flex-direction:column;gap:10px}
+#dlForm,#dlNew{display:flex;flex-direction:column;gap:10px}
+#dlForm[hidden],#dlNew[hidden]{display:none}
+#dlNName,#dlNPw,#dlNPw2{background:#0d2536;border:1px solid #1e4a64;color:var(--lcd);font:1rem var(--mono);padding:10px 12px;border-radius:6px}
+#dlNMsg{min-height:1.2em;font-size:.82rem;color:#ff8a8a}
+#dlNewBtn{width:100%;margin-top:8px;background:transparent;border:1px dashed #1e4a64;color:var(--lcd);font:600 .95rem var(--mono);padding:10px 12px;border-radius:6px}
 #dlPw{background:#0d2536;border:1px solid #1e4a64;color:var(--lcd);font:1rem var(--mono);padding:10px 12px;border-radius:6px}
 #dlMsg{min-height:1.2em;font-size:.82rem;color:#ff8a8a}
 .dl-row{display:flex;gap:8px}.dl-row button{flex:1;white-space:nowrap;padding:9px 6px;background:#0d2536;border-color:#1e4a64;color:var(--lcd);font-family:var(--mono)}
-#dlGo{background:#17794a;border-color:var(--green);color:#fff}
+#dlGo,#dlNGo{background:#17794a;border-color:var(--green);color:#fff}
 #dlView{background:transparent;border-style:dashed}
 .dl-frame-foot{display:flex;gap:5px;justify-content:flex-end;margin-top:4%}.dl-spk{width:22px;height:3px;border-radius:2px;background:#9aa3b1}
 .dl-controls{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:6%}
@@ -386,7 +400,17 @@ a{color:var(--lcd)}
         <div id="dlPick">
           <div class="dl-head">Select trainer</div>
           <div id="dlList"></div>
+          <button type="button" id="dlNewBtn" hidden>＋ New trainer</button>
         </div>
+        <form id="dlNew" hidden>
+          <div class="dl-head">New trainer</div>
+          <input id="dlNName" type="text" maxlength="30" autocomplete="username" placeholder="Trainer name" aria-label="Trainer name">
+          <input id="dlNPw" type="password" autocomplete="new-password" placeholder="Password (min. 8)" aria-label="Password, at least 8 characters">
+          <input id="dlNPw2" type="password" autocomplete="new-password" placeholder="Password again" aria-label="Password again">
+          <input id="dlNWeb" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px">
+          <div id="dlNMsg" aria-live="polite"></div>
+          <div class="dl-row"><button type="button" id="dlNBack">◀ Back</button><button type="submit" id="dlNGo">Create ▶</button></div>
+        </form>
         <form id="dlForm" hidden>
           <div class="dl-head">Trainer <b id="dlName"></b></div>
           <input id="dlPw" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
@@ -475,6 +499,12 @@ a{color:var(--lcd)}
     <option value="most">Most complete</option>
     <option value="least">Least complete</option>
   </select>
+  <select id="setLang" aria-label="Sets in which language" hidden>
+    <option value="">All languages</option>
+    <option value="en">English sets</option>
+    <option value="ja">Japanese sets</option>
+    <option value="zh-cn">Chinese sets</option>
+  </select>
   <button id="refresh" type="button" title="Checks up to 25 missing cards or the oldest prices">Refresh prices</button>
 </div>
 <div id="gens"></div>
@@ -507,6 +537,15 @@ a{color:var(--lcd)}
   <form id="lgForm" style="margin-top:8px">
     <input id="lgPw" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
     <div style="display:flex;gap:8px;align-items:center"><button id="lgGo" type="submit">Log in</button><span id="lgMsg" style="color:var(--muted);font-size:.85rem"></span></div>
+  </form>
+  <p id="lgSignup" hidden style="margin:12px 0 0;font-size:.85rem;color:var(--muted)">New here? <button type="button" class="mini" id="lgNew">Create your own dex</button></p>
+  <form id="suForm" hidden style="margin-top:8px">
+    <p style="margin:0 0 8px;font-size:.85rem;color:var(--muted)">Pick a trainer name and a password (at least 8 characters). Your dex is ready right away.</p>
+    <input id="suName" type="text" maxlength="30" autocomplete="username" placeholder="Trainer name" aria-label="Trainer name">
+    <input id="suPw" type="password" autocomplete="new-password" placeholder="Password" aria-label="Password">
+    <input id="suPw2" type="password" autocomplete="new-password" placeholder="Password again" aria-label="Password again">
+    <input id="suWeb" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button id="suGo" type="submit">Create my dex</button><button id="suBack" type="button" class="mini">Back to log in</button><span id="suMsg" style="color:var(--muted);font-size:.85rem"></span></div>
   </form>
 </dialog>
 <dialog id="namedlg">
@@ -569,6 +608,13 @@ a{color:var(--lcd)}
     <input id="pwNew2" type="password" autocomplete="new-password" placeholder="New password again" aria-label="New password again">
     <div style="display:flex;gap:8px;align-items:center"><button type="submit">Change password</button><span id="pwMsg" style="color:var(--muted);font-size:.85rem"></span></div>
   </form>
+</dialog>
+<dialog id="chartdlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong id="chartTitle" style="font:800 1.05rem var(--head)">Price history</strong>
+    <button id="chartClose" type="button">Close</button>
+  </div>
+  <div id="chartBody"></div>
 </dialog>
 <dialog id="impdlg">
   <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
@@ -666,6 +712,10 @@ function post(url,body){ return call(url,{method:'POST',headers:{'Content-Type':
 /* ---------- pictures: TCGdex first, then two other image hosts, then a placeholder ---------- */
 function ptcgId(sid){ return String(sid).replace(/^([a-z]+)0*(\d)/i,'$1$2').replace('.','pt'); }
 function isJa(id){ return /^ja:/.test(String(id||'')); }
+function langOf(id){ var m=/^(ja|zh-cn):/.exec(String(id||'')); return m?m[1]:'en'; }
+function langTag(id){ var l=langOf(id); return l==='ja'?' · JA':l==='zh-cn'?' · ZH':''; }
+// the names a card can be found by: its printed name (also Japanese or Chinese) and the English name of its Pokémon
+function cardNames(c){ var t=String(c.n||''); (c.d||[]).forEach(function(n){ if(names[n]) t+=' '+names[n]; }); return t.toLowerCase(); }
 function numOf(k){ return /^\d+$/.test(String(k))?String(+k):String(k); }
 var PHONE=false; try{ PHONE=window.matchMedia('(max-width:700px)').matches; }catch(e){}
 function imgList(c,big){
@@ -683,7 +733,7 @@ function imgList(c,big){
     l.push('https://images.scrydex.com/pokemon/'+encodeURIComponent(js)+'_ja-'+encodeURIComponent(plain)+'/'+sz);
     if(String(c.k)!==plain) l.push('https://images.scrydex.com/pokemon/'+encodeURIComponent(js)+'_ja-'+encodeURIComponent(c.k)+'/'+sz);
   }
-  if(c.sid&&c.k!=null&&c.k!==''&&!isJa(c.sid)){
+  if(c.sid&&c.k!=null&&c.k!==''&&langOf(c.sid)==='en'){
     var pid=ptcgId(c.sid), nm=encodeURIComponent(numOf(c.k));
     l.push('https://images.pokemontcg.io/'+pid+'/'+nm+(big?'_hires':'')+'.png');
     l.push('https://images.scrydex.com/pokemon/'+pid+'-'+nm+'/'+(big?'medium':'small'));
@@ -691,7 +741,7 @@ function imgList(c,big){
   if(lp&&l.indexOf(lp+'low?v='+encodeURIComponent(c.lv||''))<0) l.push(lp+'low?v='+encodeURIComponent(c.lv||'')); // last resort: the stored low one
   return l;
 }
-function subOf(c){ var s=setsById[c.sid]; return (s?s.name:(c.sid||''))+(c.k?' · '+c.k:'')+(isJa(c.sid)?' · JA':''); }
+function subOf(c){ var s=setsById[c.sid]; return (s?s.name:(c.sid||''))+(c.k?' · '+c.k:'')+langTag(c.sid); }
 function phHTML(name,sub){ return '<div class="ph"><i class="ball"></i><b>'+esc(name)+'</b><span>No picture available yet</span><span>'+esc(sub)+'</span></div>'; }
 function picHTML(c,big){
   var l=imgList(c,big);
@@ -703,7 +753,7 @@ function logoList(s){
   if(s.ll) l.push('img/s/'+encodeURIComponent(s.id)+'?v='+encodeURIComponent(s.ll)); // stored on this server
   if(s.lg){ l.push(s.lg+'.webp'); l.push(s.lg+'.png'); }
   if(s.sy){ l.push(s.sy+'.webp'); }
-  if(!isJa(s.id)){
+  if(langOf(s.id)==='en'){
     var pid=ptcgId(s.id);
     l.push('https://images.pokemontcg.io/'+pid+'/logo.png');
     l.push('https://images.scrydex.com/pokemon/'+pid+'-logo/logo');
@@ -775,7 +825,19 @@ function priceHTML(c){
   var isArt=c.a||c.t==='a';
   if(c.pv) return '<div class="price" title="Known art card, price not fetched yet">price pending</div>'+getBtn(c);
   if(!isArt&&!c.pt) return '<div class="price" title="Prices of regular cards are fetched slowly in the background">price not loaded yet</div>'+getBtn(c);
-  return '<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>'+(price(c)==null?getBtn(c):'');
+  return '<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+chHTML(c)+'</div>'+printsHTML(c)+(price(c)==null?getBtn(c):'');
+}
+// Up or down: Cardmarket's day price (yesterday's average) against its 30-day average.
+function chHTML(c){
+  if(!c||st.cur!=='eu'||typeof c.ch!=='number') return '';
+  var pc=Math.round(c.ch*100), cls=pc>=1?'up':pc<=-1?'down':'flat';
+  return ' <span class="chg '+cls+'" title="Day price compared with the 30-day average on Cardmarket">'+(pc>=1?'▲ +'+pc:pc<=-1?'▼ '+pc:'= 0')+'%</span>';
+}
+// Every printing with its own price (standard / reverse holo on Cardmarket; normal, holo, reverse, 1st edition ... on TCGplayer)
+function printsHTML(c){
+  var v=c&&c.vr&&c.vr[st.cur];
+  if(!v||v.length<2) return '';
+  return '<div class="prints">'+v.map(function(x){ return '<span>'+esc(x.k)+' <b>'+fmt(x.v)+'</b></span>'; }).join('')+'</div>';
 }
 function linkHTML(c){
   var nm=c.n;
@@ -987,7 +1049,7 @@ function renderTrainers(){
   list=list.filter(function(c){
     if(trFilter==='miss'&&owned(c.id)) return false;
     if(trFilter==='own'&&!owned(c.id)) return false;
-    return !q||(c.n||'').toLowerCase().indexOf(q)>=0||setName(c).toLowerCase().indexOf(q)>=0;
+    return !q||cardNames(c).indexOf(q)>=0||setName(c).toLowerCase().indexOf(q)>=0;
   });
   list.sort(function(a,b){ return String(setDate(b)).localeCompare(String(setDate(a)))||String(a.k).localeCompare(String(b.k),undefined,{numeric:true}); });
   var S=st.cur==='eu'?'€':'$', h=[];
@@ -1000,7 +1062,7 @@ function renderTrainers(){
     h.push('<div class="tile '+(o?'s-g':'s-r')+'"><div class="no"><span>'+esc(c.k||'')+'</span><i class="led"></i></div>'+
       '<div class="pic">'+picHTML(c,false)+'<span class="badge">ART</span></div>'+
       '<div class="name" title="'+esc(c.n)+'">'+esc(c.n)+'</div>'+
-      '<div class="meta">'+esc(c.r||'Art card')+' · '+esc(setName(c))+(isJa(c.sid)?' · JA':'')+'</div>'+
+      '<div class="meta">'+esc(c.r||'Art card')+' · '+esc(setName(c))+langTag(c.sid)+'</div>'+
       priceHTML(c)+linkHTML(c)+
       '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div>'+wishBtn(c)+'</div>');
   });
@@ -1097,7 +1159,7 @@ function renderWish(){
   h.push('<div class="cgrid">');
   mine.forEach(function(w){
     var c=byId[w.id], who=holders[c.id];
-    h.push(cardTile(c,who?'s-y':'s-r',priceHTML(c)+linkHTML(c)+
+    h.push(cardTile(c,who?'s-y':'s-r',priceHTML(c)+'<button type="button" class="spark" data-chart="'+esc(c.id)+'" title="Price history"><span class="sparknote">…</span></button>'+linkHTML(c)+
       '<div class="who'+(who?'':' none')+'">'+(who?'Owned by '+esc(who.join(', ')):'No other trainer has this one')+'</div>'+(w.dex?dexBtn(w.dex):'')+
       '<div class="row"><button type="button" data-do="wish" data-id="'+esc(c.id)+'">Take off wish list</button></div>'));
   });
@@ -1111,6 +1173,7 @@ function renderWish(){
   });
   h.push('</div>');
   $('wishView').innerHTML=h.join('');
+  fillSparks(mine.map(function(w){ return w.id; }));
   setStatus(all+' on the wish list'+(mine.length<all?' ('+mine.length+' shown)':'')+' · '+wantedIds.length+' wanted by others.');
 }
 
@@ -1152,6 +1215,10 @@ function renderSets(){
   $('wishView').hidden=view!=='wish'; $('histView').hidden=view!=='history'; $('adminView').hidden=view!=='admin';
   $('viewSel').value=view;
   $('filter').hidden=view!=='dex'; $('genSel').hidden=view!=='dex'; $('sortSel').hidden=view!=='dex'; $('setSort').hidden=view!=='sets'||!!curSet;
+  // the language menu only when sets of more than one language are read
+  var langs={}; sets.forEach(function(s){ langs[langOf(s.id)]=1; });
+  $('setLang').hidden=view!=='sets'||!!curSet||Object.keys(langs).length<2;
+  [].forEach.call($('setLang').options,function(o){ o.hidden=!!o.value&&!langs[o.value]; });
   if(view==='trainers') renderTrainers();
   if(view==='wish') renderWish();
   if(view==='history') renderHist();
@@ -1160,7 +1227,8 @@ function renderSets(){
   var q=$('q').value.trim().toLowerCase(), h=[];
   if(!curSet){
     var per=ownedPerSet(), srt=$('setSort').value;
-    var list=sets.filter(function(s){ return !q||s.name.toLowerCase().indexOf(q)>=0||s.id.toLowerCase().indexOf(q)>=0; });
+    var lg=$('setLang').hidden?'':$('setLang').value;
+    var list=sets.filter(function(s){ return (!lg||langOf(s.id)===lg)&&(!q||s.name.toLowerCase().indexOf(q)>=0||s.id.toLowerCase().indexOf(q)>=0); });
     function pct(s){ return s.n?(per[s.id]||0)/s.n:0; }
     list.sort(function(a,b){
       if(srt==='old') return String(a.date).localeCompare(String(b.date));
@@ -1173,7 +1241,7 @@ function renderSets(){
     list.forEach(function(s){
       var o=per[s.id]||0, p=s.n?Math.round(o/s.n*100):0;
       h.push('<button type="button" class="settile'+(o&&o>=s.n?' full':'')+'" data-do="set" data-id="'+esc(s.id)+'">'+
-        '<div class="slbox">'+logoHTML(s)+'</div><b>'+esc(s.name)+'</b><span>'+esc(s.date)+' · '+s.n+' cards · '+s.art+' art'+(s.promo?' · promo':'')+(isJa(s.id)?' · JA':'')+'</span>'+
+        '<div class="slbox">'+logoHTML(s)+'</div><b>'+esc(s.name)+'</b><span>'+esc(s.date)+' · '+s.n+' cards · '+s.art+' art'+(s.promo?' · promo':'')+langTag(s.id)+'</span>'+
         '<div class="mbar"><i style="width:'+p+'%"></i></div><span class="pct">'+o+' / '+s.n+' · '+p+'%</span></button>');
     });
     h.push('</div>');
@@ -1189,14 +1257,14 @@ function renderSets(){
     if(c.t==='a'){artTot++; if(o) artOwn++;}
   });
   var list2=s.cards.filter(function(c){
-    if(q&&(c.n||'').toLowerCase().indexOf(q)<0&&String(c.k)!==q) return false;
+    if(q&&cardNames(c).indexOf(q)<0&&String(c.k)!==q) return false;
     if(setFilter==='miss') return !owned(c.id);
     if(setFilter==='own') return owned(c.id);
     if(setFilter==='art') return c.t==='a';
     return true;
   });
   var total=s.cards.length, p=total?Math.round(own/total*100):0;
-  h.push('<div class="sethead"><button type="button" data-do="back">← All sets</button>'+(setsById[s.id]?'<span class="slbox big">'+logoHTML(setsById[s.id])+'</span>':'')+'<h2>'+esc(s.name)+'</h2><span>'+esc(s.date)+(s.promo?' · promo set':'')+'</span><span class="sp"></span>'+
+  h.push('<div class="sethead"><button type="button" data-do="back">← All sets</button>'+(setsById[s.id]?'<span class="slbox big">'+logoHTML(setsById[s.id])+'</span>':'')+'<h2>'+esc(s.name)+'</h2><span>'+esc(s.date)+(s.promo?' · promo set':'')+langTag(s.id)+'</span>'+(ADMIN?'<button type="button" class="mini" data-do="setpic" data-id="'+esc(s.id)+'" title="Give this set a picture by hand">Set picture…</button>':'')+'<span class="sp"></span>'+
     [['all','All'],['miss','Missing'],['own','Owned'],['art','Art cards']].map(function(x){return '<button type="button" class="chip'+(setFilter===x[0]?' on':'')+'" data-do="sf" data-v="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>');
   h.push('<div class="setprog"><span>'+own+' / '+total+' ('+p+'%)</span><div class="mbar"><i style="width:'+p+'%"></i></div>'+
     (s.official?'<span>Main '+mainOwn+' / '+mainTot+'</span>':'')+(secTot?'<span>Secret '+secOwn+' / '+secTot+'</span>':'')+(artTot?'<span>Art '+artOwn+' / '+artTot+'</span>':'')+'</div>');
@@ -1320,7 +1388,7 @@ document.addEventListener('click',function(e){
   if(RO&&/^(any|art|have)$/.test(a)){ readOnlyHint(); return; }
   if(RO&&/^(main|unwish|wish)$/.test(a)) return;
   if(RO&&!ADMIN&&/^(mark|getp)$/.test(a)) return;
-  if(!ADMIN&&(a==='mark'||a==='pic')) return;
+  if(!ADMIN&&(a==='mark'||a==='pic'||a==='setpic')) return;
   if(a==='any'){
     if(artOwned(n)) return;
     if(anyOwned(n)){
@@ -1349,6 +1417,7 @@ document.addEventListener('click',function(e){
   else if(a==='more'){ regShown+=60; fillDex(); }
   else if(a==='zoom'){ openLb(id); }
   else if(a==='pic'){ openPic(id); }
+  else if(a==='setpic'){ openPic(id,true); }
   else if(a==='scanview'){ $('scandlg').close(); go('#/dex/'+n); }
   else if(a==='mark'){
     var art=t.dataset.v==='1';
@@ -1397,6 +1466,8 @@ $('genSel').addEventListener('change',function(){
   if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
 });
 $('setSort').addEventListener('change',render);
+try{ $('setLang').value=localStorage.getItem('dexSetLang')||''; }catch(e){}
+$('setLang').addEventListener('change',function(){ try{ localStorage.setItem('dexSetLang',$('setLang').value); }catch(e){} render(); });
 
 async function pollRefresh(){
   if(RO) return;
@@ -1418,7 +1489,9 @@ $('refresh').addEventListener('click',async function(){
   }
   pollRefresh();
 });
-function openLogin(){ $('lgTitle').textContent=ADMINPATH?'Admin login':(DEX?'Log in to '+DEXNAME+"'s dex":'Log in'); $('lgMsg').textContent=''; $('lgPw').value=''; $('lgdlg').showModal(); $('lgPw').focus(); }
+function openLogin(){ $('lgTitle').textContent=ADMINPATH?'Admin login':(DEX?'Log in to '+DEXNAME+"'s dex":'Log in');
+  var none=!DEX&&SIGNUP&&!ADMINPATH; // no trainers yet: straight to signing up
+  $('lgForm').hidden=none; $('lgSignup').hidden=!SIGNUP||ADMINPATH||!DEX; $('suForm').hidden=!none; $('lgMsg').textContent=''; $('lgPw').value=''; $('lgdlg').showModal(); (none?$('suName'):$('lgPw')).focus(); }
 function backToLock(){ location.replace(location.pathname); } // the app's closed Pokédex: pick a trainer again
 if(LOGIN){
   var lensEl=document.querySelector('.lens'), lensGo=LOOK?backToLock:openLogin;
@@ -1426,6 +1499,20 @@ if(LOGIN){
   lensEl.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); lensGo(); } });
 }
 $('lgClose').addEventListener('click',function(){ $('lgdlg').close(); });
+// Signing up: a new trainer makes their own dex (when the admin allows it) and is logged in right away.
+var SIGNUP=!!window.DEX_SIGNUP;
+async function signUp(name,pw,pw2,web,msgEl){
+  if(!name.trim()){ msgEl.textContent='Enter a trainer name.'; return; }
+  if(pw.length<8){ msgEl.textContent='The password needs at least 8 characters.'; return; }
+  if(pw!==pw2){ msgEl.textContent='The two passwords are not the same.'; return; }
+  msgEl.textContent='…';
+  try{ var r=await post('api/signup',{name:name,password:pw,website:web}); try{ localStorage.setItem('dexLast',r.id); }catch(x){} location.replace(location.pathname+'?dex='+encodeURIComponent(r.id)); }
+  catch(err){ msgEl.textContent=err.message||'Could not sign up.'; }
+}
+function showSignup(on){ $('lgForm').hidden=on; $('lgSignup').hidden=on||!SIGNUP||ADMINPATH; $('suForm').hidden=!on; $('suMsg').textContent=''; (on?$('suName'):$('lgPw')).focus(); }
+$('lgNew').addEventListener('click',function(){ showSignup(true); });
+$('suBack').addEventListener('click',function(){ showSignup(false); });
+$('suForm').addEventListener('submit',function(e){ e.preventDefault(); signUp($('suName').value,$('suPw').value,$('suPw2').value,$('suWeb').value,$('suMsg')); });
 $('lgForm').addEventListener('submit',async function(e){
   e.preventDefault(); $('lgMsg').textContent='…';
   try{ await post('api/login',{dex:DEX,password:$('lgPw').value}); location.reload(); }
@@ -1551,7 +1638,7 @@ function searchHTML(q){
   var words=q.split(/\s+/).filter(Boolean), out=[];
   var num=function(k){ return String(k||'').toLowerCase().replace(/^([a-z]*)0+(\d)/,'$1$2'); };
   for(var id in byId){
-    var c=byId[id], name=String(c.n||'').toLowerCase(), k=num(c.k), set=setName(c).toLowerCase();
+    var c=byId[id], name=cardNames(c), k=num(c.k), set=setName(c).toLowerCase();
     if(words.every(function(w){ return name.indexOf(w)>=0||k===num(w)||set.indexOf(w)>=0; })) out.push(c);
     if(out.length>=400) break;
   }
@@ -1638,11 +1725,13 @@ var installEvt=null;
 window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); installEvt=e; $('installBtn').hidden=false; });
 window.addEventListener('appinstalled',function(){ installEvt=null; $('installBtn').hidden=true; });
 $('installBtn').addEventListener('click',function(){ if(!installEvt) return; installEvt.prompt(); installEvt.userChoice.then(function(){ installEvt=null; $('installBtn').hidden=true; }); });
-// The Android app download, offered on Android phones (not inside the app itself)
-if(window.DEX_APK&&/Android/i.test(navigator.userAgent)&&!APP){
+// The Android app download: for everyone, logged in or not, on every device except iPhones/iPads and the app itself
+if(window.DEX_APK&&!APP&&!/iPhone|iPad|iPod/i.test(navigator.userAgent)){
+  var onAndroid=/Android/i.test(navigator.userAgent);
   $('apkBtn').hidden=false;
   $('apkBtn').addEventListener('click',function(){
-    toast('Downloading the app… Open the file when it is done. Android may ask you to allow installing apps from your browser.');
+    toast(onAndroid?'Downloading the app… Open the file when it is done. Android may ask you to allow installing apps from your browser.'
+      :'Downloading the Android app. Easiest: open this page on your Android phone and tap "Android app" there.');
     location.href='android.apk';
   });
 }
@@ -1667,10 +1756,10 @@ $('nameBtn').addEventListener('click',function(){ $('nameIn').value=ME?ME.name:'
 $('nameClose').addEventListener('click',function(){ $('namedlg').close(); });
 $('pwBtn').addEventListener('click',function(){ ['pwOld','pwNew','pwNew2'].forEach(function(i){ $(i).value=''; }); $('pwMsg').textContent=''; $('pwdlg').showModal(); $('pwOld').focus(); });
 $('pwClose').addEventListener('click',function(){ $('pwdlg').close(); });
-var picId=null, picData=null;
-function openPic(id){
-  var c=lookup(id); picId=id;
-  $('picTitle').textContent='Picture · '+(c?c.n+' · '+subOf(c):id);
+var picId=null, picData=null, picSet=false; // picSet: the picture is for a set (its logo), not a card
+function openPic(id,isSet){
+  var c=isSet?null:lookup(id); picId=id; picSet=!!isSet;
+  $('picTitle').textContent=isSet?'Set picture · '+((setsById[id]||{}).name||id):'Picture · '+(c?c.n+' · '+subOf(c):id);
   $('picUrl').value=''; $('picFile').value=''; picData=null; $('picMsg').textContent=''; showPrev();
   $('picdlg').showModal(); $('picUrl').focus();
 }
@@ -1693,7 +1782,7 @@ $('picClose').addEventListener('click',function(){ $('picdlg').close(); });
 $('picForm').addEventListener('submit',async function(e){
   e.preventDefault(); $('picMsg').textContent='…';
   $('picMsg').textContent=picData||$('picUrl').value.trim()?'Downloading and storing the picture…':'…';
-  try{ await post('api/card/picture',picData?{id:picId,data:picData}:{id:picId,url:$('picUrl').value.trim()}); }
+  try{ await post(picSet?'api/set/picture':'api/card/picture',picData?{id:picId,data:picData}:{id:picId,url:$('picUrl').value.trim()}); }
   catch(err){ if(err.status===401){ location.reload(); return; } $('picMsg').textContent=err.message; return; }
   $('picdlg').close();
   await loadData(); index();
@@ -1720,7 +1809,7 @@ async function loadAccounts(){
   $('accList').innerHTML=list.map(function(a){
     var del=accArmed&&accArmed.key==='del:'+a.id&&Date.now()-accArmed.t<4000;
     return '<div class="accrow"><b>'+esc(a.name)+'</b>'+
-      ('<span>added '+esc(new Date(a.created).toLocaleDateString())+'</span>'+
+      ('<span>'+(a.self?'signed up ':'added ')+esc(new Date(a.created).toLocaleDateString())+'</span>'+
       '<button type="button" class="mini" data-acc="pw" data-id="'+esc(a.id)+'" data-name="'+esc(a.name)+'">New password</button>'+
       '<button type="button" class="mini'+(del?' arm':'')+'" data-acc="del" data-id="'+esc(a.id)+'" data-name="'+esc(a.name)+'">'+(del?'Really delete?':'Delete')+'</button>')+
       '<a class="mini" href="'+esc(dexUrl(a.id))+'">open dex</a></div>';
@@ -1886,6 +1975,70 @@ $('adminView').addEventListener('click',async function(e){
   }
 });
 
+/* ---------- price history graphs (wish list) ---------- */
+// The server notes each card's price every time it is fetched; wished cards are priced every day.
+var histCache={};
+async function loadHist(ids){
+  var now=Date.now(), need=ids.filter(function(id){ var x=histCache[id]; return !x||now-x.t>10*60000; });
+  for(var i=0;i<need.length;i+=150){
+    var part=need.slice(i,i+150), r;
+    try{ r=await getJSON('api/prices?ids='+encodeURIComponent(part.join(','))); }catch(e){ return; }
+    part.forEach(function(id){ histCache[id]={t:now,h:(r.h&&r.h[id])||[]}; });
+  }
+}
+function monthAvg(c){ // Cardmarket's 30-day average of the printing whose price is shown
+  var v=c&&c.vr&&c.vr.eu; if(st.cur!=='eu'||!v) return null;
+  var p=price(c), best=null; v.forEach(function(x){ if(best==null||Math.abs(x.v-p)<Math.abs(best.v-p)) best=x; });
+  return best&&best.a30!=null?best:null;
+}
+// pts: [[day, price], ...]; w, h: size; big: axis labels and dots; ref: the 30-day average (dashed line)
+function chartSVG(pts,w,h,big,ref){
+  var vals=pts.map(function(p){ return p[1]; }); if(ref!=null) vals.push(ref);
+  var lo=Math.min.apply(null,vals), hi=Math.max.apply(null,vals); if(hi-lo<0.01){ hi+=0.5; lo=Math.max(0,lo-0.5); }
+  var t0=Date.parse(pts[0][0]), t1=Date.parse(pts[pts.length-1][0]); if(t1===t0) t1=t0+864e5;
+  var L=big?52:2, R=big?10:2, T=big?10:3, B=big?24:3;
+  var X=function(d){ return L+(Date.parse(d)-t0)/(t1-t0)*(w-L-R); }, Y=function(v){ return T+(1-(v-lo)/(hi-lo))*(h-T-B); };
+  var line=pts.map(function(p,i){ return (i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1); }).join(' ');
+  var up=pts[pts.length-1][1]>=pts[0][1], col=up?'var(--green)':'#ff8a8a';
+  var o='<svg viewBox="0 0 '+w+' '+h+'"'+(big?'':' preserveAspectRatio="none"')+' role="img" aria-label="Price from '+fmt(pts[0][1])+' to '+fmt(pts[pts.length-1][1])+'">';
+  if(ref!=null) o+='<line x1="'+L+'" x2="'+(w-R)+'" y1="'+Y(ref).toFixed(1)+'" y2="'+Y(ref).toFixed(1)+'" stroke="var(--muted)" stroke-dasharray="4 4" stroke-width="1" vector-effect="non-scaling-stroke"><title>30-day average '+fmt(ref)+'</title></line>';
+  o+='<path d="'+line+'" fill="none" stroke="'+col+'" stroke-width="'+(big?2.5:2)+'" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>';
+  if(big){
+    o+='<text x="'+(L-6)+'" y="'+(Y(hi)+4).toFixed(1)+'" text-anchor="end" font-size="11" fill="var(--muted)">'+fmt(hi)+'</text><text x="'+(L-6)+'" y="'+(Y(lo)+4).toFixed(1)+'" text-anchor="end" font-size="11" fill="var(--muted)">'+fmt(lo)+'</text>';
+    o+='<text x="'+L+'" y="'+(h-6)+'" font-size="11" fill="var(--muted)">'+new Date(t0).toLocaleDateString()+'</text><text x="'+(w-R)+'" y="'+(h-6)+'" text-anchor="end" font-size="11" fill="var(--muted)">'+new Date(Date.parse(pts[pts.length-1][0])).toLocaleDateString()+'</text>';
+    pts.forEach(function(p){ o+='<circle cx="'+X(p[0]).toFixed(1)+'" cy="'+Y(p[1]).toFixed(1)+'" r="3" fill="'+col+'"><title>'+new Date(Date.parse(p[0])).toLocaleDateString()+': '+fmt(p[1])+'</title></circle>'; });
+  }
+  return o+'</svg>';
+}
+async function fillSparks(ids){
+  if(!ids.length) return;
+  await loadHist(ids);
+  ids.forEach(function(id){
+    var el=document.querySelector('#wishView [data-chart="'+(window.CSS&&CSS.escape?CSS.escape(id):id)+'"]'); if(!el) return;
+    var pts=(histCache[id]||{}).h||[], m=monthAvg(byId[id]);
+    if(pts.length>=2) el.innerHTML=chartSVG(pts,200,40,false,m?m.a30:null);
+    else el.innerHTML='<span class="sparknote">'+(pts.length?'Price graph from '+new Date(Date.parse(pts[0][0])).toLocaleDateString()+' · grows daily':'Price graph starts with the next daily price')+'</span>';
+  });
+}
+async function openChart(id){
+  var c=byId[id]; if(!c) return;
+  await loadHist([id]);
+  var pts=(histCache[id]||{}).h||[], m=monthAvg(c), v=c.vr&&c.vr[st.cur];
+  $('chartTitle').textContent=c.n+' · '+setName(c)+' '+(c.k||'');
+  if(!$('chartdlg').open) $('chartdlg').showModal();
+  var cw=Math.max(280,Math.round($('chartBody').clientWidth||600)), hh=''; // drawn at the real width, so the labels keep their size
+  if(pts.length>=2) hh+=chartSVG(pts,cw,Math.round(Math.min(260,cw*0.45)),true,m?m.a30:null);
+  else hh+='<p class="sparknote" style="margin:12px 0">'+(pts.length?'The server noted the price on '+new Date(Date.parse(pts[0][0])).toLocaleDateString()+'. Wished cards are priced every day, so the graph grows from here.':'No price noted yet. Wished cards are priced every day, so the graph starts with the next daily price.')+'</p>';
+  var stats=['<span>Now <b>'+fmt(price(c))+'</b>'+chHTML(c)+'</span>'];
+  if(pts.length>=2){ var vals=pts.map(function(p){ return p[1]; }); stats.push('<span>Lowest <b>'+fmt(Math.min.apply(null,vals))+'</b></span>','<span>Highest <b>'+fmt(Math.max.apply(null,vals))+'</b></span>','<span>'+pts.length+' days noted</span>'); }
+  if(m) stats.push('<span>Cardmarket averages: day <b>'+fmt(m.a1)+'</b> · 7 days <b>'+fmt(m.a7)+'</b> · 30 days <b>'+fmt(m.a30)+'</b> (dashed line)</span>');
+  hh+='<div class="chartstats">'+stats.join('')+'</div>';
+  if(v&&v.length) hh+='<p class="sparknote" style="margin-top:10px">Prices per printing:</p><div class="prints" style="font-size:.85rem">'+v.map(function(x){ return '<span>'+esc(x.k)+' <b>'+fmt(x.v)+'</b>'+(x.a30!=null?' (30 days '+fmt(x.a30)+')':'')+'</span>'; }).join('')+'</div>';
+  $('chartBody').innerHTML=hh;
+}
+$('wishView').addEventListener('click',function(e){ var b=e.target.closest('[data-chart]'); if(b) openChart(b.dataset.chart); });
+$('chartClose').addEventListener('click',function(){ $('chartdlg').close(); });
+
 /* ---------- importing a collection export from another site (Collectr and the like) ---------- */
 var impData=null;
 $('impTop').addEventListener('click',function(){ $('impSite').click(); });
@@ -1950,7 +2103,8 @@ function showLock(){
   var list=CFG.accounts, last=null;
   try{ last=localStorage.getItem('dexLast'); }catch(e){}
   $('dlList').innerHTML=list.length?list.map(function(a){ return '<button type="button" data-id="'+esc(a.id)+'"'+(a.id===last?' class="last"':'')+'>'+esc(a.name)+'</button>'; }).join('')
-    :'<p>No trainers yet. Ask the admin to add an account for you.</p>';
+    :'<p>'+(SIGNUP?'No trainers yet. Tap "New trainer" to make the first dex.':'No trainers yet. Ask the admin to add an account for you.')+'</p>';
+  $('dlNewBtn').hidden=!SIGNUP;
   lockSize();
   $('dexLock').hidden=false;
 }
@@ -1968,6 +2122,9 @@ function pickTrainer(id){
 }
 $('dlList').addEventListener('click',function(e){ var b=e.target.closest('button[data-id]'); if(b) pickTrainer(b.dataset.id); });
 $('dlBack').addEventListener('click',function(){ $('dlForm').hidden=true; $('dlPick').hidden=false; });
+$('dlNewBtn').addEventListener('click',function(){ $('dlPick').hidden=true; $('dlNew').hidden=false; $('dlNMsg').textContent=''; $('dlNName').focus(); });
+$('dlNBack').addEventListener('click',function(){ $('dlNew').hidden=true; $('dlPick').hidden=false; });
+$('dlNew').addEventListener('submit',function(e){ e.preventDefault(); signUp($('dlNName').value,$('dlNPw').value,$('dlNPw2').value,$('dlNWeb').value,$('dlNMsg')); });
 $('dlView').addEventListener('click',function(){ location.replace(location.pathname+'?dex='+encodeURIComponent(dlId)+'&look=1'); });
 $('dlForm').addEventListener('submit',async function(e){
   e.preventDefault(); $('dlMsg').textContent='…'; $('dlGo').disabled=true;

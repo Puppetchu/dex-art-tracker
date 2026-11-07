@@ -56,7 +56,9 @@ in the data folder. Or choose your own with the ADMIN_PASSWORD setting in
 docker-compose.yml.
 As admin you get "Admin settings" (click the lens): dropdowns for the prices,
 sets, pictures, scanning and AI settings. Saving restarts the server by itself.
-To give someone (you too) their own dex: log in as admin, open the "Dex of" menu
+Trainers can sign up themselves ("Create your own dex" in the login box, or
+"New trainer" in the app); switch that off under Admin settings -> Trainers.
+To give someone (you too) their own dex yourself: log in as admin, open the "Dex of" menu
 and choose "+ Add account...". "Manage accounts..." gives a new password or
 deletes one.
 Everyone can rename their own dex with the "Trainer name" button and change

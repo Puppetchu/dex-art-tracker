@@ -2,7 +2,7 @@
 // Dex Art Card Tracker server (TCGdex edition).
 //
 // Local database, built gently:
-//  1. Sets: the set list is checked at start and then daily (SETS_CHECK_DAYS); every new set is fetched once.
+//  1. Sets: the set list is checked at start and then every 6 hours (SETS_CHECK_HOURS); every new set is fetched once.
 //     A set request returns all its cards by name and image, so every card is stored from that
 //     alone. Regular cards need no further requests.
 //  2. Art candidates: TCGdex is asked which cards have an art rarity (a few dozen list requests), and
@@ -36,12 +36,12 @@ const SETTINGS = [
   { group: 'Prices', key: 'SHOW_VALUE_PUBLIC', label: 'Visitors (not logged in) see worth and left to spend', def: '0', options: yesNo('Shown', 'Hidden') },
   { group: 'Card database', key: 'MIN_SET_DATE', label: 'Sets to read', def: 'any', help: 'Older sets are read the next time the set list is checked (at start).',
     options: [['any', 'All sets (from 1996)'], ['2000-01-01', 'From 2000'], ['2011-04-25', 'From Black & White (2011)'], ['2017-02-03', 'From Sun & Moon (2017)'], ['2020-02-07', 'From Sword & Shield (2020)'], ['2023-03-31', 'From Scarlet & Violet (2023)']] },
-  { group: 'Card database', key: 'LANGUAGES', label: 'Languages', def: 'en,ja', options: [['en,ja', 'English and Japanese'], ['en', 'English only']] },
+  { group: 'Card database', key: 'LANGUAGES', label: 'Languages', def: 'en,ja', options: [['en,ja', 'English and Japanese'], ['en,ja,zh-cn', 'English, Japanese and Chinese (Simplified)'], ['en,zh-cn', 'English and Chinese (Simplified)'], ['en', 'English only']] },
   { group: 'Card database', key: 'PROMO_AS_ART', label: 'Every Pokémon card from a promo set counts as an art card', def: '1', options: yesNo() },
   { group: 'Card database', key: 'DISABLE_REFRESH', label: 'Contact the card service (TCGdex)', def: '0', options: [['0', 'Yes'], ['1', 'No (work offline)']] },
   { group: 'Card database', key: 'REQUEST_DELAY_MS', label: 'Pause between requests to the card service', def: '2000', options: [['1000', '1 second'], ['2000', '2 seconds'], ['5000', '5 seconds'], ['10000', '10 seconds']] },
   { group: 'Card database', key: 'DAILY_REQUESTS', label: 'Requests per day', def: '0', options: [['0', 'No limit'], ['500', '500'], ['1000', '1,000'], ['2000', '2,000'], ['5000', '5,000'], ['10000', '10,000']] },
-  { group: 'Card database', key: 'SETS_CHECK_DAYS', label: 'Look for new sets', def: '1', options: [['1', 'Every day'], ['3', 'Every 3 days'], ['7', 'Every week']] },
+  { group: 'Card database', key: 'SETS_CHECK_HOURS', label: 'Look for new sets', def: '6', options: [['1', 'Every hour'], ['3', 'Every 3 hours'], ['6', 'Every 6 hours'], ['12', 'Every 12 hours'], ['24', 'Every day'], ['168', 'Every week']] },
   { group: 'Pictures', key: 'IMAGE_HIGH', label: 'Store high resolution pictures of', def: 'all', options: [['all', 'All cards'], ['art', 'Art, owned and wished cards'], ['none', 'No cards (small pictures only)']] },
   { group: 'Pictures', key: 'PICTURE_LOOKUP', label: 'Look up missing pictures on pokemontcg.io', def: '1', options: yesNo() },
   { group: 'Pictures', key: 'PICTURES_PER_DAY', label: 'Picture lookups per day', def: '500', options: [['100', '100'], ['500', '500'], ['1000', '1,000'], ['0', 'No limit']] },
@@ -54,6 +54,9 @@ const SETTINGS = [
   { group: 'Scanning', key: 'SCAN_AI_URL', label: 'Address of the AI server', type: 'url', def: '(the service\'s own address)', help: 'Only for a local AI, including /v1, for example http://192.168.1.20:11434/v1' },
   { group: 'Scanning', key: 'SCAN_AI_TIMEOUT', label: 'Wait for the AI at most', def: '45', options: [['30', '30 seconds'], ['45', '45 seconds'], ['60', '1 minute'], ['120', '2 minutes'], ['180', '3 minutes']] },
   { group: 'Scanning', key: 'SCAN_DEBUG', label: 'Write scan details to the log', def: '0', options: yesNo() },
+  { group: 'Trainers', key: 'SIGNUP', label: 'New trainers can sign up themselves', def: '1', options: [['1', 'Yes (on the website and in the app)'], ['0', 'No, only the admin adds trainers']] },
+  { group: 'Trainers', key: 'SIGNUP_PER_DAY', label: 'Sign-ups allowed per day (all together)', def: '20', options: [['5', '5'], ['20', '20'], ['50', '50'], ['200', '200']] },
+  { group: 'Trainers', key: 'MAX_TRAINERS', label: 'Most trainers on this server', def: '200', options: [['25', '25'], ['50', '50'], ['200', '200'], ['1000', '1,000']] },
   { group: 'Android app', key: 'ANDROID_APP', label: 'Offer the Android app (a button on the website, update check in the app)', def: '1', options: yesNo() },
   { group: 'Android app', key: 'ANDROID_RELEASE', label: 'Where the app is downloaded from', type: 'url', def: 'https://github.com/Puppetchu/dex-art-tracker/releases/latest/download/',
     help: 'The address of the folder with dex-art.apk and version.json: the "android-latest" release that GitHub builds for your repository.' },
@@ -88,18 +91,23 @@ for (const f of SETTINGS) {
 }
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const BASE = (process.env.TCGDEX_BASE || 'https://api.tcgdex.net/v2/en').replace(/\/$/, '');
-// Languages whose sets are read: en (always) and ja. Japanese ids are stored as "ja:<id>" so they never clash.
-const LANGS = ['en'].concat((process.env.LANGUAGES || 'en,ja').split(',').map(x => x.trim().toLowerCase()).filter(x => x === 'ja'));
+// Languages whose sets are read: en (always), ja (Japanese) and zh-cn (Chinese Simplified). Their ids are stored as
+// "ja:<id>" and "zh-cn:<id>" so they never clash with the English ones.
+const EXTRA_LANGS = ['ja', 'zh-cn'];
+const LANGS = ['en'].concat((process.env.LANGUAGES || 'en,ja').split(',').map(x => x.trim().toLowerCase()).filter(x => EXTRA_LANGS.includes(x)));
+const LANG_NAME = { en: 'English', ja: 'Japanese', 'zh-cn': 'Chinese' };
 const baseFor = lang => BASE.replace(/\/en$/, '/' + lang);
-const langOf = id => String(id).startsWith('ja:') ? 'ja' : 'en';
+const langOf = id => { const m = /^(ja|zh-cn):/.exec(String(id)); return m ? m[1] : 'en'; };
 const pfx = lang => lang === 'en' ? '' : lang + ':';
-const rawId = id => String(id).replace(/^ja:/, '');
+const rawId = id => String(id).replace(/^(ja|zh-cn):/, '');
 // How many of the daily requests may go to prices of regular cards (the rest is for art cards).
 const REGULAR_PRICES_PER_DAY = process.env.REGULAR_PRICES_PER_DAY !== undefined ? +process.env.REGULAR_PRICES_PER_DAY : 0; // 0 = no limit
 const DAILY_REQUESTS = process.env.DAILY_REQUESTS !== undefined ? (+process.env.DAILY_REQUESTS || 0) : 0; // 0 = no daily limit
 const REQUEST_DELAY_MS = process.env.REQUEST_DELAY_MS !== undefined ? +process.env.REQUEST_DELAY_MS : 2000; // pause between requests, 2 seconds by default
 const PRICE_MAX_AGE_DAYS = +process.env.PRICE_MAX_AGE_DAYS || 30;
-const SETS_CHECK_DAYS = +process.env.SETS_CHECK_DAYS || 1; // the set list is checked at start and then this often
+// The set list is checked at start and then every SETS_CHECK_HOURS (6); the older SETS_CHECK_DAYS still works.
+const SETS_CHECK_HOURS = +process.env.SETS_CHECK_HOURS || (+process.env.SETS_CHECK_DAYS ? +process.env.SETS_CHECK_DAYS * 24 : 6);
+const WISH_PRICE_DAYS = 0.9; // wished cards are priced again after this many days (a little under one, so the hourly run does not slip a day)
 const PRICE_CANDIDATES = +process.env.PRICE_CANDIDATES || 2;
 // Only sets released on or after this date are read. "any" (the default) reads every set, back to the 1996-1999 originals.
 // ('0000' instead of '' so sets without a release date still count as "before" and are not asked for again and again.)
@@ -236,20 +244,32 @@ const rarOk = lang => !!(db.rar[lang] && db.rar[lang].ok);
 // rarity search is unavailable) it is numbered above the official set size.
 function isCandidate(s, c) {
   if (PROMO_AS_ART && s.promo) return true;
-  if (s.lang === 'ja' && isSecret(s, c)) return true;
+  if (s.lang && s.lang !== 'en' && isSecret(s, c)) return true; // Japanese and Chinese: cards past the set size
   if (foundIds().has(c.id)) return true;
   return !rarOk(s.lang || 'en') && isSecret(s, c);
 }
 // Rarity a not-yet-fetched art card was listed under (kept from the rarity search).
 function provRarity(id) {
   const r = db.rar[langOf(id)];
-  return (r && r.m && r.m[rawId(id)]) || (String(id).startsWith('ja:') ? 'Secret card' : null);
+  return (r && r.m && r.m[rawId(id)]) || (langOf(id) !== 'en' ? 'Secret card' : null);
 }
 function worth(s, c) { return isCandidate(s, c) && (foundIds().has(c.id) || spOf(c) !== 0); }
 const localOf = (id, sid) => String(id).slice(String(sid || '').length + 1);
 
+const num = v => typeof v === 'number' && v > 0 ? Math.round(v * 100) / 100 : null;
+// TCGplayer names its printings normal, holofoil, reverse-holofoil, 1st-edition-holofoil ...
+function printName(k) {
+  const t = String(k).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').toLowerCase().trim();
+  const m = { normal: 'Normal', holo: 'Holo', holofoil: 'Holo', reverse: 'Reverse holo', 'reverse holo': 'Reverse holo', 'reverse holofoil': 'Reverse holo',
+    '1st edition': '1st edition', '1st edition holo': '1st edition holo', '1st edition holofoil': '1st edition holo', '1st edition normal': '1st edition',
+    unlimited: 'Unlimited', 'unlimited holo': 'Unlimited holo', 'unlimited holofoil': 'Unlimited holo' };
+  return m[t] || t.charAt(0).toUpperCase() + t.slice(1);
+}
+// The card's price (eu, us), every printing (vr) and the change of the day price against the 30-day average (ch).
+// Cardmarket has two price families per card: the card itself and its reverse holo (TCGdex: "-holo");
+// TCGplayer has one price per printing (normal, holo, reverse holo, 1st edition ...).
 function prices(d) {
-  let us = null, eu = null;
+  let us = null, eu = null, fam = '';
   const p = d.pricing || {};
   const tp = p.tcgplayer || {};
   Object.keys(tp).forEach(k => {
@@ -257,11 +277,22 @@ function prices(d) {
     if (v && typeof v === 'object' && typeof v.marketPrice === 'number' && v.marketPrice > 0 && (us === null || v.marketPrice < us)) us = v.marketPrice;
   });
   const cm = p.cardmarket || {};
-  ['trend-holo', 'trend', 'avg30-holo', 'avg30'].some(k => {
-    if (typeof cm[k] === 'number' && cm[k] > 0) { eu = cm[k]; return true; }
+  // the card's own price (standard print) first; the reverse holo only when the card has no other price
+  ['trend', 'avg30', 'trend-holo', 'avg30-holo'].some(k => {
+    if (typeof cm[k] === 'number' && cm[k] > 0) { eu = cm[k]; fam = k.endsWith('-holo') ? '-holo' : ''; return true; }
     return false;
   });
-  return { us, eu };
+  const vrEu = [['', 'Standard print'], ['-holo', 'Reverse holo']].map(([f, k]) => {
+    const o = { k, v: num(cm['trend' + f]) || num(cm['avg30' + f]) || num(cm['avg' + f]), a1: num(cm['avg1' + f]), a7: num(cm['avg7' + f]), a30: num(cm['avg30' + f]), lo: num(cm['low' + f]) };
+    return o.v == null ? null : o;
+  }).filter(Boolean);
+  const vrUs = Object.keys(tp).filter(k => tp[k] && typeof tp[k] === 'object' && num(tp[k].marketPrice) != null)
+    .map(k => ({ k: printName(k), v: num(tp[k].marketPrice), lo: num(tp[k].lowPrice) }));
+  const vr = vrEu.length || vrUs.length ? { eu: vrEu.length ? vrEu : undefined, us: vrUs.length ? vrUs : undefined } : undefined;
+  // up or down: the day price (average of yesterday's sales, else the trend) against the 30-day average, same family as the price shown
+  const day = num(cm['avg1' + fam]) || num(cm['trend' + fam]), month = num(cm['avg30' + fam]);
+  const ch = eu != null && day != null && month != null ? Math.round((day - month) / month * 1000) / 1000 : undefined;
+  return { us, eu, vr, ch };
 }
 // Names that do not match PokeAPI's spelling once punctuation is removed.
 const ALIAS = { 83: ['farfetch d'], 865: ['sirfetch d'] };
@@ -272,17 +303,19 @@ function dexByName(name, list) { // list: [[dex, [' token ', ...]], ...]
   if (/♂/.test(raw) && !out.includes(32)) out.push(32); // Nidoran♂
   return out;
 }
-// Japanese card names contain the Pokémon's katakana name (リザードンex, ナンジャモのピカチュウ ...).
-let jaCache = null;
-function jaList() {
-  const n = NM && NM.ja ? Object.keys(NM.ja).length : 0;
-  if (!jaCache || jaCache.n !== n) jaCache = { n, list: Object.entries(NM.ja || {}).map(([d, name]) => [+d, String(name).normalize('NFKC')]).filter(x => x[1].length >= 2) };
-  return jaCache.list;
+// Japanese and Chinese card names contain the Pokémon's name (リザードンex, ナンジャモのピカチュウ, 皮卡丘ex ...).
+// The names come from PokeAPI and are kept in names.json (ja for Japanese, zh-cn for Chinese Simplified).
+const locCache = {};
+function locList(lang) {
+  const map = (NM && NM[lang]) || {}, n = Object.keys(map).length;
+  if (!locCache[lang] || locCache[lang].n !== n) locCache[lang] = { n, list: Object.entries(map).map(([d, name]) => [+d, String(name).normalize('NFKC')]).filter(x => x[1].length >= 2) };
+  return locCache[lang].list;
 }
-function dexByNameJa(raw) {
-  if (!NM || !NM.ja) return [];
+function dexByNameJa(raw) { return dexByNameLoc(raw, 'ja'); }
+function dexByNameLoc(raw, lang) {
+  if (!NM || !NM[lang]) return [];
   const t = String(raw || '').normalize('NFKC');
-  const hits = jaList().filter(([, name]) => t.includes(name));
+  const hits = locList(lang).filter(([, name]) => t.includes(name));
   // ミュウ is part of ミュウツー: a name that only appears inside a longer matching name does not count
   const keep = hits.filter(([, a]) => !hits.some(([, b]) => b.length > a.length && b.includes(a)));
   return [...new Set(keep.map(([n]) => n))];
@@ -303,14 +336,14 @@ function qualifies(d, p) {
   if (!isPokemon(d)) return false;
   if (d.rarity && RAR_ALL.has(String(d.rarity).toLowerCase())) return true;
   const s = d.set && db.sets[(p || '') + d.set.id];
-  if (p === 'ja:' && s && isSecret(s, { l: String(d.localId) })) return true;
+  if (p && s && isSecret(s, { l: String(d.localId) })) return true;
   return !!(PROMO_AS_ART && s && s.promo);
 }
 function record(d, p) {
   const pr = prices(d); p = p || '';
   return {
     id: p + d.id, n: d.name, r: d.rarity || null, s: d.set && d.set.name, sid: d.set && (p + d.set.id), d: d.dexId || [], tr: d.category === 'Trainer' ? 1 : undefined,
-    b: cleanBase(d.image), eu: pr.eu, us: pr.us, cm: cmId(d), pt: new Date().toISOString(),
+    b: cleanBase(d.image), eu: pr.eu, us: pr.us, vr: pr.vr, ch: pr.ch, cm: cmId(d), pt: new Date().toISOString(),
   };
 }
 
@@ -325,7 +358,7 @@ function loadSpecies() {
 loadSpecies();
 // 1 if the card name contains a Pokémon name, 0 if not (trainers, energy), undefined if names are not loaded yet.
 function spOf(c) {
-  if (!SP || String(c.id).startsWith('ja:')) return undefined;
+  if (!SP || langOf(c.id) !== 'en') return undefined;
   if (c.sp === undefined) { const k = cmp(c.n || ''); c.sp = (SP.some(s => k.includes(s)) || /[♀♂]/.test(c.n || '')) ? 1 : 0; }
   return c.sp;
 }
@@ -343,7 +376,7 @@ async function refreshNames() {
       names[id] = x.name.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
       if (id > max) max = id;
     });
-    NM = { t: Date.now(), max, names, ja: NM && NM.ja, jaDone: NM && NM.jaDone };
+    NM = Object.assign({}, NM || {}, { t: Date.now(), max, names }); // keeps the Japanese and Chinese names
     writeJSON(NAMES_FILE, NM);
     loadSpecies();
     log('names updated:', Object.keys(names).length);
@@ -352,53 +385,55 @@ async function refreshNames() {
 
 // Regular cards have no dex number in the set listing, so they are matched to Pokémon by name.
 function matchRegular() {
-  const key = NM && NM.names ? NM.t + ':' + (NM.jaDone || 0) : null;
+  const key = NM && NM.names ? NM.t + ':' + EXTRA_LANGS.map(l => (NM[l + 'Done'] || 0)).join(':') : null; // again when names of a language arrive
   if (!key || db.regMatched === key) return;
   const sp = speciesList();
   for (const s of Object.values(db.sets)) {
     if (!s.scan) continue;
-    for (const c of s.cards) c.d = s.lang === 'ja' ? dexByNameJa(c.n) : dexByName(c.n, sp);
+    for (const c of s.cards) c.d = s.lang && s.lang !== 'en' ? dexByNameLoc(c.n, s.lang) : dexByName(c.n, sp);
   }
   db.regMatched = key;
 }
 
-// Japanese species names from PokeAPI: one GraphQL request, or one request per Pokémon if that is not available.
-async function refreshJaNames() {
-  if (!LANGS.includes('ja') || !NM || !NM.names) return;
-  const want = Object.keys(NM.names).map(Number);
-  NM.ja = NM.ja || {};
-  if (NM.jaDone && Object.keys(NM.ja).length >= want.length * 0.9) return;
-  const have = () => Object.keys(NM.ja).length;
+// Japanese and Chinese species names from PokeAPI: one GraphQL request, or one request per Pokémon if that is not available.
+const POKEAPI_LANG = { ja: ['ja-Hrkt', 'ja'], 'zh-cn': ['zh-hans', 'zh-Hans'] };
+async function refreshLocNames() { for (const l of LANGS) if (l !== 'en') await refreshLangNames(l); }
+async function refreshLangNames(lang) {
+  const codes = POKEAPI_LANG[lang]; if (!codes || !NM || !NM.names) return;
+  const want = Object.keys(NM.names).map(Number), doneKey = lang + 'Done';
+  NM[lang] = NM[lang] || {};
+  const map = NM[lang], have = () => Object.keys(map).length;
+  if (NM[doneKey] && have() >= want.length * 0.9) return;
   if (have() < want.length * 0.9) {
     try {
       const r = await fetch('https://beta.pokeapi.co/graphql/v1beta', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': 'dex-art-tracker' }, signal: AbortSignal.timeout(60000),
-        body: JSON.stringify({ query: '{ pokemon_v2_pokemonspeciesname(where: {pokemon_v2_language: {name: {_in: ["ja-Hrkt", "ja"]}}}) { pokemon_species_id name pokemon_v2_language { name } } }' }),
+        body: JSON.stringify({ query: '{ pokemon_v2_pokemonspeciesname(where: {pokemon_v2_language: {name: {_in: ' + JSON.stringify(codes) + '}}}) { pokemon_species_id name pokemon_v2_language { name } } }' }),
       });
       const j = r.ok ? await r.json() : null;
       const rows = j && j.data && j.data.pokemon_v2_pokemonspeciesname;
-      if (Array.isArray(rows)) rows.forEach(x => { const id = x.pokemon_species_id; if (id && x.name && (x.pokemon_v2_language.name === 'ja-Hrkt' || !NM.ja[id])) NM.ja[id] = x.name; });
-    } catch (e) { log('japanese names (bulk) failed:', e.message); }
+      if (Array.isArray(rows)) rows.forEach(x => { const id = x.pokemon_species_id; if (id && x.name && (x.pokemon_v2_language.name === codes[0] || !map[id])) map[id] = x.name; });
+    } catch (e) { log(LANG_NAME[lang].toLowerCase() + ' names (bulk) failed:', e.message); }
   }
   if (have() < want.length * 0.9) { // fall back to one request per Pokémon, up to 400 per start of a run
     let n = 0;
     for (const id of want) {
-      if (NM.ja[id]) continue;
+      if (map[id]) continue;
       if (n++ >= 400) break;
       try {
         const r = await fetch('https://pokeapi.co/api/v2/pokemon-species/' + id + '/', { signal: AbortSignal.timeout(30000), headers: { 'User-Agent': 'dex-art-tracker' } });
         if (r.ok) {
-          const j = await r.json();
-          const nm = (j.names || []).find(x => x.language.name === 'ja-Hrkt') || (j.names || []).find(x => x.language.name === 'ja');
-          if (nm) NM.ja[id] = nm.name;
+          const j = await r.json(), lc = codes.map(c => c.toLowerCase());
+          const nm = lc.map(c => (j.names || []).find(x => String(x.language.name).toLowerCase() === c)).find(Boolean);
+          if (nm) map[id] = nm.name;
         }
       } catch (e) { /* try again in a later run */ }
       await sleep(REQUEST_DELAY_MS);
     }
   }
-  if (have() >= want.length * 0.9) { NM.jaDone = Date.now(); log('japanese names loaded:', have()); }
+  if (have() >= want.length * 0.9) { NM[doneKey] = Date.now(); log(LANG_NAME[lang].toLowerCase() + ' names loaded:', have()); }
   writeJSON(NAMES_FILE, NM);
-  jaCache = null;
+  delete locCache[lang];
 }
 
 // ---------- export for the page ----------
@@ -415,7 +450,7 @@ function exportCards() {
   const art = [], trainers = [], regular = [], sets = [];
   Object.values(db.cards).forEach(c => {
     if (c.x) return;
-    (c.tr ? trainers : art).push(picOf(c.id, { id: c.id, n: c.n, r: c.r, sid: c.sid, k: localOf(c.id, c.sid), b: c.b || (setPics.get(c.id) && setPics.get(c.id).i ? cleanBase(setPics.get(c.id).i) : null), d: c.d, eu: c.eu, us: c.us, cm: c.cm || undefined, pt: c.pt, m: c.m ? 1 : undefined }));
+    (c.tr ? trainers : art).push(picOf(c.id, { id: c.id, n: c.n, r: c.r, sid: c.sid, k: localOf(c.id, c.sid), b: c.b || (setPics.get(c.id) && setPics.get(c.id).i ? cleanBase(setPics.get(c.id).i) : null), d: c.d, eu: c.eu, us: c.us, vr: c.vr, ch: c.ch, cm: c.cm || undefined, pt: c.pt, m: c.m ? 1 : undefined }));
   });
   for (const [sid, s] of Object.entries(db.sets)) {
     if (!s.scan) continue;
@@ -427,7 +462,7 @@ function exportCards() {
         if (c.d && c.d.length) art.push(picOf(c.id, { id: c.id, n: c.n, r: provRarity(c.id), sid, k: c.l, b: c.i ? cleanBase(c.i) : null, d: c.d, eu: null, us: null, pv: 1 }));
         a++; continue;
       }
-      if (c.d && c.d.length) regular.push(picOf(c.id, { id: c.id, n: c.n, sid, k: c.l, b: c.i || null, d: c.d, eu: c.eu, us: c.us, cm: c.cm || undefined, pt: c.pt }));
+      if (c.d && c.d.length) regular.push(picOf(c.id, { id: c.id, n: c.n, sid, k: c.l, b: c.i || null, d: c.d, eu: c.eu, us: c.us, vr: c.vr, ch: c.ch, cm: c.cm || undefined, pt: c.pt }));
     }
     sets.push({ id: sid, name: s.name, date: s.date || '', official: s.official, total: s.total, n: s.cards.length, art: a, promo: s.promo ? 1 : 0,
       lg: noExt(s.lg), sy: noExt(s.sy), ll: imgs.s[sid] ? imgs.s[sid].v : undefined });
@@ -445,9 +480,9 @@ function setPayload(sid) {
     cards: s.cards.map(c => {
       const rec = db.cards[c.id];
       const o = picOf(c.id, { id: c.id, k: c.l, n: c.n, b: c.i || null });
-      if (rec && !rec.x) { o.t = 'a'; o.r = rec.r; o.eu = rec.eu; o.us = rec.us; o.cm = rec.cm; o.pt = rec.pt; o.d = rec.d; if (rec.m) o.m = 1; }
+      if (rec && !rec.x) { o.t = 'a'; o.r = rec.r; o.eu = rec.eu; o.us = rec.us; o.vr = rec.vr; o.ch = rec.ch; o.cm = rec.cm; o.pt = rec.pt; o.d = rec.d; if (rec.m) o.m = 1; }
       else if (!rec && worth(s, c)) { o.t = 'a'; o.pv = 1; o.r = provRarity(c.id); o.d = c.d || []; o.eu = null; o.us = null; }
-      else { o.t = 'r'; o.eu = c.eu; o.us = c.us; o.cm = c.cm; o.pt = c.pt; o.d = c.d || []; }
+      else { o.t = 'r'; o.eu = c.eu; o.us = c.us; o.vr = c.vr; o.ch = c.ch; o.cm = c.cm; o.pt = c.pt; o.d = c.d || []; }
       if (isSecret(s, c)) o.sec = 1;
       return o;
     }),
@@ -506,7 +541,7 @@ async function syncLang(lang) {
       total: (d.cardCount && d.cardCount.total) || 0,
       cards: scan ? (d.cards || []).map(c => {
         const o = oldCards.get(p + c.id), n = { id: p + c.id, l: String(c.localId), n: c.name, i: c.image || (o && o.i) || null };
-        if (o && o.pt) { n.eu = o.eu; n.us = o.us; n.cm = o.cm; n.pt = o.pt; } // keep prices already fetched for regular cards
+        if (o && o.pt) { n.eu = o.eu; n.us = o.us; n.vr = o.vr; n.ch = o.ch; n.cm = o.cm; n.pt = o.pt; } // keep prices already fetched for regular cards
         return n;
       }) : [],
     };
@@ -568,16 +603,18 @@ async function fetchCard(id, fast) {
   if (db.cards[id] && db.cards[id].x && db.cards[id].m) return; // you took this card off the art list: leave it
   const d = await paced('/cards/' + encodeURIComponent(rawId(id)), lang, fast);
   const old = db.cards[id];
-  if (d && d.category === 'Pokemon' && !(Array.isArray(d.dexId) && d.dexId.length)) { const g = p === '' ? nameDex(d.name) : dexByNameJa(d.name); if (g.length) d.dexId = g; }
+  if (d && d.category === 'Pokemon' && !(Array.isArray(d.dexId) && d.dexId.length)) { const g = p === '' ? nameDex(d.name) : dexByNameLoc(d.name, lang); if (g.length) d.dexId = g; }
   if (d && qualifies(d, p)) {
     const r = record(d, p); if (old && old.m) r.m = 1;
     if (old && !old.x) { // never replace something known with nothing: keep the last picture, price and shop number
       if (!r.b && old.b) r.b = old.b;
       if (r.eu == null && old.eu != null) r.eu = old.eu;
       if (r.us == null && old.us != null) r.us = old.us;
+      if (!r.vr && old.vr) { r.vr = old.vr; r.ch = old.ch; }
       if (!r.cm && old.cm) r.cm = old.cm;
     }
     db.cards[id] = r;
+    notePrice(id, r);
   }
   else if (old && !old.x) old.pt = new Date().toISOString();
   else db.cards[id] = { id, x: 1 };
@@ -624,19 +661,35 @@ function planPriceRefresh(maxAge, limit) {
 }
 
 async function refreshPrices(maxAge) {
+  // Cards on someone's wish list first, every day (Cardmarket updates its prices once a day): they feed the price graphs.
+  const idx = regIndex();
+  for (const id of wishedIds()) {
+    const art = db.cards[id] && !db.cards[id].x ? db.cards[id] : null, reg = art ? null : idx.get(id);
+    if ((!art && !reg) || ageDays((art || reg).pt) < WISH_PRICE_DAYS) continue;
+    if (!canSpend()) return;
+    if (art) await fetchCard(id); else await priceRegular(id, idx);
+  }
   for (const c of planPriceRefresh(maxAge, Infinity)) {
     if (!canSpend()) return;
     await fetchCard(c.id);
   }
-  // Wished regular cards (art cards are in the plan above).
-  const idx = regIndex();
-  for (const id of wishedIds()) {
-    const c = idx.get(id);
-    if (!c || db.cards[id] || ageDays(c.pt) < maxAge) continue;
-    if (!canSpend()) return;
-    await priceRegular(id, idx);
-  }
 }
+
+// ---------- price history (for the graphs) ----------
+// Every time a card's price is fetched, that day's price is noted: price-history.json { id: [[day, eu, us], ...] }.
+// Wished cards are priced every day, so their graph fills in day by day; other cards get a point when they are priced.
+const HIST_FILE = path.join(DATA_DIR, 'price-history.json');
+let priceHist = readJSON(HIST_FILE) || {}, histDirty = false;
+function notePrice(id, c) {
+  if (!c || (c.eu == null && c.us == null)) return;
+  const day = new Date().toISOString().slice(0, 10), h = priceHist[id] || (priceHist[id] = []);
+  const row = [day, c.eu == null ? null : c.eu, c.us == null ? null : c.us];
+  if (h.length && h[h.length - 1][0] === day) h[h.length - 1] = row; else h.push(row);
+  if (h.length > 400) h.splice(0, h.length - 400);
+  histDirty = true;
+}
+function saveHist(force) { if (histDirty || force) { writeJSON(HIST_FILE, priceHist); histDirty = false; } }
+setInterval(() => saveHist(false), 60000).unref();
 // Every card on someone's wish list.
 function wishedIds() { const out = new Set(); allStates().forEach(s => wishOf(s).forEach(w => out.add(w.id))); return out; }
 
@@ -651,7 +704,7 @@ async function priceRegular(id, idx, fast) {
   if (!c) return false;
   const d = await paced('/cards/' + encodeURIComponent(rawId(id)), langOf(id), fast);
   c.pt = new Date().toISOString();
-  if (d) { const pr = prices(d); c.eu = pr.eu; c.us = pr.us; c.cm = cmId(d); }
+  if (d) { const pr = prices(d); c.eu = pr.eu; c.us = pr.us; c.vr = pr.vr; c.ch = pr.ch; c.cm = cmId(d); notePrice(id, c); }
   persist(false);
   return true;
 }
@@ -682,7 +735,7 @@ async function fillRegularPrices() {
 // pokemontcg.io has no Japanese cards. A card without a result is asked about again after 30 days.
 function picsNeeded() {
   const out = [];
-  const sets = Object.entries(db.sets).filter(([, s]) => s.scan && s.lang !== 'ja')
+  const sets = Object.entries(db.sets).filter(([, s]) => s.scan && (!s.lang || s.lang === 'en'))
     .sort((a, b) => (b[1].promo ? 1 : 0) - (a[1].promo ? 1 : 0) || String(b[1].date).localeCompare(String(a[1].date)));
   for (const [sid, s] of sets) for (const c of s.cards) {
     const rec = db.cards[c.id], art = !!(rec && !rec.x);
@@ -925,7 +978,7 @@ function logoSources(sid, s) {
   const l = [];
   if (s.lg) { l.push(s.lg + '.png'); l.push(s.lg + '.webp'); }
   if (s.sy) l.push(s.sy + '.png');
-  if (langOf(sid) !== 'ja') l.push('https://images.pokemontcg.io/' + encodeURIComponent(ptcgSetId(sid)) + '/logo.png');
+  if (langOf(sid) === 'en') l.push('https://images.pokemontcg.io/' + encodeURIComponent(ptcgSetId(sid)) + '/logo.png');
   return l;
 }
 async function downloadLogo(sid, s) {
@@ -1155,15 +1208,32 @@ async function cardOutlines(rgba, W, H) {
       }
       hull.delete(); ap.delete(); c.delete();
     }
-    quads.sort((a, b) => b.area - a.area);
     const box = q => ({ x0: Math.min(...q.pts.map(p => p.x)), x1: Math.max(...q.pts.map(p => p.x)), y0: Math.min(...q.pts.map(p => p.y)), y1: Math.max(...q.pts.map(p => p.y)) });
     const within = (a, b) => { const p = box(a), o = box(b), m = 0.02 * Math.max(W, H); return p.x0 >= o.x0 - m && p.x1 <= o.x1 + m && p.y0 >= o.y0 - m && p.y1 <= o.y1 + m; };
+    // An upright card whose own edge was not found can show up as two lying pieces, one above the other (its top and
+    // bottom half, or its picture and its text): two such pieces that together make an upright card shape are one card.
+    // (Two cards side by side are standing pieces that make a lying shape: those stay apart.)
+    for (let again = true; again;) {
+      again = false;
+      for (let i = 0; i < quads.length && !again; i++) for (let j = i + 1; j < quads.length && !again; j++) {
+        const a = quads[i], b = quads[j];
+        if (!a.landscape || !b.landscape || within(a, b) || within(b, a)) continue;
+        const pts = orderCorners(a.pts.concat(b.pts)), [tl, tr, br, bl] = pts;
+        const w = (dist(tl, tr) + dist(bl, br)) / 2, h = (dist(tl, bl) + dist(tr, br)) / 2, area = w * h;
+        if (w < h && w / h > 0.66 && w / h < 0.77 && area <= (a.area + b.area) * 1.3 && area >= Math.max(a.area, b.area) * 1.5) {
+          quads.splice(j, 1); quads[i] = { pts, area, landscape: false, joined: true }; again = true;
+        }
+      }
+    }
+    quads.sort((a, b) => b.area - a.area);
     const groups = [];
     for (const q of quads) {
       const g = groups.find(gr => within(q, gr[0]) && q.area / gr[0].area > 0.35);
       if (g) { if (g.length < 3) g.push(q); } else if (!groups.some(gr => within(q, gr[0]))) groups.push([q]);
     }
-    return groups.slice(0, MAX_CARDS);
+    // cards on one photo are about the same size: a much smaller shape on its own is a detail (a box, a sticker), not a card
+    const biggest = groups.length ? groups[0][0].area : 0;
+    return groups.filter(g => g[0].area >= biggest * 0.4).slice(0, MAX_CARDS);
   } finally { mats.forEach(m => { try { m.delete(); } catch (e) { /* gone */ } }); }
 }
 // The card inside four corners, straightened to CARD_W x CARD_H (with 4.5% room around it).
@@ -1244,11 +1314,15 @@ if (AI) log('scanning: cards are read by ' + AI.name + ' (' + AI.model + (AI.bac
 
 const AI_FIELDS = '"name": the card name exactly as printed at the top, with suffixes like ex, V, VMAX, VSTAR or GX (for a Trainer or Energy card: its title); '
   + '"number": the collector number exactly as printed, usually small at the bottom left or bottom right, for example "201/198", "TG05/TG30", "GG09/GG70", "SWSH050" or "050", or null if you cannot read it; '
+  + '"set_code": the short set code printed at the bottom left next to the regulation mark and the number on newer cards, for example "PAL", "SVI", "MEW", "PFL" or "TEF" (not the language letters such as EN or JP), or null if there is none; '
+  + '"set": the name of the expansion the card is from, if the set symbol, set code or number tells you (for example "Paldea Evolved" or "Base Set"), or null; '
   + '"pokemon": the English name of the Pokémon on the card (translate it if the card is not in English), or null; '
-  + '"language": the two-letter language code of the card text';
+  + '"language": the two-letter language code of the card text (en, ja, zh, ...). '
+  + 'Copy the number character by character: do not guess digits you cannot see';
 const AI_ONE = 'This is a photo of one Pokémon Trading Card Game card. It may be in a plastic sleeve, slightly blurry, shiny or upside down. '
   + 'Read what is printed on it. Reply with only one JSON object and nothing else: {' + AI_FIELDS + '}.';
 const AI_MANY = 'This photo shows one or more Pokémon Trading Card Game cards. Some may be in sleeves, blurry, shiny or upside down. '
+  + 'Only include cards that are completely or almost completely in the photo: leave out cards that are cut off at the edge of the photo, so a single card photo gives one card. '
   + 'Read each card. Reply with only JSON and nothing else: {"cards": [ one object per card, from top left to bottom right, each {' + AI_FIELDS + '} ]}.';
 
 function aiJson(text) {
@@ -1276,10 +1350,13 @@ async function aiAskOnce(jpeg, prompt, model) {
     return (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
   }
   // OpenAI, OpenRouter, Mistral and local servers: the OpenAI-style chat completions request
-  const image = AI.name === 'mistral' ? dataUrl : { url: dataUrl };
+  // OpenAI (also through OpenRouter) looks at a smaller copy unless asked for "high" detail: the card number is small print
+  const image = AI.name === 'mistral' ? dataUrl : (AI.name === 'openai' || AI.name === 'openrouter' ? { url: dataUrl, detail: 'high' } : { url: dataUrl });
   const headers = AI.key ? { Authorization: 'Bearer ' + AI.key } : {};
   if (AI.name === 'openrouter') Object.assign(headers, { 'X-Title': 'Dex Art Tracker' });
-  r = await fetch(AI.url + '/chat/completions', opts(headers, { model, messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: image }] }] }));
+  const req = { model, messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: image }] }] };
+  if (AI.name === 'openai') req.response_format = { type: 'json_object' }; // always a JSON answer
+  r = await fetch(AI.url + '/chat/completions', opts(headers, req));
   j = await r.json().catch(() => ({}));
   if (!r.ok) throw aiErr(r.status, AI.name + ': ' + ((j.error && (j.error.message || j.error)) || 'HTTP ' + r.status));
   const c = ((j.choices || [])[0] || {}).message || {};
@@ -1323,10 +1400,13 @@ function aiRead(o) {
   let num = raw ? readNumber(raw) : null;
   if (!num && /^[A-Za-z]{0,5}-?\d{1,3}[a-z]?$/.test(raw)) num = { num: normNum(raw), total: null, text: raw }; // "050", "SWSH050"
   if (!words.length && !num) return null;
-  return { words, num, ai: true, said: [name, raw].filter(Boolean).join(' · ') };
+  const code = String(o.set_code || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8);
+  const setName = SET_CODES[code] || (o.set ? String(o.set).slice(0, 60) : '');
+  const lang = String(o.language || '').toLowerCase().slice(0, 5);
+  return { words, num, ai: true, set: setName ? setWords(setName) : '', setByCode: !!SET_CODES[code], lang, said: [name, raw, code || o.set].filter(Boolean).join(' · ') };
 }
 async function aiReadCard(card) { // one straightened card
-  const jpeg = await sharp(card).resize({ width: 768 }).jpeg({ quality: 88 }).toBuffer();
+  const jpeg = await sharp(card).resize({ width: 1024 }).jpeg({ quality: 90 }).toBuffer(); // sharp enough for the small print
   return aiRead(aiJson(await aiAsk(jpeg, AI_ONE)));
 }
 async function aiReadPhoto(buf) { // a whole photo, when no card outline was found
@@ -1352,7 +1432,17 @@ function scoreText(x, read, dex) {
     if (nameHit) for (const k of NAME_KINDS) if (read.words.includes(k) !== ct.includes(k)) nameHit -= 0.25; // "Pikachu ex" is not "Pikachu"
   }
   const dexHit = Math.max(0, ...x.d.map(n => dex.get(n) || 0));
-  return { numHit, totHit, nameHit: Math.max(0, nameHit), dexHit, text: (numHit ? 4 : 0) + (totHit ? 2 : 0) + Math.max(0, nameHit) * 3 + dexHit * 1.5 };
+  // the set the AI read (its set code is printed on the card, so it counts most; a set name it recognised counts less)
+  let setHit = 0;
+  if (read.set) {
+    const sw = x.sw || (x.sw = setWords(x.s.name));
+    if (sw === read.set) setHit = read.setByCode ? 5 : 3;
+    else if (sw.includes(read.set) || read.set.includes(sw)) setHit = read.setByCode ? 3 : 1.5;
+  }
+  // the card's language: an English card is not the Japanese print of the same card, and the other way round
+  const sl = x.s.lang || 'en', rl = read.lang ? (read.lang.startsWith('zh') ? 'zh' : read.lang) : '';
+  const langHit = !rl ? 0 : (sl === rl || (rl === 'zh' && sl.startsWith('zh')) ? 1 : -4);
+  return { numHit, totHit, nameHit: Math.max(0, nameHit), dexHit, setHit, text: (numHit ? 4 : 0) + (totHit ? 2 : 0) + Math.max(0, nameHit) * 3 + dexHit * 1.5 + setHit + langHit };
 }
 // card: the straightened card (null when only text is known); given: what the AI read (else the built-in reader reads)
 async function matchCard(card, given) {
@@ -1392,7 +1482,7 @@ function matchOut(x, best, second) {
   return picOf(x.c.id, {
     id: x.c.id, n: x.name, sid: x.sid, set: x.s.name, k: x.c.l, r: x.rec && !x.rec.x ? x.rec.r : null, a: x.art ? 1 : 0, tr: x.rec && x.rec.tr ? 1 : undefined, d: x.d,
     b: (x.rec && !x.rec.x && x.rec.b) || cleanBase(x.c.i), eu: x.rec && !x.rec.x ? x.rec.eu : x.c.eu, us: x.rec && !x.rec.x ? x.rec.us : x.c.us, pt: x.rec && !x.rec.x ? x.rec.pt : x.c.pt,
-    why: [x.numHit ? 'number' : null, x.totHit ? 'set size' : null, x.nameHit >= 0.6 ? 'name' : (x.dexHit >= 0.6 ? 'pokémon' : null), x.pic != null && x.pic > 0.7 ? 'picture' : null].filter(Boolean),
+    why: [x.numHit ? 'number' : null, x.totHit ? 'set size' : null, x.setHit >= 3 ? 'set' : null, x.nameHit >= 0.6 ? 'name' : (x.dexHit >= 0.6 ? 'pokémon' : null), x.pic != null && x.pic > 0.7 ? 'picture' : null].filter(Boolean),
     sure: x.score >= best - 0.01 && x.score >= 7 && best - second >= 2 ? 1 : 0,
   });
 }
@@ -1422,6 +1512,34 @@ async function scanPhoto(buf) {
       slog('AI read the photo:', JSON.stringify(reads.map(x => x.said)));
       for (const read of reads) { const m = await matchCard(null, read); if (useful(m)) found.push(m); }
       if (found.length) groups = [];
+    } catch (e) { aiProblem = e.message; log('AI reader failed:', e.message); }
+  }
+  // One or two shapes found: with an AI, the whole photo decides how many cards there are. A single card is then read
+  // from the whole photo, so a shape that cut the card in half or caught only its picture cannot spoil the reading.
+  if (AI && !aiProblem && groups.length && groups.length <= 2 && !groups[0][0].scaled) {
+    try {
+      const reads = await aiReadPhoto(buf); aiUsed = true;
+      slog('AI read the photo (' + groups.length + ' shapes found):', JSON.stringify(reads.map(x => x.said)));
+      // one big card shape (a quarter of the photo or more) is one card, whatever else the AI noticed at the edges
+      const oneBig = groups.length === 1 && groups[0][0].area >= small.info.width * small.info.height * 0.25;
+      if (reads.length === 1 || (oneBig && reads.length > 1)) {
+        // the card's picture for comparing: the shapes together (two pieces of one card) or the one shape
+        let q = groups[0][0];
+        if (groups.length === 2) {
+          const pts = orderCorners(groups[0][0].pts.concat(groups[1][0].pts)), [tl, tr, br, bl] = pts;
+          const w = (dist(tl, tr) + dist(bl, br)) / 2, h = (dist(tl, bl) + dist(tr, br)) / 2, r = Math.min(w, h) / Math.max(w, h);
+          if (r > 0.66 && r < 0.77) q = { landscape: w > h, pts }; // together they make one card
+        }
+        const card = await straighten(bigData, big.info.width, big.info.height, scaleQ(q), 1.045);
+        let m = null;
+        for (const read of reads) { const x = await matchCard(card, read); if (!m || x.best > m.best) m = x; } // the reading that fits this card best
+        m.card = card;
+        if (useful(m)) found.push(m);
+        groups = [];
+      } else if (reads.length > groups.length) { // more cards than shapes: go by what the AI saw
+        for (const read of reads) { const m = await matchCard(null, read); if (useful(m)) found.push(m); }
+        if (found.length) groups = [];
+      } // as many cards as shapes: each shape is read on its own below
     } catch (e) { aiProblem = e.message; log('AI reader failed:', e.message); }
   }
   for (const g of groups) {
@@ -1490,7 +1608,7 @@ async function tick() {
     db.fix3 = true; persist(true);
   }
   if (!db.fix4) { // Japanese secret cards are counted now: check Japanese cards rejected earlier again
-    for (const [id, c] of Object.entries(db.cards)) if (c.x && !c.m && id.startsWith('ja:')) delete db.cards[id];
+    for (const [id, c] of Object.entries(db.cards)) if (c.x && !c.m && langOf(id) === 'ja') delete db.cards[id];
     db.fix4 = true; persist(true);
   }
   if (db.ruleV !== 4) { // art rules changed (Ultra Rare, Holo Rare, Mega Hyper Rare ...): cards rejected before are looked at again
@@ -1502,14 +1620,14 @@ async function tick() {
   await exclusive(async () => {
     unlimited = !db.initialDone && !STAGGER_INITIAL;
     await refreshNames();
-    await refreshJaNames();
+    await refreshLocNames();
     if (!db.logosDone && canSpend()) { // one request: fetch set pictures for sets stored by an older version
       const list = await paced('/sets');
       if (Array.isArray(list)) { applyLogos(list); db.logosDone = true; persist(true); }
     }
-    if ((bootCheck || !db.setsChecked || ageDays(db.setsChecked) >= SETS_CHECK_DAYS || LANGS.some(l => !db.langsDone[l])) && canSpend()) { bootCheck = false; await syncSets(); }
+    if ((bootCheck || !db.setsChecked || ageDays(db.setsChecked) * 24 >= SETS_CHECK_HOURS || LANGS.some(l => !db.langsDone[l])) && canSpend()) { bootCheck = false; await syncSets(); }
     for (const lang of LANGS) {
-      if (db.langsDone[lang] && (!db.rar[lang] || db.rar[lang].v !== 5 || ageDays(db.rar[lang].t) >= SETS_CHECK_DAYS) && canSpend()) await rarityScan(lang);
+      if (db.langsDone[lang] && (!db.rar[lang] || db.rar[lang].v !== 5 || ageDays(db.rar[lang].t) >= Math.max(1, SETS_CHECK_HOURS / 24)) && canSpend()) await rarityScan(lang);
     }
     await backfill();
     if (!db.initialDone && db.setsChecked && LANGS.every(l => db.rar[l]) && pendingCards().length === 0) {
@@ -1710,8 +1828,9 @@ function importMatch(text) {
     const rawName = row.name, rawNo = row.number, set = row.set;
     const out = { row: row.row, name: rawName, number: rawNo, set };
     const tags = (rawName.match(/\(([^)]*)\)/g) || []).map(x => x.slice(1, -1).trim().toUpperCase());
-    if (tags.includes('CN') || tags.includes('KR') || tags.includes('TW')) return missing.push(Object.assign(out, { why: 'Chinese or Korean cards are not in the card database' }));
-    const ja = tags.includes('JP') || !!row.ja;
+    if (tags.includes('KR') || tags.includes('TW')) return missing.push(Object.assign(out, { why: 'Korean and Traditional Chinese cards are not in the card database' }));
+    if (tags.includes('CN') && !LANGS.includes('zh-cn')) return missing.push(Object.assign(out, { why: 'Chinese card: switch on Chinese (Simplified) under Languages on the admin page' }));
+    const want = tags.includes('JP') || row.ja ? 'ja' : tags.includes('CN') ? 'zh-cn' : 'en'; // the language the row says the card is in
     const name = plain(rawName.replace(/\([^)]*\)/g, ' '));
     const parts = rawNo.split('/'), num = cardNo(parts[0]), total = parts[1] ? cardNo(parts[1]) : '';
     if (!num) return missing.push(Object.assign(out, { why: 'No card number' }));
@@ -1727,7 +1846,7 @@ function importMatch(text) {
       if (sw && x.sw === sw) score += 6;
       else if (sw && x.sw && (x.sw.includes(sw) || sw.includes(x.sw))) score += 3;
       if (total && (cardNo(String(x.s.official)) === total || cardNo(String(x.s.total)) === total)) score += 2;
-      if ((x.s.lang === 'ja') === ja) score += 1;
+      if ((x.s.lang || 'en') === want) score += 1; else if (want !== 'en') score -= 2;
       if (score > bestScore || (score === bestScore && String(x.s.date) > String(best.s.date))) { tie = score === bestScore; best = x; bestScore = score; }
       else if (score === bestScore) tie = true;
     }
@@ -1761,6 +1880,9 @@ const SESS_FILE = path.join(DATA_DIR, 'sessions.json');
 const ACC_FILE = path.join(DATA_DIR, 'accounts.json');
 const STATES_DIR = path.join(DATA_DIR, 'states');
 const ADMIN_ID = '@admin';
+// Signing up: a visitor makes their own trainer (dex). Limits against floods: 3 per address per day, SIGNUP_PER_DAY in all, MAX_TRAINERS.
+const SIGNUP = process.env.SIGNUP !== '0', SIGNUP_PER_DAY = +process.env.SIGNUP_PER_DAY || 20, MAX_TRAINERS = +process.env.MAX_TRAINERS || 200;
+const signups = { day: '', n: 0, ip: new Map() };
 fs.mkdirSync(STATES_DIR, { recursive: true });
 const sha = x => crypto.createHash('sha256').update(String(x)).digest();
 const sameText = (a, b) => crypto.timingSafeEqual(sha(a), sha(b));
@@ -1907,7 +2029,7 @@ function indexHtml(mode, dexId, sess) {
   const me = sess ? (sess.acc === ADMIN_ID ? { id: ADMIN_ID, name: 'Admin', admin: true } : accById(sess.acc)) : null;
   const cfg = { dex: dexId, accounts: publicAccounts(), me: me ? { id: me.id, name: me.name, admin: me.id === ADMIN_ID } : null };
   const inj = 'window.DEX_CUR=' + JSON.stringify(PRICE_CUR) + ';' + (mode === 'full' ? 'window.DEX_AUTH=true;' : 'window.DEX_READONLY=true;' + hide + (mode === 'ro' || mode === 'adminlogin' ? 'window.DEX_LOGIN=true;' : ''))
-    + (mode === 'admin' || mode === 'adminlogin' ? 'window.DEX_ADMINPATH=true;' : '') + (APK_BASE ? 'window.DEX_APK=true;' : '')
+    + (mode === 'admin' || mode === 'adminlogin' ? 'window.DEX_ADMINPATH=true;' : '') + (APK_BASE ? 'window.DEX_APK=true;' : '') + (SIGNUP && mode !== 'admin' && mode !== 'adminlogin' ? 'window.DEX_SIGNUP=true;' : '')
     + 'window.DEX_CFG=' + JSON.stringify(cfg).replace(/</g, '\\u003c') + ';';
   return h.replace('<!--DEX_MODE-->', '<script>' + inj + '</script>');
 }
@@ -2009,6 +2131,12 @@ const server = http.createServer(async (req, res) => {
       return s ? sendJSON(res, 200, s) : sendJSON(res, 404, { error: 'unknown set' });
     }
     if (req.method === 'GET' && p === '/api/state') return sendJSON(res, 200, (dexId && readJSON(stateFile(dexId))) || {});
+    // Price history of up to 300 cards (the wish list graphs): { cur, h: { id: [[day, price], ...] } }
+    if (req.method === 'GET' && p === '/api/prices') {
+      const ids = String(u.searchParams.get('ids') || '').split(',').filter(Boolean).slice(0, 300), out = {}, k = PRICE_CUR === 'us' ? 2 : 1;
+      for (const id of ids) { const h = priceHist[id]; if (h) out[id] = h.filter(r => r[k] != null).map(r => [r[0], r[k]]); }
+      return sendJSON(res, 200, { cur: PRICE_CUR, h: out });
+    }
     if (req.method === 'GET' && p === '/api/admin/settings') {
       if (!isAdmin) return sendJSON(res, authed ? 403 : 401, { error: 'Only the admin can do that' });
       return sendJSON(res, 200, {
@@ -2025,7 +2153,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && p === '/api/admin/accounts') {
       if (!isAdmin) return sendJSON(res, authed ? 403 : 401, { error: 'Only the admin can do that' });
-      return sendJSON(res, 200, accounts.list.map(a => ({ id: a.id, name: a.name, created: a.created })));
+      return sendJSON(res, 200, accounts.list.map(a => ({ id: a.id, name: a.name, created: a.created, self: a.self ? 1 : undefined })));
     }
     if (req.method === 'GET' && p === '/api/lang-check') {
       if (!isAdmin) return sendJSON(res, 401, { error: 'login as the admin required' });
@@ -2057,6 +2185,26 @@ const server = http.createServer(async (req, res) => {
       if (asAdmin) log('admin logged in');
       res.setHeader('Set-Cookie', cookie(req, asAdmin, tok, SESSION_MS / 1000));
       return sendJSON(res, 200, { ok: true, admin: asAdmin });
+    }
+    if (req.method === 'POST' && p === '/api/signup') {
+      if (!SIGNUP || adminPath) return sendJSON(res, 403, { error: 'Signing up is switched off on this server. Ask the admin for a dex.' });
+      const b = JSON.parse(await readBody(req, 1e4));
+      if (b.website) return sendJSON(res, 400, { error: 'Could not sign up' }); // a field people never see: only bots fill it in
+      const day = new Date().toISOString().slice(0, 10);
+      if (signups.day !== day) { signups.day = day; signups.n = 0; signups.ip.clear(); }
+      if ((signups.ip.get(ip) || 0) >= 3) return sendJSON(res, 429, { error: 'Too many new trainers from this connection today. Try again tomorrow.' });
+      if (signups.n >= SIGNUP_PER_DAY || accounts.list.length >= MAX_TRAINERS) return sendJSON(res, 429, { error: 'No new trainers can sign up right now. Try again later or ask the admin.' });
+      const pw = String(b.password || '');
+      if (pw.length < 8) return sendJSON(res, 400, { error: 'A password needs at least 8 characters' });
+      let name; try { name = cleanName(b.name); } catch (e) { return sendJSON(res, 400, { error: e.message }); }
+      const acc = { id: crypto.randomBytes(6).toString('hex'), name, created: new Date().toISOString(), self: 1 };
+      setPw(acc, pw); accounts.list.push(acc); saveAccounts();
+      signups.n++; signups.ip.set(ip, (signups.ip.get(ip) || 0) + 1);
+      const tok = crypto.randomBytes(24).toString('base64url');
+      sessions[hashTok(tok)] = { exp: Date.now() + SESSION_MS, acc: acc.id }; saveSessions();
+      res.setHeader('Set-Cookie', cookie(req, false, tok, SESSION_MS / 1000));
+      log('new trainer signed up:', acc.name);
+      return sendJSON(res, 200, { ok: true, id: acc.id, name: acc.name });
     }
     if (req.method === 'POST' && p === '/api/logout') {
       const t = tokenOf(req, adminPath); if (t) { delete sessions[hashTok(t)]; saveSessions(); }
@@ -2234,6 +2382,37 @@ const server = http.createServer(async (req, res) => {
       persist(true);
       return sendJSON(res, 200, { ok: true, high: !!out.high });
     }
+    // Set a set's picture (logo) by hand (admin): a picture address or an uploaded file; empty: back to the automatic one.
+    if (req.method === 'POST' && p === '/api/set/picture') {
+      if (!isAdmin) return sendJSON(res, 403, { error: 'Only the admin can change pictures' });
+      const b = JSON.parse(await readBody(req, 22e6));
+      const sid = String(b.id || ''), url = String(b.url || '').trim(), data = typeof b.data === 'string' ? b.data : '';
+      if (!db.sets[sid]) return sendJSON(res, 404, { error: 'unknown set' });
+      if (!url && !data) { // back to automatic: the stored picture goes, the server looks for one again
+        delete imgs.s[sid]; delete imgs.fail['s:' + sid]; try { fs.unlinkSync(imgPath('s', sid)); } catch (e) { /* none */ }
+        saveImgs(true); exportCards(); return sendJSON(res, 200, { ok: true });
+      }
+      if (!sharp) return sendJSON(res, 409, { error: 'Picture processing is not available on this server (rebuild the container so sharp is installed)' });
+      let buf;
+      if (data) {
+        const m = /^data:image\/[a-z0-9.+-]+;base64,([A-Za-z0-9+/=\s]+)$/i.exec(data);
+        if (!m) return sendJSON(res, 400, { error: 'That file could not be read as a picture' });
+        buf = Buffer.from(m[1], 'base64');
+        if (buf.length > MAX_IMAGE_BYTES) return sendJSON(res, 400, { error: 'The picture is larger than 15 MB' });
+      } else {
+        if (!/^https:\/\//i.test(url) || url.length > 2000) return sendJSON(res, 400, { error: 'Paste a picture address that starts with https://' });
+        try { buf = await fetchImage(url, true); }
+        catch (e) { return sendJSON(res, 400, { error: 'Could not download that picture: ' + e.message }); }
+      }
+      try {
+        const base = await checkedImage(buf); // re-encoded: only the picture itself is kept
+        writeAtomic(imgPath('s', sid), await base.resize({ height: LOGO_H, withoutEnlargement: true }).webp({ quality: 90 }).toBuffer());
+      } catch (e) { return sendJSON(res, 400, { error: 'That is not a picture that can be used: ' + e.message }); }
+      imgs.s[sid] = { v: Date.now().toString(36), t: new Date().toISOString(), m: 1 }; delete imgs.fail['s:' + sid]; saveImgs(true);
+      exportCards();
+      log('set picture set by hand:', db.sets[sid].name);
+      return sendJSON(res, 200, { ok: true });
+    }
     if (req.method === 'POST' && p === '/api/card/mark') {
       // The art list is shared by every dex, so only the admin changes it.
       if (!isAdmin) return sendJSON(res, 403, { error: 'Only the admin can change the art list' });
@@ -2267,6 +2446,7 @@ function shutDown(code) {
   if (stoppingNow) return; stoppingNow = true;
   try { persist(true); } catch (e) { log('saving the database failed:', e.message); }
   try { saveImgs(true); } catch (e) { /* nothing to save */ }
+  try { saveHist(false); } catch (e) { /* nothing to save */ }
   if (code === 75) log('restarting to apply the new settings');
   server.close(); setTimeout(() => process.exit(code), 200);
 }

@@ -10,8 +10,8 @@ services:
       # REQUEST_DELAY_MS: "2000"
       # Prices of the cheapest art cards are re-checked when older than this many days.
       PRICE_MAX_AGE_DAYS: "30"
-      # The set list is checked for new sets when the container starts and then this often (days).
-      # SETS_CHECK_DAYS: "1"
+      # The set list is checked for new sets when the container starts and then this often (hours).
+      # SETS_CHECK_HOURS: "6"
       # How many of the cheapest art cards per Pokémon are kept up to date.
       PRICE_CANDIDATES: "2"
       # Only sets released on or after this date (YYYY-MM-DD) are read; "any" reads every set, back to the 1999 Base Set.
