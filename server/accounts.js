@@ -134,6 +134,7 @@ function saveSessions() { const n = Date.now(); Object.keys(sessions).forEach(k 
 function dropSessions(acc) { Object.keys(sessions).forEach(k => { if (sessions[k].acc === acc) delete sessions[k]; }); saveSessions(); }
 // Two cookies: dex_session (a trainer, every page) and dex_admin (the admin, only sent to /admin/).
 const cookieName = admin => admin ? 'dex_admin' : 'dex_session';
+const cookieOf = (req, name) => { const m = String(req.headers.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith(name + '=')); return m ? decodeURIComponent(m.slice(name.length + 1)).slice(0, 2000) : ''; };
 const tokenOf = (req, admin) => { const n = cookieName(admin) + '='; const m = String(req.headers.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith(n)); return m ? m.slice(n.length) : ''; };
 const hashTok = t => crypto.createHash('sha256').update(t).digest('hex');
 function sessionOf(req, admin) {

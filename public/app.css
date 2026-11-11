@@ -98,6 +98,9 @@ h1{margin:0;font:800 1.45rem/1 var(--head);letter-spacing:.14em;text-transform:u
 #chartdlg{width:min(720px,95vw)}
 #infodlg{width:min(600px,95vw)}
 #wpdlg{width:min(440px,95vw)}
+#orddlg{width:min(440px,95vw)}
+.ordrow{display:flex;gap:8px;align-items:center;padding:8px 2px;border-bottom:1px solid var(--line)}
+.ordrow b{flex:1}.ordrow i{font-style:normal;color:var(--muted);width:1.6em}
 #cmdlg{width:min(620px,95vw)}
 #cmText{width:100%;font:.85rem/1.45 var(--mono);margin:8px 0 0;resize:vertical}
 .cmhelp{font-size:.82rem;color:var(--muted);margin:8px 0 0}

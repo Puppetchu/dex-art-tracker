@@ -105,7 +105,9 @@ const server = http.createServer(async (req, res) => {
     if (!authed && limited(ip)) { res.writeHead(429); return res.end('Slow down'); }
     // Which dex is looked at: ?dex=<account id>, else your own one when logged in, else the main one.
     const dexQ = u.searchParams.get('dex');
-    const dexId = accById(dexQ) ? dexQ : (sess && accById(sess.acc) ? sess.acc : firstDex());
+    // (a visitor who put the dexes in an order of their own gets the first of those: the dex_order cookie)
+    const own1 = !dexQ && !(sess && accById(sess.acc)) ? cookieOf(req, 'dex_order').split('.').find(id => accById(id)) : null;
+    const dexId = accById(dexQ) ? dexQ : (sess && accById(sess.acc) ? sess.acc : own1 || firstDex());
     if (req.method === 'GET' && (p === '/' || p === '/index.html')) {
       // Content security policy: scripts only from this server (plus the one settings script, by its one-time number),
       // so text that ends up in the page (a card or trainer name) can never run as a script. Pictures may come from
@@ -285,6 +287,11 @@ const server = http.createServer(async (req, res) => {
         accounts.list.push(acc); saveAccounts();
         log('account created:', acc.name);
         return sendJSON(res, 200, { ok: true, id: acc.id, name: acc.name, password: pw });
+      }
+      if (p === '/api/admin/accounts/order') { // the order of the dexes for everyone (the first one opens by default)
+        const ids = (Array.isArray(b.ids) ? b.ids : []).map(String).filter((x, i, a) => accById(x) && a.indexOf(x) === i);
+        accounts.list = ids.map(accById).concat(accounts.list.filter(a => !ids.includes(a.id))); saveAccounts();
+        return sendJSON(res, 200, { ok: true, order: accounts.list.map(a => a.id) });
       }
       const acc = accById(b.id);
       if (!acc) return sendJSON(res, 404, { error: 'Unknown account' });

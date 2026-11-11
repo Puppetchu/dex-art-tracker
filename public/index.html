@@ -157,12 +157,23 @@
   </div>
   <div id="opts"></div>
 </dialog>
+<dialog id="orddlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong style="font:800 1.05rem var(--head)">Order of the dexes</strong>
+    <button id="ordClose" type="button">Close</button>
+  </div>
+  <p class="cmhelp">Move the dexes into the order you like. The first one opens when you visit the site. Your order is kept on this device (in a cookie).</p>
+  <div id="ordList"></div>
+  <div class="row" style="margin-top:10px;flex-wrap:wrap"><button id="ordSave" type="button" class="on">Save for me</button><button id="ordAll" type="button" hidden>Save for everyone</button><button id="ordReset" type="button" class="mini">Back to the standard order</button></div>
+  <div id="ordMsg" class="cmhelp" aria-live="polite"></div>
+</dialog>
 <dialog id="lgdlg">
   <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
     <strong id="lgTitle" style="font:800 1.05rem var(--head)">Log in</strong>
     <button id="lgClose" type="button">Close</button>
   </div>
   <form id="lgForm" style="margin-top:8px">
+    <div id="lgWhoRow" hidden style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><select id="lgWho" aria-label="Which dex" style="flex:1;margin:0"></select><button type="button" id="lgView" class="mini" title="Open this dex without logging in">View dex</button></div>
     <input id="lgPw" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
     <div style="display:flex;gap:8px;align-items:center"><button id="lgGo" type="submit">Log in</button><span id="lgMsg" style="color:var(--muted);font-size:.85rem"></span></div>
   </form>

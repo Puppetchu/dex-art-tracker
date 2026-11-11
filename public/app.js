@@ -2,6 +2,15 @@
 var RO=!!window.DEX_READONLY, HIDEV=!!window.DEX_HIDE_VALUE, LOGIN=!!window.DEX_LOGIN, AUTH=!!window.DEX_AUTH;
 var ADMINPATH=!!window.DEX_ADMINPATH; // the /admin/ address: the admin logs in here, trainers on the normal address
 var CFG=window.DEX_CFG||{dex:null,accounts:[],me:null};
+// Your own order of the dexes, kept in the dex_order cookie (ids with dots between); dexes not in it come after.
+function ownOrder(){ var m=/(?:^|;\s*)dex_order=([^;]*)/.exec(document.cookie); return m&&m[1]?decodeURIComponent(m[1]).split('.'):[]; }
+function applyOrder(ids){
+  var by={}; CFG.accounts.forEach(function(a){ by[a.id]=a; });
+  var first=ids.filter(function(id,i){ return by[id]&&ids.indexOf(id)===i; }).map(function(id){ return by[id]; });
+  CFG.accounts=first.concat(CFG.accounts.filter(function(a){ return first.indexOf(a)<0; }));
+}
+var STD_ORDER=CFG.accounts.map(function(a){ return a.id; }); // the order the admin set
+applyOrder(ownOrder());
 var DEX=CFG.dex, ME=CFG.me, ADMIN=!!(ME&&ME.admin);
 function accName(id){ for(var i=0;i<CFG.accounts.length;i++) if(CFG.accounts[i].id===id) return CFG.accounts[i].name; return id; }
 var DEXNAME=DEX?accName(DEX):'Nobody';
@@ -841,6 +850,11 @@ function goBack(fallback){
 async function applyRoute(){
   var h=hashNow(), parts=h.replace(/^#\/?/,'').split('/'), keepTop=false;
   curHash=h;
+  // A search belongs to the page it was typed on: another view, a set or an artist starts without it.
+  // (A Pokémon's card list, #/dex/25, opens over the Pokémon page, so the search stays there.)
+  var pageKey=parts[0]+'|'+(parts[0]==='sets'?parts.slice(1).join('/'):'');
+  if(applyRoute.page!==undefined&&applyRoute.page!==pageKey) $('q').value='';
+  applyRoute.page=pageKey;
   if(parts[0]==='sets'){
     view='sets';
     if($('dlg').open){ closingByRoute=true; $('dlg').close(); }
@@ -950,7 +964,7 @@ document.addEventListener('click',function(e){
   }
   else if(a==='set'){ go('#/sets/'+encodeURIComponent(id)); }
   else if(a==='back'){ goBack('#/sets'); }
-  else if(a==='smode'){ setMode=t.dataset.v; try{ localStorage.setItem('dexSetMode',setMode); }catch(x){} window.scrollTo(0,0); renderSets(); }
+  else if(a==='smode'){ $('q').value=''; setMode=t.dataset.v; try{ localStorage.setItem('dexSetMode',setMode); }catch(x){} window.scrollTo(0,0); renderSets(); }
   else if(a==='artist'){ go('#/sets/'+encodeURIComponent('artist:'+t.dataset.name)); }
   else if(a==='getp'){
     t.disabled=true; t.textContent='Fetching…'; setStatus('Fetching the price…'); noteIn('Fetching the price…');
@@ -1016,7 +1030,10 @@ $('refresh').addEventListener('click',async function(){
   }
   pollRefresh();
 });
-function openLogin(){ $('lgTitle').textContent=ADMINPATH?'Admin login':(DEX?'Log in to '+DEXNAME+"'s dex":'Log in');
+function fillLgWho(){ $('lgWho').innerHTML=CFG.accounts.map(function(a){ return '<option value="'+esc(a.id)+'">'+esc(a.name)+'</option>'; }).join(''); $('lgWho').value=DEX||''; }
+function lgDex(){ return !$('lgWhoRow').hidden&&$('lgWho').value||DEX; }
+function openLogin(){ var pick=!ADMINPATH&&CFG.accounts.length>1; $('lgWhoRow').hidden=!pick; if(pick) fillLgWho();
+  $('lgTitle').textContent=ADMINPATH?'Admin login':(pick?'Whose dex?':(DEX?'Log in to '+DEXNAME+"'s dex":'Log in'));
   var none=!DEX&&SIGNUP&&!ADMINPATH; // no trainers yet: straight to signing up
   $('lgForm').hidden=none; $('lgSignup').hidden=!SIGNUP||ADMINPATH||!DEX; $('suForm').hidden=!none; $('lgMsg').textContent=''; $('lgPw').value=''; $('lgdlg').showModal(); (none?$('suName'):$('lgPw')).focus(); }
 function backToLock(){ location.replace(location.pathname); } // the app's closed Pokédex: pick a trainer again
@@ -1026,6 +1043,7 @@ if(LOGIN){
   lensEl.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); lensGo(); } });
 }
 $('lgClose').addEventListener('click',function(){ $('lgdlg').close(); });
+$('lgView').addEventListener('click',function(){ var who=lgDex(); if(who&&who!==DEX) location.href=dexUrl(who); else $('lgdlg').close(); }); // look at that dex without logging in
 // Signing up: a new trainer makes their own dex (when the admin allows it) and is logged in right away.
 var SIGNUP=!!window.DEX_SIGNUP;
 async function signUp(name,pw,pw2,web,msgEl){
@@ -1042,7 +1060,8 @@ $('suBack').addEventListener('click',function(){ showSignup(false); });
 $('suForm').addEventListener('submit',function(e){ e.preventDefault(); signUp($('suName').value,$('suPw').value,$('suPw2').value,$('suWeb').value,$('suMsg')); });
 $('lgForm').addEventListener('submit',async function(e){
   e.preventDefault(); $('lgMsg').textContent='…';
-  try{ await post('api/login',{dex:DEX,password:$('lgPw').value}); location.reload(); }
+  var who=lgDex();
+  try{ await post('api/login',{dex:who,password:$('lgPw').value}); if(who!==DEX) location.href=dexUrl(who); else location.reload(); }
   catch(err){ $('lgMsg').textContent=err.status===429?'Too many tries. Wait 15 minutes.':(err.status===404?'Pick a dex under "Dex of" first.':'Wrong password.'); }
 });
 /* ---------- scanning: a queue of photos, then a screen to check what was found ---------- */
@@ -1491,7 +1510,9 @@ $('logoutBtn').addEventListener('click',async function(){ try{ await post('api/l
 function dexUrl(id){ return location.pathname+'?dex='+encodeURIComponent(id)+location.hash; }
 function fillDexSel(){
   var h=CFG.accounts.map(function(a){ return '<option value="'+esc(a.id)+'">'+esc(a.name)+(ME&&ME.id===a.id?' (you)':'')+'</option>'; });
-  if(ADMIN) h.push('<option disabled>──────────</option><option value="__add">+ Add account…</option><option value="__manage">Manage accounts…</option>');
+  if(CFG.accounts.length>1||ADMIN) h.push('<option disabled>──────────</option>');
+  if(CFG.accounts.length>1) h.push('<option value="__order">Change the order…</option>');
+  if(ADMIN) h.push('<option value="__add">+ Add account…</option><option value="__manage">Manage accounts…</option>');
   $('dexSel').innerHTML=h.join(''); $('dexSel').value=DEX;
 }
 fillDexSel();
@@ -1499,9 +1520,33 @@ if(ADMIN){ $('meTag').hidden=false; $('meTag').innerHTML='Logged in as admin · 
 else if(ME&&ME.id!==DEX){ $('meTag').hidden=false; $('meTag').innerHTML='Logged in as '+esc(ME.name)+' · <a href="'+esc(dexUrl(ME.id))+'">your dex</a>'; }
 $('dexSel').addEventListener('change',function(){
   var v=$('dexSel').value;
+  if(v==='__order'){ $('dexSel').value=DEX; openOrder(); return; }
   if(v==='__add'||v==='__manage'){ $('dexSel').value=DEX; openAccounts(v==='__add'); return; }
   if(v!==DEX) location.href=dexUrl(v);
 });
+/* ---------- the order of the dexes: your own (a cookie), and for the admin the standard one for everyone ---------- */
+var ordIds=[];
+function openOrder(){ ordIds=CFG.accounts.map(function(a){ return a.id; }); $('ordMsg').textContent=''; $('ordAll').hidden=!ADMIN; renderOrder(); if(!$('orddlg').open) $('orddlg').showModal(); }
+function renderOrder(){
+  $('ordList').innerHTML=ordIds.map(function(id,i){
+    return '<div class="ordrow"><i>'+(i+1)+'</i><b>'+esc(accName(id))+'</b><button type="button" class="mini" data-ord="up" data-i="'+i+'"'+(i?'':' disabled')+' aria-label="Move '+esc(accName(id))+' up">↑</button>'+
+      '<button type="button" class="mini" data-ord="down" data-i="'+i+'"'+(i<ordIds.length-1?'':' disabled')+' aria-label="Move '+esc(accName(id))+' down">↓</button></div>'; }).join('');
+}
+$('ordList').addEventListener('click',function(e){
+  var b=e.target.closest('[data-ord]'); if(!b) return;
+  var i=+b.dataset.i, j=b.dataset.ord==='up'?i-1:i+1; if(j<0||j>=ordIds.length) return;
+  var t=ordIds[i]; ordIds[i]=ordIds[j]; ordIds[j]=t; renderOrder();
+  var again=$('ordList').querySelector('[data-ord="'+b.dataset.ord+'"][data-i="'+j+'"]'); if(again&&!again.disabled) again.focus();
+});
+function orderCookie(ids){ document.cookie='dex_order='+encodeURIComponent(ids.join('.'))+'; Path=/; Max-Age='+(ids.length?31536000:0)+'; SameSite=Lax'+(location.protocol==='https:'?'; Secure':''); }
+function orderDone(msg){ fillDexSel(); if(typeof fillLgWho==='function') fillLgWho(); if(!$('dexLock').hidden) showLock(); $('ordMsg').textContent=msg; }
+$('ordSave').addEventListener('click',function(){ orderCookie(ordIds); applyOrder(ordIds); orderDone('Saved on this device.'); });
+$('ordReset').addEventListener('click',function(){ orderCookie([]); applyOrder(STD_ORDER); ordIds=STD_ORDER.slice(); renderOrder(); orderDone('Back to the standard order.'); });
+$('ordAll').addEventListener('click',async function(){
+  try{ var r=await post('api/admin/accounts/order',{ids:ordIds}); STD_ORDER=r.order; orderCookie([]); applyOrder(STD_ORDER); orderDone('This is now the order for everyone.'); }
+  catch(err){ $('ordMsg').textContent=err.message||'Could not save.'; }
+});
+$('ordClose').addEventListener('click',function(){ $('orddlg').close(); });
 $('nameBtn').addEventListener('click',function(){ $('nameIn').value=ME?ME.name:''; $('nameMsg').textContent=''; $('namedlg').showModal(); $('nameIn').focus(); });
 $('nameClose').addEventListener('click',function(){ $('namedlg').close(); });
 $('pwBtn').addEventListener('click',function(){ ['pwOld','pwNew','pwNew2'].forEach(function(i){ $(i).value=''; }); $('pwMsg').textContent=''; $('pwdlg').showModal(); $('pwOld').focus(); });
