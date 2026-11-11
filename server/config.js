@@ -36,6 +36,8 @@ const SETTINGS = [
   { group: 'Card database', key: 'DAILY_REQUESTS', label: 'Requests per day', def: '0', options: [['0', 'No limit'], ['500', '500'], ['1000', '1,000'], ['2000', '2,000'], ['5000', '5,000'], ['10000', '10,000']] },
   { group: 'Card database', key: 'SETS_CHECK_HOURS', label: 'Look for new sets', def: '6', options: [['1', 'Every hour'], ['3', 'Every 3 hours'], ['6', 'Every 6 hours'], ['12', 'Every 12 hours'], ['24', 'Every day'], ['168', 'Every week']] },
   { group: 'Pictures', key: 'IMAGE_HIGH', label: 'Store high resolution pictures of', def: 'all', options: [['all', 'All cards'], ['art', 'Art, owned and wished cards'], ['none', 'No cards (small pictures only)']] },
+  { group: 'Pictures', key: 'PICTURE_SOURCE', label: 'Show pictures from', def: 'outside', help: 'Outside first: the picture sites (TCGdex, pokemontcg.io, Scrydex) send the picture straight to the visitor, and the copy stored on this server is used when they fail. Pictures you set by hand always come from this server.',
+    options: [['outside', 'The outside picture sites first, this server as the spare'], ['server', 'This server first, the outside sites as the spare']] },
   { group: 'Pictures', key: 'PICTURE_LOOKUP', label: 'Look up missing pictures on pokemontcg.io', def: '1', options: yesNo() },
   { group: 'Pictures', key: 'PICTURES_PER_DAY', label: 'Picture lookups per day', def: '500', options: [['100', '100'], ['500', '500'], ['1000', '1,000'], ['0', 'No limit']] },
   { group: 'Scanning', key: 'SCAN', label: 'Card scanning', def: '1', options: yesNo('On', 'Off') },

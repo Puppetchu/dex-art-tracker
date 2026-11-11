@@ -72,13 +72,15 @@ function langTag(id){ var l=langOf(id); return l==='ja'?' · JA':l==='zh-cn'?' �
 function cardNames(c){ var t=String(c.n||''); (c.d||[]).forEach(function(n){ if(names[n]) t+=' '+names[n]; }); return t.toLowerCase(); }
 function numOf(k){ return /^\d+$/.test(String(k))?String(+k):String(k); }
 var PHONE=false; try{ PHONE=window.matchMedia('(max-width:700px)').matches; }catch(e){}
+var PICS_OUT=!!window.DEX_PICS_OUT; // pictures from the outside sites first, the stored copy as the spare
 function imgList(c,big){
   var lightbox=!!big;
   big=big||PHONE; // phones get the full resolution picture everywhere
-  var l=[], lp=c.lc?'img/c/'+encodeURIComponent(c.id)+'/':null;
-  // Pictures stored on this server come first; the outside sites are only tried for pictures not stored yet.
-  if(lp&&(c.lc>=2||!big)) l.push(lp+(big&&c.lc>=2?'high':'low')+'?v='+encodeURIComponent(c.lv||''));
-  if(lp&&c.lc<2&&big&&!lightbox) l.push(lp+'low?v='+encodeURIComponent(c.lv||''));
+  var l=[], st=[], lp=c.lc?'img/c/'+encodeURIComponent(c.id)+'/':null, low=lp?lp+'low?v='+encodeURIComponent(c.lv||''):null;
+  // The copies stored on this server
+  if(lp&&(c.lc>=2||!big)) st.push(lp+(big&&c.lc>=2?'high':'low')+'?v='+encodeURIComponent(c.lv||''));
+  if(lp&&c.lc<2&&big&&!lightbox) st.push(low);
+  // The outside picture sites
   if(c.b) l.push(c.b+'/'+(big?'high':'low')+'.webp');
   if(c.im) l.push(big?(c.iL||c.im):c.im); // found on pokemontcg.io, or set by hand
   if(c.sid&&c.k!=null&&c.k!==''&&isJa(c.sid)){
@@ -92,7 +94,10 @@ function imgList(c,big){
     l.push('https://images.pokemontcg.io/'+pid+'/'+nm+(big?'_hires':'')+'.png');
     l.push('https://images.scrydex.com/pokemon/'+pid+'-'+nm+'/'+(big?'medium':'small'));
   }
-  if(lp&&l.indexOf(lp+'low?v='+encodeURIComponent(c.lv||''))<0) l.push(lp+'low?v='+encodeURIComponent(c.lv||'')); // last resort: the stored low one
+  // Which first is the admin's choice (Show pictures from). A picture set by hand always comes from this server;
+  // when the outside sites come first, only the first two are tried before the stored copy, so a miss costs little.
+  if(PICS_OUT&&!c.lm&&st.length) l=l.slice(0,2).concat(st,l.slice(2)); else l=st.concat(l);
+  if(low&&l.indexOf(low)<0) l.push(low); // last resort: the stored low one
   return l;
 }
 function subOf(c){ var s=setsById[c.sid]; return (s?s.name:(c.sid||''))+(c.k?' · '+c.k:'')+langTag(c.sid); }
@@ -103,9 +108,9 @@ function picHTML(c,big){
   return '<img loading="lazy" src="'+esc(l[0])+'" data-srcs="'+esc(l.slice(1).map(encodeURIComponent).join('|'))+'" data-n="'+esc(c.n)+'" data-sub="'+esc(subOf(c))+'" alt="'+esc(c.n)+'" data-do="zoom" data-id="'+esc(c.id)+'">';
 }
 function logoList(s){
-  var l=[];
-  if(s.ll) l.push('img/s/'+encodeURIComponent(s.id)+'?v='+encodeURIComponent(s.ll)); // stored on this server
-  if(s.lg){ l.push(s.lg+'.webp'); l.push(s.lg+'.png'); }
+  var l=[], own=s.ll?'img/s/'+encodeURIComponent(s.id)+'?v='+encodeURIComponent(s.ll):null; // stored on this server
+  if(own&&(!PICS_OUT||s.lm||!s.lg)) l.push(own);
+  if(s.lg){ l.push(s.lg+'.webp'); if(own&&l.indexOf(own)<0) l.push(own); l.push(s.lg+'.png'); }
   if(s.sy){ l.push(s.sy+'.webp'); }
   if(langOf(s.id)==='en'){
     var pid=ptcgId(s.id);

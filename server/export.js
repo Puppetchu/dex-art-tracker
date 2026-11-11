@@ -7,7 +7,7 @@ let lastExport = { art: 0, regular: 0, sets: 0 };
 // Picture fields for the page: im (small) and iL (large), when one was found elsewhere or set by hand.
 function picOf(id, o) {
   const p = db.pics[id]; if (p && p.im) { o.im = p.im; o.iL = p.imL || p.im; }
-  const st = imgs.c[id]; if (st) { o.lc = st.h ? 2 : 1; o.lv = st.v; } // stored on this server: 1 = low, 2 = low and high
+  const st = imgs.c[id]; if (st) { o.lc = st.h ? 2 : 1; o.lv = st.v; if (st.s === 'custom') o.lm = 1; } // stored on this server: 1 = low, 2 = low and high; lm: set by hand
   return o;
 }
 function exportCards() {
@@ -32,7 +32,7 @@ function exportCards() {
       if (c.d && c.d.length) regular.push(picOf(c.id, { id: c.id, n: c.n, sid, k: c.l, b: c.i || null, d: c.d, eu: c.eu, us: c.us, vr: c.vr, ch: c.ch, cm: c.cm || undefined, pt: c.pt }));
     }
     sets.push({ id: sid, name: s.name, date: s.date || '', official: s.official, total: s.total, n: s.cards.length, art: a, promo: s.promo ? 1 : 0,
-      lg: noExt(s.lg), sy: noExt(s.sy), ll: imgs.s[sid] ? imgs.s[sid].v : undefined });
+      lg: noExt(s.lg), sy: noExt(s.sy), ll: imgs.s[sid] ? imgs.s[sid].v : undefined, lm: imgs.s[sid] && imgs.s[sid].m ? 1 : undefined });
   }
   lastExport = { art: art.length, trainers: trainers.length, regular: regular.length, sets: sets.length };
   if (!art.length && !regular.length && !sets.length) return;

@@ -181,7 +181,7 @@ function indexHtml(mode, dexId, sess, nonce) {
   const hide = 'window.DEX_HIDE_VALUE=' + (mode !== 'admin' && !SHOW_VALUE_PUBLIC) + ';';
   const me = sess ? (sess.acc === ADMIN_ID ? { id: ADMIN_ID, name: 'Admin', admin: true } : accById(sess.acc)) : null;
   const cfg = { dex: dexId, accounts: publicAccounts(), me: me ? { id: me.id, name: me.name, admin: me.id === ADMIN_ID } : null };
-  const inj = 'window.DEX_CUR=' + JSON.stringify(PRICE_CUR) + ';' + (mode === 'full' ? 'window.DEX_AUTH=true;' : 'window.DEX_READONLY=true;' + hide + (mode === 'ro' || mode === 'adminlogin' ? 'window.DEX_LOGIN=true;' : ''))
+  const inj = 'window.DEX_CUR=' + JSON.stringify(PRICE_CUR) + ';' + ((process.env.PICTURE_SOURCE || 'outside') === 'server' ? '' : 'window.DEX_PICS_OUT=true;') + (mode === 'full' ? 'window.DEX_AUTH=true;' : 'window.DEX_READONLY=true;' + hide + (mode === 'ro' || mode === 'adminlogin' ? 'window.DEX_LOGIN=true;' : ''))
     + (mode === 'admin' || mode === 'adminlogin' ? 'window.DEX_ADMINPATH=true;' : '') + (APK_BASE ? 'window.DEX_APK=true;' : '') + (SIGNUP && mode !== 'admin' && mode !== 'adminlogin' ? 'window.DEX_SIGNUP=true;' : '')
     + 'window.DEX_CFG=' + JSON.stringify(cfg).replace(/</g, '\\u003c') + ';';
   return h.replace('<!--DEX_MODE-->', '<script nonce="' + nonce + '">' + inj + '</script>'); // the only script written into the page: the policy lets it run by its one-time number

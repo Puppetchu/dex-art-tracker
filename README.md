@@ -58,6 +58,8 @@ The server downloads every card picture the page shows and keeps its own copy in
 
 ### Where pictures come from
 
+**Which first.** The admin setting **Show pictures from** (`PICTURE_SOURCE`) decides the order. *Outside sites first* (the default): the visitor's browser gets each picture straight from the picture sites (TCGdex, then pokemontcg.io or Scrydex), and the copy stored on this server is the spare when the first two fail, so pictures do not travel through your server or its reverse proxy. *This server first*: the stored copy is shown and the outside sites are only the spare, which also works when those sites are down and when the app is offline. A picture you set by hand always comes from this server. Note that a picture only moves on to the next address when one fails, not when a site is merely slow.
+
 Pictures come from TCGdex. Brand new cards and many promos have no picture there yet. For those:
 
 - **Automatic lookup.** The server asks the pokemontcg.io card search for the exact picture of every English card the page shows that has no TCGdex picture, promo sets first. It searches by set and number, and if the set is named differently there, by name and number, only taking an unambiguous match. Found pictures are stored for good; a card without a result is asked about again after 30 days. It runs in the background at the usual pace, at most 200 cards per hour and `PICTURES_PER_DAY` per day. The status line shows how many cards are still to look up. Japanese cards are not on pokemontcg.io.
@@ -225,6 +227,7 @@ Most of these can also be chosen on the **Admin settings** page; a choice saved 
 | `IMAGE_CACHE` | 1 | 0 = do not store pictures on the server (the page then loads them from the picture sites) |
 | `IMAGE_HIGH` | all | Which cards also get a high resolution copy: `all`, `art` (art, owned and wished cards) or `none` |
 | `IMAGE_DELAY_MS` | 1000 | Pause between two picture downloads, in milliseconds |
+| `PICTURE_SOURCE` | outside | Show pictures from the outside picture sites first (`outside`) or from this server first (`server`); also on the admin page |
 | `PICTURE_LOOKUP` | 1 | 0 = do not look up missing pictures on pokemontcg.io |
 | `PICTURES_PER_DAY` | 500 | Most picture lookups per day, 0 = no limit (each card takes one or two requests) |
 | `PTCG_API_KEY` | (none) | Optional free pokemontcg.io API key, for a higher request limit there |
