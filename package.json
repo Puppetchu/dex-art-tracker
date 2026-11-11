@@ -1,0 +1,22 @@
+{
+  "name": "dex-art-tracker",
+  "version": "2.13.0",
+  "private": true,
+  "description": "Self-hosted Pok\u00e9dex-style art card tracker",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@techstark/opencv-js": "4.12.0-release.1",
+    "@tesseract.js-data/eng": "1.0.0",
+    "sharp": "0.35.5",
+    "tesseract.js": "7.0.0"
+  },
+  "overrides": {
+    "wasm-feature-detect": "1.9.0"
+  }
+}

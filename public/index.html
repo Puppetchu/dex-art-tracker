@@ -5,154 +5,83 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dex Art Card Tracker</title>
 <meta name="robots" content="noindex">
+<meta name="theme-color" content="#d4202f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <!--DEX_MODE-->
-<style>
-/* Pokédex look: red shell, cyan lens, dark LCD panels. Red LED = nothing yet, yellow = have a card, green = have the art card. */
-:root{
-  --shell:#d4202f; --shell-hi:#f0475a; --shell-lo:#8c0f1d;
-  --body:#10131a; --panel:#1a2030; --panel2:#222b3f; --screen:#0b1f2e; --line:#2c3a54;
-  --ink:#e9f1fb; --muted:#8fa6c0; --lcd:#b9ffdc;
-  --lens:#38bdf8; --yellow:#ffd23f; --green:#3ddc84; --red:#ff4d63;
-  --mono:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;
-  --head:"Trebuchet MS","Segoe UI",system-ui,sans-serif;
-  color-scheme:dark;
-}
-*{box-sizing:border-box}
-[hidden]{display:none!important}
-body{margin:0;background:var(--body);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  background-image:radial-gradient(1200px 500px at 50% -200px,#1b2740,transparent)}
-button,input,select{font:inherit;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 11px;min-width:0}
-button{cursor:pointer;font-weight:600}
-button:hover:not(:disabled){border-color:var(--lens)}
-button:disabled{opacity:.45;cursor:default}
-:focus-visible{outline:2px solid var(--lens);outline-offset:2px}
-input::placeholder{color:var(--muted)}
-
-/* shell */
-.shell{background:linear-gradient(var(--shell-hi),var(--shell) 45%,var(--shell-lo));border-bottom:6px solid #5e0813;box-shadow:0 6px 22px #0008;padding:14px max(16px,env(safe-area-inset-left)) 16px}
-.top{display:flex;flex-wrap:wrap;align-items:center;gap:14px}
-.lens{width:58px;height:58px;border-radius:50%;flex:none;border:4px solid #f5f7fb;box-shadow:0 0 0 3px #00000040,inset 0 -6px 12px #0b4a7c;
-  background:radial-gradient(circle at 32% 28%,#d9f4ff 0 9%,#38bdf8 28%,#0a6fb5 70%,#07416b);animation:glow 3.2s ease-in-out infinite}
-@keyframes glow{50%{box-shadow:0 0 0 3px #00000040,0 0 18px 4px #38bdf8aa,inset 0 -6px 12px #0b4a7c}}
-.leds{display:flex;gap:7px;align-self:flex-start;margin-top:2px}
-.leds i{width:13px;height:13px;border-radius:50%;border:2px solid #0006;display:block}
-.leds .r{background:#ff8a8a}.leds .y{background:var(--yellow)}.leds .g{background:var(--green)}
-h1{margin:0;font:800 1.45rem/1 var(--head);letter-spacing:.14em;text-transform:uppercase;text-shadow:0 2px 0 #0005}
-.legend{margin-left:auto;font-size:.78rem;display:flex;gap:12px;flex-wrap:wrap;background:#0003;border-radius:999px;padding:5px 12px}
-.legend span{display:flex;align-items:center;gap:6px}
-.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
-.dot.r{background:var(--red)}.dot.y{background:var(--yellow)}.dot.g{background:var(--green)}
-.readouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px}
-.ro{background:var(--screen);border:2px solid #04121c;border-radius:10px;padding:8px 12px;box-shadow:inset 0 0 18px #000a}
-.ro small{display:block;color:var(--muted);font:600 .68rem var(--head);letter-spacing:.12em;text-transform:uppercase}
-.ro b{display:block;font:600 1.15rem var(--mono);color:var(--lcd);font-variant-numeric:tabular-nums;text-shadow:0 0 8px #3ddc8466}
-.bar{position:relative;height:10px;border-radius:6px;background:#04121c;margin-top:12px;overflow:hidden;border:1px solid #0008}
-.bar i{position:absolute;left:0;top:0;bottom:0;display:block;width:0;transition:width .4s}
-.bar .any{background:var(--yellow)}.bar .art{background:var(--green)}
-
-/* deck: tabs and controls */
-.deck{position:sticky;top:0;z-index:5;background:#0e1219ee;backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:10px max(16px,env(safe-area-inset-left)) 10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.tab{background:var(--panel2);border-radius:999px;padding:7px 18px;letter-spacing:.06em;text-transform:uppercase;font-size:.82rem}
-.tab.on{background:var(--shell);border-color:var(--shell-hi);color:#fff;box-shadow:0 0 12px #d4202f88}
-.deck input[type=search]{flex:1 1 170px}
-#status,#gens{padding:8px max(16px,env(safe-area-inset-left)) 0;color:var(--muted);font-size:.83rem}
-#gens{font-family:var(--mono);font-size:.76rem}
-
-/* grids and tiles */
-#grid,#setsView,#trainersView{padding:14px max(16px,env(safe-area-inset-left)) 50px}
-.cgrid,#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(172px,1fr));gap:14px}
-.setlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
-.tile{position:relative;background:linear-gradient(var(--panel2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:7px;min-width:0}
-.tile.s-g{border-color:#2f9d62;box-shadow:0 0 0 1px #2f9d6255,0 0 16px #3ddc8422}
-.tile.s-y{border-color:#a8861f}
-.tile .no{display:flex;align-items:center;justify-content:space-between;font:600 .78rem var(--mono);color:var(--muted)}
-.led{width:11px;height:11px;border-radius:50%;background:var(--red);box-shadow:0 0 6px var(--red)}
-.s-y .led{background:var(--yellow);box-shadow:0 0 6px var(--yellow)}
-.s-g .led{background:var(--green);box-shadow:0 0 8px var(--green)}
-.pic{position:relative;aspect-ratio:5/7;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;
-  background:repeating-linear-gradient(0deg,#0b1f2e 0 3px,#0d2536 3px 6px)}
-.pic img{width:100%;height:100%;object-fit:contain;display:block;cursor:zoom-in}
-.badge{position:absolute;left:6px;top:6px;font:700 .62rem var(--head);letter-spacing:.1em;padding:2px 7px;border-radius:999px;background:#000b;color:var(--lcd);pointer-events:none}
-.badge.reg{color:var(--muted)}
-.ph{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:10px;color:var(--muted);font-size:.78rem;width:100%;height:100%}
-.ph b{color:var(--ink);font-size:.86rem}
-.ball{width:42px;height:42px;border-radius:50%;border:3px solid #0b0f16;position:relative;background:linear-gradient(#e63946 0 44%,#0b0f16 44% 56%,#f1f4f9 56%);opacity:.85}
-.ball::after{content:"";position:absolute;left:50%;top:50%;width:13px;height:13px;margin:-6.5px 0 0 -6.5px;border-radius:50%;background:#f1f4f9;border:3px solid #0b0f16}
-.name{font:700 1rem var(--head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.meta{font-size:.76rem;color:var(--muted);min-height:2.3em}
-.price{font:600 .95rem var(--mono);color:var(--lcd);font-variant-numeric:tabular-nums}
-.row{display:flex;gap:6px}
-.row button{flex:1;padding:6px 4px;font-size:.78rem}
-.row button.on{background:#17794a;border-color:var(--green);color:#fff}
-.row button.yel.on{background:#8a6d0c;border-color:var(--yellow)}
-.row button.arm{background:var(--shell);border-color:var(--shell-hi);color:#fff}
-.alt{font-size:.75rem;padding:5px 6px;background:none;border-style:dashed;color:var(--muted);font-weight:500}
-.mini{font-size:.72rem;padding:4px 8px;background:none;color:var(--muted);font-weight:500}
-.mini.arm{background:var(--shell);color:#fff;border-color:var(--shell-hi)}
-
-/* sets */
-.settile{display:flex;flex-direction:column;gap:6px;text-align:left;background:linear-gradient(var(--panel2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:12px;min-width:0}
-.settile.full{border-color:#2f9d62;box-shadow:0 0 14px #3ddc8422}
-.settile b{font:700 1rem var(--head)}
-.settile span{font-size:.78rem;color:var(--muted)}
-.settile .pct{font:600 .82rem var(--mono);color:var(--lcd)}
-.slbox{height:64px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#ffffff12;padding:6px;overflow:hidden}
-.slbox .slogo{max-width:100%;max-height:100%;object-fit:contain;display:block}
-.slbox .sid{font:600 .8rem var(--mono);color:var(--muted)}
-.slbox.big{height:48px;min-width:96px;max-width:200px}
-.mbar{height:7px;border-radius:5px;background:#04121c;overflow:hidden}
-.mbar i{display:block;height:100%;background:var(--green)}
-.sethead{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
-.sethead h2{margin:0;font:800 1.2rem var(--head);letter-spacing:.04em}
-.sethead span{color:var(--muted);font-size:.82rem}
-.sethead .sp{flex:1 1 40px}
-.chip{border-radius:999px;padding:5px 13px;font-size:.78rem}
-.chip.on{background:var(--shell);border-color:var(--shell-hi);color:#fff}
-.setprog{background:var(--screen);border:2px solid #04121c;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:6px 22px;align-items:center;font:600 .82rem var(--mono);color:var(--lcd)}
-.setprog .mbar{flex:1 1 200px}
-
-/* dialogs */
-dialog{max-width:min(980px,95vw);width:100%;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-top:5px solid var(--shell);border-radius:12px;padding:14px}
-dialog::backdrop{background:#000b}
-#opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:10px;max-height:72vh;overflow:auto}
-.opt{border:1px solid var(--line);border-radius:10px;padding:7px;font-size:.78rem;display:flex;flex-direction:column;gap:5px;background:var(--panel2);min-width:0}
-.opt.sel{border-color:var(--lens);box-shadow:0 0 10px #38bdf855}
-.opt.own{border-color:var(--green)}
-.opt .pic{aspect-ratio:5/7}
-.sec{grid-column:1/-1;font:700 .9rem var(--head);letter-spacing:.08em;text-transform:uppercase;margin-top:6px;color:var(--lcd)}
-#lb{max-width:min(520px,94vw);text-align:center}
-#lb img{max-width:100%;max-height:78vh;display:block;margin:0 auto 8px;border-radius:10px}
-#lb .ph{min-height:320px}
-.tools{display:flex;flex-wrap:wrap;gap:8px;padding:0 max(16px,env(safe-area-inset-left)) 30px}
-#bk{width:100%;min-height:90px;font:12px var(--mono);background:var(--screen);border:1px solid var(--line);color:var(--lcd);border-radius:8px;padding:8px}
-@media (prefers-reduced-motion:reduce){.lens{animation:none}.bar i{transition:none}}
-@media (max-width:520px){h1{font-size:1.1rem}.legend{margin-left:0}}
-.ro-mode [data-do="any"],.ro-mode [data-do="art"],.ro-mode [data-do="have"]{pointer-events:none}
-.ro-mode [data-do="getp"],.ro-mode [data-do="main"],.ro-mode [data-do="mark"],.ro-mode #refresh,.ro-mode .tools,.ro-mode #gens,.ro-mode #logoutBtn{display:none!important}
-.ro-mode button:disabled{opacity:1}
-#roTag{display:none;margin-left:10px;padding:2px 9px;border-radius:99px;background:var(--screen);color:var(--lcd);font:700 .7rem var(--head);letter-spacing:.08em;text-transform:uppercase;vertical-align:middle}
-.ro-mode #roTag{display:inline-block}
-#lgdlg input{width:100%;box-sizing:border-box;padding:8px;margin:8px 0;background:var(--screen);color:var(--lcd);border:1px solid var(--line);border-radius:6px;font:.85rem monospace}
-
-a{color:var(--lcd)}
-.links{font-size:.72rem;display:flex;gap:8px;flex-wrap:wrap;margin:2px 0}
-.links a{color:var(--muted);text-decoration:underline}
-.gen{scroll-margin-top:12px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin-top:14px;padding:8px 12px;border-radius:10px;background:var(--panel);border:1px solid var(--line);color:var(--ink)}
-.gen b{font:800 1rem var(--head);letter-spacing:.04em}
-.gen span{color:var(--muted);font:.78rem var(--mono)}
-.gen .gbar{flex:1 1 120px;height:6px;border-radius:3px;background:var(--screen);overflow:hidden;min-width:80px}
-.gen .gbar i{display:block;height:100%;background:#2ecc71}
-</style>
+<link rel="stylesheet" href="app.css">
 </head>
 <body>
+<div id="dexLock" hidden>
+  <div class="dl-shell" id="dlShell">
+    <div class="dl-hinge"></div>
+    <div class="dl-top">
+      <div class="dl-lens"></div>
+      <div class="dl-leds"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+    </div>
+    <div class="dl-frame">
+      <div class="dl-frame-dots"><i></i><i></i></div>
+      <div class="dl-screen">
+        <div id="dlPick">
+          <div class="dl-head">Select trainer</div>
+          <div id="dlList"></div>
+          <button type="button" id="dlNewBtn" hidden>＋ New trainer</button>
+        </div>
+        <form id="dlNew" hidden>
+          <div class="dl-head">New trainer</div>
+          <input id="dlNName" type="text" maxlength="30" autocomplete="username" placeholder="Trainer name" aria-label="Trainer name">
+          <input id="dlNPw" type="password" autocomplete="new-password" placeholder="Password (min. 8)" aria-label="Password, at least 8 characters">
+          <input id="dlNPw2" type="password" autocomplete="new-password" placeholder="Password again" aria-label="Password again">
+          <input id="dlNWeb" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px">
+          <div id="dlNMsg" aria-live="polite"></div>
+          <div class="dl-row"><button type="button" id="dlNBack">◀ Back</button><button type="submit" id="dlNGo">Create ▶</button></div>
+        </form>
+        <form id="dlForm" hidden>
+          <div class="dl-head">Trainer <b id="dlName"></b></div>
+          <input id="dlPw" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
+          <div id="dlMsg" aria-live="polite"></div>
+          <div class="dl-row"><button type="button" id="dlBack">◀ Back</button><button type="submit" id="dlGo">Open ▶</button></div>
+          <div class="dl-row"><button type="button" id="dlView">View dex</button></div>
+        </form>
+      </div>
+      <div class="dl-frame-foot"><i class="dl-spk"></i><i class="dl-spk"></i><i class="dl-spk"></i></div>
+    </div>
+    <div class="dl-controls">
+      <div class="dl-btn"></div>
+      <div class="dl-slots"><i class="r"></i><i class="b"></i></div>
+      <div class="dl-pad"><i></i></div>
+    </div>
+    <div class="dl-title">Dex Art Tracker</div>
+  </div>
+</div>
 
 <header class="shell">
   <div class="top">
-    <div class="lens" aria-hidden="true"></div>
-    <div class="leds" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
-    <h1>Dex Art Tracker<span id="roTag">View only</span></h1>
-    <div class="legend" aria-label="Legend">
-      <span><i class="dot r"></i>nothing yet</span><span><i class="dot y"></i>have a card</span><span><i class="dot g"></i>have the art card</span>
+    <div class="brand">
+      <div class="brow">
+        <div class="lens" aria-hidden="true"></div>
+        <div class="leds" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+        <h1>Dex Art Tracker<span id="roTag">View only</span></h1>
+      </div>
+      <div class="legend" aria-label="Legend">
+        <span><i class="dot r"></i>nothing yet</span><span><i class="dot y"></i>have a card</span><span><i class="dot g"></i>have the art card</span>
+      </div>
+    </div>
+    <div class="tsearch"><input id="q" type="search" placeholder="Search name or number" aria-label="Search"></div>
+    <div class="tright">
+      <div class="trainer"><label for="dexSel">Dex of</label><select id="dexSel"></select></div>
+      <span id="meTag" hidden></span>
+      <div class="acct">
+        <button id="nameBtn" type="button" class="mini" title="Change the name of your dex">Trainer name</button>
+        <button id="impTop" type="button" class="mini" title="Import a collection export (CSV) from another site, such as Collectr">Import</button>
+        <button id="pwBtn" type="button" class="mini" title="Change your password">Password</button>
+        <button id="logoutBtn" type="button" class="mini" title="Log out of this dex">Log out</button>
+        <button id="installBtn" type="button" class="mini" title="Install this page as an app on this device" hidden>Install app</button>
+        <button id="apkBtn" type="button" class="mini" title="Download the Android app (it scans cards and updates itself)" hidden>Android app</button>
+      </div>
     </div>
   </div>
   <div class="readouts">
@@ -166,16 +95,24 @@ a{color:var(--lcd)}
 </header>
 
 <div class="deck">
-  <button id="tabDex" type="button" class="tab on">Pokémon</button>
-  <button id="tabSets" type="button" class="tab">Sets</button>
-  <button id="tabTrainers" type="button" class="tab">Trainers</button>
-  <input id="q" type="search" placeholder="Search name or number">
+  <select id="viewSel" aria-label="Show">
+    <option value="dex">Pokémon</option>
+    <option value="sets">Sets &amp; artists</option>
+    <option value="trainers">Trainers</option>
+    <option value="wish">Wish list &amp; trades</option>
+    <option value="showcase">Showcase</option>
+  </select>
   <select id="filter" aria-label="Filter">
     <option value="all">All Pokémon</option>
     <option value="noany">Missing any card</option>
     <option value="noart">Missing art card (one exists)</option>
     <option value="haveart">Have art card</option>
     <option value="noexist">No art card exists yet</option>
+  </select>
+  <select id="sortSel" aria-label="Sort">
+    <option value="">Dex order</option>
+    <option value="high">Owned: price high → low</option>
+    <option value="low">Owned: price low → high</option>
   </select>
   <select id="genSel" aria-label="Generation">
     <option value="0">Jump to generation…</option>
@@ -190,21 +127,26 @@ a{color:var(--lcd)}
     <option value="most">Most complete</option>
     <option value="least">Least complete</option>
   </select>
-  <select id="cur" aria-label="Currency">
-    <option value="eu">€ Cardmarket</option>
-    <option value="us">$ TCGplayer</option>
+  <select id="setLang" aria-label="Sets in which language" hidden>
+    <option value="">All languages</option>
+    <option value="en">English sets</option>
+    <option value="ja">Japanese sets</option>
+    <option value="zh-cn">Chinese sets</option>
   </select>
-  <button id="refresh" type="button" title="Checks up to 25 missing cards or the oldest prices">Refresh prices</button>
-  <button id="logoutBtn" type="button" title="Log out of the owner account">Log out</button>
+  <button id="refresh" type="button" title="Checks up to 25 missing cards or the oldest prices" hidden>Refresh prices</button>
 </div>
 <div id="gens"></div>
 <div id="status">Loading…</div>
 <main id="grid"></main>
 <main id="setsView" hidden></main>
 <main id="trainersView" hidden></main>
+<main id="wishView" hidden></main>
+<main id="histView" hidden></main>
+<main id="adminView" hidden></main>
 <section class="tools">
   <button id="exp" type="button">Show backup text</button>
   <button id="imp" type="button">Restore from backup text</button>
+  <button id="impSite" type="button">Import from another site…</button>
   <textarea id="bk" hidden aria-label="Backup text"></textarea>
 </section>
 
@@ -217,646 +159,154 @@ a{color:var(--lcd)}
 </dialog>
 <dialog id="lgdlg">
   <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
-    <strong style="font:800 1.05rem var(--head)">Owner login</strong>
+    <strong id="lgTitle" style="font:800 1.05rem var(--head)">Log in</strong>
     <button id="lgClose" type="button">Close</button>
   </div>
   <form id="lgForm" style="margin-top:8px">
     <input id="lgPw" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
     <div style="display:flex;gap:8px;align-items:center"><button id="lgGo" type="submit">Log in</button><span id="lgMsg" style="color:var(--muted);font-size:.85rem"></span></div>
   </form>
+  <p id="lgSignup" hidden style="margin:12px 0 0;font-size:.85rem;color:var(--muted)">New here? <button type="button" class="mini" id="lgNew">Create your own dex</button></p>
+  <form id="suForm" hidden style="margin-top:8px">
+    <p style="margin:0 0 8px;font-size:.85rem;color:var(--muted)">Pick a trainer name and a password (at least 8 characters). Your dex is ready right away.</p>
+    <input id="suName" type="text" maxlength="30" autocomplete="username" placeholder="Trainer name" aria-label="Trainer name">
+    <input id="suPw" type="password" autocomplete="new-password" placeholder="Password" aria-label="Password">
+    <input id="suPw2" type="password" autocomplete="new-password" placeholder="Password again" aria-label="Password again">
+    <input id="suWeb" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button id="suGo" type="submit">Create my dex</button><button id="suBack" type="button" class="mini">Back to log in</button><span id="suMsg" style="color:var(--muted);font-size:.85rem"></span></div>
+  </form>
+</dialog>
+<dialog id="namedlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong style="font:800 1.05rem var(--head)">Trainer name</strong>
+    <button id="nameClose" type="button">Close</button>
+  </div>
+  <form id="nameForm">
+    <input id="nameIn" maxlength="30" autocomplete="off" aria-label="Trainer name">
+    <button type="submit">Save</button>
+  </form>
+  <div id="nameMsg" style="color:var(--muted);font-size:.85rem;margin-top:6px"></div>
+</dialog>
+<dialog id="scandlg">
+  <div id="scanCam">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+      <strong style="font:800 1.05rem var(--head)">Scan cards</strong>
+      <button id="scanClose" type="button">Close</button>
+    </div>
+    <div id="camBox" class="cam"><video id="camVid" playsinline muted autoplay></video><div class="guide"></div><canvas id="camOv" aria-hidden="true"></canvas></div>
+    <div id="vsMsg" aria-live="polite"></div>
+    <div class="scanbar">
+      <label class="mini" style="display:inline-flex;align-items:center;cursor:pointer">Use photos<input id="scanFile" type="file" accept="image/*" multiple hidden></label>
+      <button id="scanShot" type="button" class="shutter" aria-label="Take the picture" title="Take the picture"></button>
+      <button id="scanTorch" type="button" class="mini" hidden>Light</button>
+      <button id="scanAuto" type="button" class="mini" title="Takes the photo by itself when the cards stand still">Video scan: on</button>
+    </div>
+    <div id="scanMsg"></div>
+    <div class="queuebar"><span id="queueMsg" aria-live="polite"></span><button id="pile" type="button" hidden aria-label="Cards being scanned and waiting for your check"><span id="pileStack"></span><span id="pileN">0</span></button><button id="reviewBtn" type="button" hidden>Check →</button></div>
+    <div id="flyLayer" aria-hidden="true"></div>
+  </div>
+  <div id="scanReview" hidden>
+    <div class="rv-top">
+      <button id="rvBack" type="button">← Camera</button>
+      <strong id="rvHead" style="flex:1;font:800 1rem var(--head)"></strong>
+    </div>
+    <div class="rv-bar"><button id="rvAdd" type="button">Add to my dex</button><button id="rvClear" type="button" class="mini">Clear list</button></div>
+    <div id="rvMsg" aria-live="polite"></div>
+    <div id="rvList"></div>
+  </div>
+</dialog>
+<dialog id="picdlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong id="picTitle" style="font:800 1.05rem var(--head)">Picture</strong>
+    <button id="picClose" type="button">Close</button>
+  </div>
+  <p style="color:var(--muted);font-size:.85rem;margin:8px 0">Paste the address of a picture of this card (right-click a picture on a shop or card site and copy the image address), or choose a picture file. The server checks it and stores a low and a high resolution copy. Save with nothing filled in to go back to the automatic picture.</p>
+  <form id="picForm" style="display:flex;flex-direction:column;gap:8px">
+    <input id="picUrl" type="url" placeholder="https://…" aria-label="Picture address" autocomplete="off">
+    <label style="font-size:.85rem;color:var(--muted)">or a file: <input id="picFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif"></label>
+    <img id="picPrev" alt="" hidden>
+    <div style="display:flex;gap:8px;align-items:center"><button type="submit">Save</button><span id="picMsg" style="color:var(--muted);font-size:.85rem"></span></div>
+  </form>
+</dialog>
+<dialog id="pwdlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong style="font:800 1.05rem var(--head)">Change password</strong>
+    <button id="pwClose" type="button">Close</button>
+  </div>
+  <form id="pwForm" style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+    <input id="pwOld" type="password" autocomplete="current-password" placeholder="Current password" aria-label="Current password">
+    <input id="pwNew" type="password" autocomplete="new-password" placeholder="New password (at least 8 characters)" aria-label="New password">
+    <input id="pwNew2" type="password" autocomplete="new-password" placeholder="New password again" aria-label="New password again">
+    <div style="display:flex;gap:8px;align-items:center"><button type="submit">Change password</button><span id="pwMsg" style="color:var(--muted);font-size:.85rem"></span></div>
+  </form>
+</dialog>
+<dialog id="chartdlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong id="chartTitle" style="font:800 1.05rem var(--head)">Price history</strong>
+    <button id="chartClose" type="button">Close</button>
+  </div>
+  <div id="chartBody"></div>
+</dialog>
+<dialog id="cmdlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong style="font:800 1.05rem var(--head)">For Cardmarket: <span id="cmTitle"></span></strong>
+    <button id="cmClose" type="button">Close</button>
+  </div>
+  <p class="cmhelp">On Cardmarket: <b>Buying → Wants</b>, open or make a list, <b>Add Deck List</b>, paste this and press <b>Add to …</b>. Each line is the card name with its attacks, which is how Cardmarket tells Pokémon cards apart.</p>
+  <label class="cmopt"><input type="checkbox" id="cmSets" checked> Add the set name (leave this off if Cardmarket does not find the cards)</label>
+  <textarea id="cmText" rows="10" readonly aria-label="Card list for Cardmarket"></textarea>
+  <div id="cmNote" class="cmhelp"></div>
+  <div class="row" style="margin-top:8px"><button id="cmCopy" type="button" class="on">Copy</button><a class="btnlink" href="https://www.cardmarket.com/en/Pokemon/Wants" target="_blank" rel="noopener">Open Cardmarket Wants ↗</a></div>
+</dialog>
+<dialog id="wpdlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong style="font:800 1.05rem var(--head)">Wish lists for <span id="wpTitle"></span></strong>
+    <button id="wpDone" type="button">Done</button>
+  </div>
+  <div id="wpList"></div>
+  <div class="row" style="margin-top:10px"><input id="wpNew" type="text" maxlength="60" placeholder="New list, for example Birthday" aria-label="Name of a new wish list"><button id="wpAdd" type="button">Add list</button></div>
+</dialog>
+<dialog id="infodlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong id="infoTitle" style="font:800 1.05rem var(--head)">Card</strong>
+    <button id="infoClose" type="button">Close</button>
+  </div>
+  <div id="infoBody"></div>
+</dialog>
+<dialog id="impdlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong style="font:800 1.05rem var(--head)">Import from another site</strong>
+    <button id="impClose" type="button">Close</button>
+  </div>
+  <p style="color:var(--muted);font-size:.85rem;margin:8px 0">Choose a file or paste the text: a CSV export of your collection (for example from Collectr: your portfolio → Export), or a card list with set codes like <code>1 Pikachu ex MEW 25</code> (Pokémon TCG Live, Limitless and other deck builders). Every card is matched by its number, name and set. Nothing is added until you confirm.</p>
+  <div class="impform">
+    <input id="impFile" type="file" accept=".csv,.txt,text/csv,text/plain" aria-label="File to import">
+    <select id="impTo" aria-label="Add the cards to"><option value="own">Add to my owned cards</option><option value="wish">Add to my wish list</option></select>
+  </div>
+  <details id="impPasteBox"><summary>…or paste the list</summary>
+    <textarea id="impText" rows="6" placeholder="Paste a card list or CSV here" aria-label="Card list to import"></textarea>
+    <button type="button" id="impRead" class="mini">Read pasted list</button>
+  </details>
+  <div id="impMsg" aria-live="polite"></div>
+  <div id="impRes"></div>
+</dialog>
+<dialog id="accdlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+    <strong style="font:800 1.05rem var(--head)">Accounts</strong>
+    <button id="accClose" type="button">Close</button>
+  </div>
+  <p style="color:var(--muted);font-size:.85rem;margin:8px 0 0">Every account has its own dex. Give the trainer their password; they log in by opening their dex and clicking the blue lens, and can change their trainer name themselves.</p>
+  <form id="accForm">
+    <input id="accName" maxlength="30" autocomplete="off" placeholder="Trainer name" aria-label="Trainer name">
+    <input id="accPw" autocomplete="new-password" placeholder="Password (empty = make one up)" aria-label="Password">
+    <button type="submit">Add account</button>
+  </form>
+  <div id="accMsg" style="font-size:.85rem;margin-top:8px" aria-live="polite"></div>
+  <div id="accList" style="margin-top:6px"></div>
 </dialog>
 <dialog id="lb"><div id="lbBody"></div><button id="lbClose" type="button">Close</button></dialog>
 
-<script>
-(function(){
-var RO=!!window.DEX_READONLY, HIDEV=!!window.DEX_HIDE_VALUE, LOGIN=!!window.DEX_LOGIN, AUTH=!!window.DEX_AUTH;
-if(RO){
-  document.body.classList.add('ro-mode');
-  document.title='Pokémon art card collection (view only)';
-  if(LOGIN){ var lens=document.querySelector('.lens'); lens.removeAttribute('aria-hidden'); lens.setAttribute('role','button'); lens.setAttribute('tabindex','0'); lens.setAttribute('aria-label','Owner login'); lens.style.cursor='pointer'; }
-  if(HIDEV){ ['roWorth','roCost'].forEach(function(i){ var e=document.getElementById(i); if(e) e.style.display='none'; }); }
-}
-'use strict';
-var cards=[], trainers=[], regular=[], sets=[], setsById={}, names={}, maxDex=1025;
-var byDex={}, byReg={}, byId={};
-var st={own:{},cards:{},pick:{},cur:'eu'};
-var trFilter='all', view='dex', curSet=null, setData=null, setFilter='all', setCache={}, dexOpen=null, regShown=60, armed=null;
-
-function $(id){return document.getElementById(id);}
-function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
-function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
-function setStatus(t){
-  if(RO) t=String(t).replace(' Pick another one under "view".','').replace(' Open one to see every card and tick what you own.',' Open one to see every card.');
-  $('status').textContent=t;
-}
-async function call(url,opts){
-  var r=await fetch(url,opts);
-  var j=await r.json().catch(function(){return {};});
-  if(!r.ok){ var e=new Error(j.error||('HTTP '+r.status)); e.status=r.status; throw e; }
-  return j;
-}
-function getJSON(url){ return call(url); }
-function post(url,body){ return call(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}); }
-
-/* ---------- pictures: TCGdex first, then two other image hosts, then a placeholder ---------- */
-function ptcgId(sid){ return String(sid).replace(/^([a-z]+)0*(\d)/i,'$1$2').replace('.','pt'); }
-function isJa(id){ return /^ja:/.test(String(id||'')); }
-function numOf(k){ return /^\d+$/.test(String(k))?String(+k):String(k); }
-var PHONE=false; try{ PHONE=window.matchMedia('(max-width:700px)').matches; }catch(e){}
-function imgList(c,big){
-  big=big||PHONE; // phones get the full resolution picture everywhere
-  var l=[];
-  if(c.b) l.push(c.b+'/'+(big?'high':'low')+'.webp');
-  if(c.sid&&c.k!=null&&c.k!==''&&isJa(c.sid)){
-    // Japanese cards: Scrydex lists them as <set>_ja-<number>. The exact numbering style is a guess, so both are tried.
-    var js=String(c.sid).replace(/^ja:/,'').toLowerCase(), sz=big?'medium':'small', plain=numOf(c.k);
-    l.push('https://images.scrydex.com/pokemon/'+encodeURIComponent(js)+'_ja-'+encodeURIComponent(plain)+'/'+sz);
-    if(String(c.k)!==plain) l.push('https://images.scrydex.com/pokemon/'+encodeURIComponent(js)+'_ja-'+encodeURIComponent(c.k)+'/'+sz);
-  }
-  if(c.sid&&c.k!=null&&c.k!==''&&!isJa(c.sid)){
-    var pid=ptcgId(c.sid), nm=encodeURIComponent(numOf(c.k));
-    l.push('https://images.pokemontcg.io/'+pid+'/'+nm+(big?'_hires':'')+'.png');
-    l.push('https://images.scrydex.com/pokemon/'+pid+'-'+nm+'/'+(big?'medium':'small'));
-  }
-  return l;
-}
-function subOf(c){ var s=setsById[c.sid]; return (s?s.name:(c.sid||''))+(c.k?' · '+c.k:'')+(isJa(c.sid)?' · JA':''); }
-function phHTML(name,sub){ return '<div class="ph"><i class="ball"></i><b>'+esc(name)+'</b><span>No picture available yet</span><span>'+esc(sub)+'</span></div>'; }
-function picHTML(c,big){
-  var l=imgList(c,big);
-  if(!l.length) return phHTML(c.n,subOf(c));
-  return '<img loading="lazy" src="'+esc(l[0])+'" data-srcs="'+esc(l.slice(1).map(encodeURIComponent).join('|'))+'" data-n="'+esc(c.n)+'" data-sub="'+esc(subOf(c))+'" alt="'+esc(c.n)+'" data-do="zoom" data-id="'+esc(c.id)+'">';
-}
-function logoList(s){
-  var l=[];
-  if(s.lg){ l.push(s.lg+'.webp'); l.push(s.lg+'.png'); }
-  if(s.sy){ l.push(s.sy+'.webp'); }
-  if(!isJa(s.id)){
-    var pid=ptcgId(s.id);
-    l.push('https://images.pokemontcg.io/'+pid+'/logo.png');
-    l.push('https://images.scrydex.com/pokemon/'+pid+'-logo/logo');
-    l.push('https://images.pokemontcg.io/'+pid+'/symbol.png');
-  }
-  return l;
-}
-function logoHTML(s){
-  var l=logoList(s);
-  if(!l.length) return '';
-  return '<img class="slogo" loading="lazy" src="'+esc(l[0])+'" data-srcs="'+esc(l.slice(1).map(encodeURIComponent).join('|'))+'" data-hide="1" data-fb="'+esc(s.id)+'" alt="'+esc(s.name)+'">';
-}
-document.addEventListener('error',function(e){
-  var t=e.target;
-  if(!t||t.tagName!=='IMG'||t.dataset.srcs===undefined) return;
-  var rest=t.dataset.srcs?t.dataset.srcs.split('|'):[];
-  if(rest.length){ t.dataset.srcs=rest.slice(1).join('|'); t.src=decodeURIComponent(rest[0]); }
-  else if(t.dataset.hide){ var sp=document.createElement('span'); sp.className='sid'; sp.textContent=t.dataset.fb||''; t.replaceWith(sp); }
-  else { var d=document.createElement('div'); d.innerHTML=phHTML(t.dataset.n,t.dataset.sub); t.replaceWith(d.firstChild); }
-},true);
-
-/* ---------- data ---------- */
-function showGens(s){
-  if(!s||!s.sets) return;
-  var t=s.count+' art cards · '+s.regular+' regular cards · '+s.sets.scanned+' sets';
-  if(s.backlog) t+=' · '+s.backlog+' cards still to check';
-  t+=' · '+s.pricesDue+' prices due';
-  if(s.setsChecked) t+=' · new sets last checked '+new Date(s.setsChecked).toLocaleDateString(undefined,{day:'numeric',month:'short'});
-  $('gens').textContent=t;
-}
-async function loadData(){
-  for(;;){
-    try{ var c=await getJSON('data/cards.json'); cards=c.cards||[]; trainers=c.trainers||[]; regular=c.regular||[]; sets=c.sets||[]; break; }
-    catch(e){
-      if(e.status!==404) throw e;
-      var s=await getJSON('api/status').catch(function(){return null;});
-      showGens(s);
-      setStatus('The server is building its card database'+(s&&s.sets?' ('+s.count+' art cards stored, '+s.backlog+' still to check)':'')+'. This can take a long time the first time. This page checks again in 15 seconds.');
-      await sleep(15000);
-    }
-  }
-  setsById={}; sets.forEach(function(s){setsById[s.id]=s;});
-  setCache={};
-  try{ showGens(await getJSON('api/status')); }catch(e){}
-  try{ var n=await getJSON('data/names.json'); names=n.names||{}; maxDex=n.max||maxDex; }catch(e){}
-}
-async function loadState(){
-  var s=null;
-  try{ s=await getJSON('api/state'); }catch(e){}
-  if(s&&s.own) st={own:s.own,cards:s.cards||{},pick:s.pick||{},cur:s.cur||'eu'};
-  $('cur').value=st.cur;
-}
-var saveTimer=null;
-function save(){
-  if(RO) return;
-  clearTimeout(saveTimer);
-  saveTimer=setTimeout(function(){
-    fetch('api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(st)}).then(function(r){ if(r.status===401) location.reload(); }).catch(function(){});
-  },400);
-}
-
-function price(c){ var v=c&&c[st.cur]; return typeof v==='number'?v:null; }
-function fmt(v){ return v==null?'no price':(st.cur==='eu'?'€':'$')+v.toFixed(2); }
-function ageOk(c){ return c&&c.pt&&(Date.now()-Date.parse(c.pt))<30*864e5; }
-function getBtn(c){ return '<button type="button" class="mini" data-do="getp" data-id="'+esc(c.id)+'" title="Ask the card service for this card now">Get price</button>'; }
-function priceHTML(c){
-  if(!c) return '';
-  var isArt=c.a||c.t==='a';
-  if(c.pv) return '<div class="price" title="Known art card, price not fetched yet">price pending</div>'+getBtn(c);
-  if(!isArt&&!c.pt) return '<div class="price" title="Prices of regular cards are fetched slowly in the background">price not loaded yet</div>'+getBtn(c);
-  return '<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>'+(price(c)==null?getBtn(c):'');
-}
-function linkHTML(c){
-  var nm=c.n;
-  if(/[^\x00-\x7F]/.test(nm||'')&&c.d&&c.d.length&&names[c.d[0]]){ // Japanese card name: search with the English Pokémon name, keeping ex / V / VMAX etc.
-    var rest=String(nm).replace(/[^\x00-\x7F]+/g,' ').replace(/\s+/g,' ').trim();
-    nm=names[c.d[0]]+(rest?' '+rest:'');
-  }
-  var q=[nm,c.k||''].filter(Boolean).join(' ').trim().split(/\s+/).map(encodeURIComponent).join('+');
-  var cm=c.cm?'https://www.cardmarket.com/en/Pokemon/Products?idProduct='+encodeURIComponent(c.cm):'https://www.cardmarket.com/en/Pokemon/Products/Search?searchString='+q;
-  var tp='https://www.tcgplayer.com/search/pokemon/product?q='+q;
-  return '<div class="links"><a href="'+esc(cm)+'" target="_blank" rel="noopener noreferrer" title="'+(c.cm?'This exact card on Cardmarket':'Search Cardmarket for this card')+'">Cardmarket ↗</a> <a href="'+esc(tp)+'" target="_blank" rel="noopener noreferrer">TCGplayer ↗</a></div>';
-}
-var priceTried={};
-async function loadPrices(list){
-  if(RO) return;
-  var ids=list.filter(function(c){ return c&&!c.a&&c.t!=='a'&&c.t!=='p'&&!ageOk(c)&&!priceTried[c.id]; }).slice(0,6).map(function(c){ priceTried[c.id]=1; return c.id; });
-  if(!ids.length) return;
-  try{ await post('api/prices',{ids:ids}); }catch(e){ return; }
-  await loadData(); index();
-  if(curSet){ delete setCache[curSet]; await openSet(curSet,true); }
-  if(dexOpen) fillDex(false);
-}
-function setName(c){ var s=setsById[c.sid]; return s?s.name:(c.sid||''); }
-function setDate(c){ var s=setsById[c.sid]; return s?s.date:''; }
-
-function index(){
-  byDex={}; byReg={}; byId={};
-  cards.forEach(function(c){ c.a=1; byId[c.id]=c; (c.d||[]).forEach(function(n){ (byDex[n]=byDex[n]||[]).push(c); }); });
-  trainers.forEach(function(c){ c.a=1; c.tr=1; byId[c.id]=c; });
-  regular.forEach(function(c){ byId[c.id]=c; (c.d||[]).forEach(function(n){ (byReg[n]=byReg[n]||[]).push(c); }); });
-  Object.keys(byDex).forEach(function(n){
-    byDex[n].sort(function(a,b){
-      var pa=price(a), pb=price(b);
-      if(pa===null&&pb===null) return 0;
-      if(pa===null) return 1; if(pb===null) return -1;
-      return pa-pb;
-    });
-    if(+n>maxDex) maxDex=+n;
-  });
-  Object.keys(byReg).forEach(function(n){
-    // regular cards: ones with a picture first, then newest set first
-    byReg[n].sort(function(a,b){
-      if(!!a.b!==!!b.b) return a.b?-1:1;
-      return String(setDate(b)).localeCompare(String(setDate(a)));
-    });
-    if(+n>maxDex) maxDex=+n;
-  });
-}
-
-/* ---------- ownership ---------- */
-function owned(id){ return !!st.cards[id]; }
-function artOwnedList(n){ return (byDex[n]||[]).filter(function(c){return owned(c.id);}); }
-function regOwnedList(n){ return (byReg[n]||[]).filter(function(c){return owned(c.id);}); }
-function artOwned(n){ var o=st.own[n]; return !!(o&&o.art)||artOwnedList(n).length>0; }
-function anyOwned(n){ var o=st.own[n]; return !!(o&&o.any)||artOwned(n)||regOwnedList(n).length>0; }
-// Main picture: the most expensive card you own, else the card you picked, else the cheapest art card, else a regular card.
-function priciest(list){
-  var best=null, bv=-2;
-  list.forEach(function(c){ var v=price(c); if(v==null) v=-1; if(v>bv){ bv=v; best=c; } });
-  return best;
-}
-function chosen(n){
-  // A Pokémon you own shows the most expensive card of it that you own (art cards first; a regular card only when no art card exists).
-  var ownedArt=artOwnedList(n);
-  if(ownedArt.length) return priciest(ownedArt);
-  if(!(byDex[n]&&byDex[n].length)){ var ownedReg=regOwnedList(n); if(ownedReg.length) return priciest(ownedReg); }
-  var pid=st.pick[n];
-  if(pid&&byId[pid]&&(byId[pid].d||[]).indexOf(+n)>=0) return byId[pid];
-  var a=byDex[n]; if(a&&a.length) return a[0];
-  var r=byReg[n]; if(r&&r.length) return r[0];
-  return null;
-}
-// The art card that counts when you tick "Art card": your pick if it is an art card, else the cheapest.
-function artTarget(n){
-  var c=chosen(n);
-  if(c&&c.a) return c;
-  var a=byDex[n]; return a&&a.length?a[0]:null;
-}
-function isArmed(key){ return armed&&armed.key===key&&Date.now()-armed.t<4000; }
-function arm(key){ armed={key:key,t:Date.now()}; setTimeout(function(){ if(armed&&armed.key===key) refresh(); },4100); }
-
-/* ---------- Pokémon view ---------- */
-function refresh(){ render(); if(dexOpen) fillDex(); }
-var GENS=[null,[1,151,'I','Kanto'],[152,251,'II','Johto'],[252,386,'III','Hoenn'],[387,493,'IV','Sinnoh'],[494,649,'V','Unova'],[650,721,'VI','Kalos'],[722,809,'VII','Alola'],[810,905,'VIII','Galar & Hisui'],[906,1025,'IX','Paldea']];
-function genOf(n){ for(var g=1;g<GENS.length;g++) if(n<=GENS[g][1]) return g; return GENS.length-1; }
-function render(){
-  var q=$('q').value.trim().toLowerCase(), f=$('filter').value, gsel=0, lastGen=0;
-  var gs={}; // per generation: Pokémon, with any card, with an art card, with an art card that exists
-  for(var n0=1;n0<=maxDex;n0++){ var g0=genOf(n0), s0=gs[g0]=gs[g0]||{t:0,a:0,r:0,e:0}; s0.t++; if(anyOwned(n0)) s0.a++; if(artOwned(n0)) s0.r++; if(byDex[n0]&&byDex[n0].length) s0.e++; }
-  var html=[], shown=0, any=0, art=0, avail=0, cost=0, costMissing=0, worth=0;
-  for(var n=1;n<=maxDex;n++){
-    var c=chosen(n), nm=names[n]||('#'+n), hasArt=!!(byDex[n]&&byDex[n].length);
-    var ao=artOwned(n), yo=anyOwned(n);
-    if(yo) any++; if(ao) art++;
-    if(hasArt){
-      avail++;
-      var t=artTarget(n);
-      if(!ao){ var p=price(t); if(p==null) costMissing++; else cost+=p; }
-      else {
-        var ol=artOwnedList(n);
-        if(ol.length) ol.forEach(function(x){ var p2=price(x); if(p2!=null) worth+=p2; });
-        else { var p3=price(t); if(p3!=null) worth+=p3; }
-      }
-    }
-    if(q && nm.toLowerCase().indexOf(q)<0 && String(n)!==q) continue;
-    if(f==='noany'&&yo) continue;
-    if(f==='noart'&&(ao||!hasArt)) continue;
-    if(f==='haveart'&&!ao) continue;
-    if(f==='noexist'&&hasArt) continue;
-    var gn=genOf(n);
-    if(gsel&&gsel!==gn) continue;
-    shown++;
-    if(gn!==lastGen){
-      lastGen=gn; var gi=GENS[gn], gx=gs[gn];
-      html.push('<div class="sec gen" data-gen="'+gn+'"><b>Generation '+gi[2]+'</b><span>'+esc(gi[3])+' · No.'+gi[0]+'–'+Math.min(gi[1],maxDex)+'</span><span>any card '+gx.a+'/'+gx.t+' · art card '+gx.r+'/'+gx.e+'</span><div class="gbar" title="Art cards: '+gx.r+' of '+gx.e+'"><i style="width:'+(gx.e?Math.round(gx.r/gx.e*100):0)+'%"></i></div></div>');
-    }
-    var cnt=(byDex[n]||[]).length, rcnt=(byReg[n]||[]).length;
-    var stc=ao?'s-g':(yo?'s-y':'s-r');
-    var kA=artOwnedList(n).length, kR=regOwnedList(n).length;
-    var artTxt=!hasArt?'No art card':(ao?(isArmed('art:'+n)?'Clear '+kA+' checked?':'✓ Art card'+(kA>1?' ×'+kA:'')):'Art card');
-    var anyTxt=yo?(isArmed('any:'+n)?'Clear '+kR+' checked?':'✓ Any card'):'Any card';
-    html.push('<div class="tile '+stc+'" data-n="'+n+'">'+
-      '<div class="no"><span>No.'+String(n).padStart(4,'0')+'</span><i class="led"></i></div>'+
-      '<div class="pic">'+(c?picHTML(c,false).replace('data-do="zoom"','data-do="zoom"'):phHTML(nm,'No card found yet'))+(c?'<span class="badge'+(c.a?'':' reg')+'">'+(c.a?'ART':'REGULAR')+'</span>':'')+'</div>'+
-      '<div class="name" title="'+esc(nm)+'">'+esc(nm)+'</div>'+
-      '<div class="meta">'+(c?esc(c.a?(c.r||'Art card'):'Regular card')+'<br>'+esc(setName(c)):'&nbsp;')+'</div>'+
-      (c&&(c.a||c.pt)?'<div class="price" title="Price checked '+(c.pt?new Date(c.pt).toLocaleDateString():'unknown')+'">'+fmt(price(c))+'</div>':'')+(c?linkHTML(c):'')+
-      '<div class="row"><button type="button" data-do="any" data-n="'+n+'" class="yel'+(yo?' on':'')+(isArmed('any:'+n)?' arm':'')+'"'+(ao?' title="Counted because you have an art card"':'')+'>'+anyTxt+'</button>'+
-      '<button type="button" data-do="art" data-n="'+n+'" class="'+(ao?'on':'')+(isArmed('art:'+n)?' arm':'')+'"'+(hasArt?'':' disabled')+'>'+artTxt+'</button></div>'+
-      ((cnt||rcnt)?'<button type="button" class="alt" data-do="view" data-n="'+n+'">'+cnt+' art · '+rcnt+' regular · view</button>':'')+
-      '</div>');
-  }
-  $('grid').innerHTML=html.join('');
-  var S=st.cur==='eu'?'€':'$';
-  $('sAny').textContent=any+' / '+maxDex;
-  $('sArt').textContent=art+' / '+avail;
-  $('sAvail').textContent=avail+' of '+maxDex;
-  $('sWorth').textContent=S+worth.toFixed(2);
-  $('sCost').textContent=S+cost.toFixed(2)+(costMissing?' (+'+costMissing+')':'');
-  $('barAny').style.width=(maxDex?Math.min(100,any/maxDex*100):0)+'%';
-  $('barArt').style.width=(maxDex?Math.min(100,art/maxDex*100):0)+'%';
-  renderSets();
-  if(view==='dex') setStatus(shown+' shown. Main picture is the most expensive card you own, else the cheapest art card (or a regular card when no art card exists). Pick another one under "view".');
-}
-
-/* ---------- Pokémon card list ---------- */
-function openDex(n){ dexOpen=+n; regShown=60; fillDex(true); if(!$('dlg').open) $('dlg').showModal(); loadPrices((byReg[dexOpen]||[]).slice(0,regShown)); }
-function fillDex(reset){
-  var n=dexOpen; if(!n) return;
-  var list=byDex[n]||[], reg=byReg[n]||[], cur=chosen(n);
-  $('dlgTitle').textContent='No.'+String(n).padStart(4,'0')+' '+(names[n]||('#'+n))+' · '+list.length+' art cards · '+reg.length+' regular cards';
-  var box=$('opts'), top=reset?0:box.scrollTop;
-  var h=[];
-  function card(c){
-    var isOwn=owned(c.id), sel=cur&&cur.id===c.id;
-    var mk=c.a?'<button type="button" class="mini'+(isArmed('unart:'+c.id)?' arm':'')+'" data-do="mark" data-id="'+esc(c.id)+'" data-v="0">'+(isArmed('unart:'+c.id)?'Really?':'Not an art card')+'</button>'
-      :'<button type="button" class="mini" data-do="mark" data-id="'+esc(c.id)+'" data-v="1">Count as art card</button>';
-    return '<div class="opt'+(sel?' sel':'')+(isOwn?' own':'')+'"><div class="pic">'+picHTML(c,false)+'</div>'+
-      '<div><b>'+esc(c.n)+'</b></div><div>'+esc(subOf(c))+'</div>'+(c.a?'<div>'+esc(c.r||'Art card')+'</div>':'')+priceHTML(c)+linkHTML(c)+
-      '<div class="row"><button type="button" class="'+(isOwn?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(isOwn?'✓ Have it':'Have it')+'</button></div>'+
-      '<button type="button" data-do="main" data-n="'+n+'" data-id="'+esc(c.id)+'"'+(sel?' disabled':'')+'>'+(sel?'✓ Main picture':'Use as main')+'</button>'+mk+'</div>';
-  }
-  if(list.length) h.push('<div class="sec">Art cards (cheapest first)</div>');
-  list.forEach(function(c){h.push(card(c));});
-  if(reg.length) h.push('<div class="sec">Regular cards</div>');
-  reg.slice(0,regShown).forEach(function(c){h.push(card(c));});
-  if(reg.length>regShown) h.push('<div class="sec"><button type="button" data-do="more">Show 60 more regular cards ('+(reg.length-regShown)+' left)</button></div>');
-  box.innerHTML=h.join('');
-  box.scrollTop=top;
-}
-
-/* ---------- lightbox ---------- */
-function lookup(id){ return byId[id]||(setData&&setData.map[id])||null; }
-function openLb(id){
-  var c=lookup(id); if(!c) return;
-  $('lbBody').innerHTML=picHTML(c,true).replace('data-do="zoom"','')+
-    '<div style="margin-bottom:8px"><b>'+esc(c.n)+'</b><br><span style="color:var(--muted)">'+esc(subOf(c))+(c.r?' · '+esc(c.r):'')+'</span>'+(c.a||c.t==='a'||c.pt?'<br><span class="price">'+fmt(price(c))+'</span>':'')+'</div>'+linkHTML(c);
-  history.pushState({app:1,lb:1},'',location.href);
-  $('lb').showModal();
-}
-
-/* ---------- Sets view ---------- */
-function sidOf(id){
-  var i=id.lastIndexOf('-'), s=id.slice(0,i);
-  if(setsById[s]) return s;
-  for(var k in setsById) if(id.indexOf(k+'-')===0) return k;
-  return null;
-}
-function ownedPerSet(){
-  var m={}; Object.keys(st.cards).forEach(function(id){ var s=sidOf(id); if(s) m[s]=(m[s]||0)+1; });
-  return m;
-}
-function renderTrainers(){
-  var q=$('q').value.trim().toLowerCase(), list=trainers.slice();
-  var own=list.filter(function(c){return owned(c.id);}).length, worth=0, left=0;
-  list.forEach(function(c){ var v=price(c); if(v==null) return; if(owned(c.id)) worth+=v; else left+=v; });
-  list=list.filter(function(c){
-    if(trFilter==='miss'&&owned(c.id)) return false;
-    if(trFilter==='own'&&!owned(c.id)) return false;
-    return !q||(c.n||'').toLowerCase().indexOf(q)>=0||setName(c).toLowerCase().indexOf(q)>=0;
-  });
-  list.sort(function(a,b){ return String(setDate(b)).localeCompare(String(setDate(a)))||String(a.k).localeCompare(String(b.k),undefined,{numeric:true}); });
-  var S=st.cur==='eu'?'€':'$', h=[];
-  h.push('<div class="sethead"><h2>Trainer art cards</h2><span>'+own+' / '+trainers.length+' owned'+(HIDEV?'':' · worth '+S+worth.toFixed(2)+' · left to spend '+S+left.toFixed(2))+'</span><span class="sp"></span>'+
-    [['all','All'],['miss','Missing'],['own','Owned']].map(function(x){return '<button type="button" class="chip'+(trFilter===x[0]?' on':'')+'" data-do="tf" data-v="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>');
-  if(!trainers.length) h.push('<p>No trainer art cards stored yet. They are added as the server works through the art rarity list.</p>');
-  h.push('<div class="cgrid">');
-  list.forEach(function(c){
-    var o=owned(c.id);
-    h.push('<div class="tile '+(o?'s-g':'s-r')+'"><div class="no"><span>'+esc(c.k||'')+'</span><i class="led"></i></div>'+
-      '<div class="pic">'+picHTML(c,false)+'<span class="badge">ART</span></div>'+
-      '<div class="name" title="'+esc(c.n)+'">'+esc(c.n)+'</div>'+
-      '<div class="meta">'+esc(c.r||'Art card')+' · '+esc(setName(c))+(isJa(c.sid)?' · JA':'')+'</div>'+
-      priceHTML(c)+linkHTML(c)+
-      '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div></div>');
-  });
-  h.push('</div>');
-  $('trainersView').innerHTML=h.join('');
-  setStatus(list.length+' of '+trainers.length+' trainer art cards shown.');
-}
-function renderSets(){
-  $('grid').hidden=view!=='dex'; $('setsView').hidden=view!=='sets'; $('trainersView').hidden=view!=='trainers';
-  $('tabDex').classList.toggle('on',view==='dex'); $('tabSets').classList.toggle('on',view==='sets'); $('tabTrainers').classList.toggle('on',view==='trainers');
-  $('filter').hidden=view!=='dex'; $('genSel').hidden=view!=='dex'; $('setSort').hidden=view!=='sets'||!!curSet;
-  if(view==='trainers') renderTrainers();
-  if(view!=='sets') return;
-  var q=$('q').value.trim().toLowerCase(), h=[];
-  if(!curSet){
-    var per=ownedPerSet(), srt=$('setSort').value;
-    var list=sets.filter(function(s){ return !q||s.name.toLowerCase().indexOf(q)>=0||s.id.toLowerCase().indexOf(q)>=0; });
-    function pct(s){ return s.n?(per[s.id]||0)/s.n:0; }
-    list.sort(function(a,b){
-      if(srt==='old') return String(a.date).localeCompare(String(b.date));
-      if(srt==='name') return a.name.localeCompare(b.name);
-      if(srt==='most') return pct(b)-pct(a);
-      if(srt==='least') return pct(a)-pct(b);
-      return String(b.date).localeCompare(String(a.date));
-    });
-    h.push('<div class="setlist">');
-    list.forEach(function(s){
-      var o=per[s.id]||0, p=s.n?Math.round(o/s.n*100):0;
-      h.push('<button type="button" class="settile'+(o&&o>=s.n?' full':'')+'" data-do="set" data-id="'+esc(s.id)+'">'+
-        '<div class="slbox">'+logoHTML(s)+'</div><b>'+esc(s.name)+'</b><span>'+esc(s.date)+' · '+s.n+' cards · '+s.art+' art'+(s.promo?' · promo':'')+(isJa(s.id)?' · JA':'')+'</span>'+
-        '<div class="mbar"><i style="width:'+p+'%"></i></div><span class="pct">'+o+' / '+s.n+' · '+p+'%</span></button>');
-    });
-    h.push('</div>');
-    $('setsView').innerHTML=list.length?h.join(''):'<p>No sets stored yet. The server is still building its database.</p>';
-    setStatus(list.length+' sets. Open one to see every card and tick what you own.');
-    return;
-  }
-  if(!setData||setData.id!==curSet){ $('setsView').innerHTML='<p>Loading set…</p>'; return; }
-  var s=setData, own=0, mainTot=0, mainOwn=0, secTot=0, secOwn=0, artTot=0, artOwn=0;
-  s.cards.forEach(function(c){
-    var o=owned(c.id); if(o) own++;
-    if(c.sec){secTot++; if(o) secOwn++;} else {mainTot++; if(o) mainOwn++;}
-    if(c.t==='a'){artTot++; if(o) artOwn++;}
-  });
-  var list2=s.cards.filter(function(c){
-    if(q&&(c.n||'').toLowerCase().indexOf(q)<0&&String(c.k)!==q) return false;
-    if(setFilter==='miss') return !owned(c.id);
-    if(setFilter==='own') return owned(c.id);
-    if(setFilter==='art') return c.t==='a';
-    return true;
-  });
-  var total=s.cards.length, p=total?Math.round(own/total*100):0;
-  h.push('<div class="sethead"><button type="button" data-do="back">← All sets</button>'+(setsById[s.id]?'<span class="slbox big">'+logoHTML(setsById[s.id])+'</span>':'')+'<h2>'+esc(s.name)+'</h2><span>'+esc(s.date)+(s.promo?' · promo set':'')+'</span><span class="sp"></span>'+
-    [['all','All'],['miss','Missing'],['own','Owned'],['art','Art cards']].map(function(x){return '<button type="button" class="chip'+(setFilter===x[0]?' on':'')+'" data-do="sf" data-v="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>');
-  h.push('<div class="setprog"><span>'+own+' / '+total+' ('+p+'%)</span><div class="mbar"><i style="width:'+p+'%"></i></div>'+
-    (s.official?'<span>Main '+mainOwn+' / '+mainTot+'</span>':'')+(secTot?'<span>Secret '+secOwn+' / '+secTot+'</span>':'')+(artTot?'<span>Art '+artOwn+' / '+artTot+'</span>':'')+'</div>');
-  h.push('<div class="cgrid">');
-  list2.forEach(function(c){
-    var o=owned(c.id), isA=c.t==='a';
-    var stc=o?(isA?'s-g':'s-y'):'s-r';
-    var mk=isA?'<button type="button" class="mini'+(isArmed('unart:'+c.id)?' arm':'')+'" data-do="mark" data-id="'+esc(c.id)+'" data-v="0">'+(isArmed('unart:'+c.id)?'Really?':'Not an art card')+'</button>'
-      :'<button type="button" class="mini" data-do="mark" data-id="'+esc(c.id)+'" data-v="1">Count as art card</button>';
-    h.push('<div class="tile '+stc+'"><div class="no"><span>'+esc(c.k)+(s.official&&/^\d+$/.test(c.k)?' / '+s.official:'')+'</span><i class="led"></i></div>'+
-      '<div class="pic">'+picHTML(c,false)+(isA?'<span class="badge">ART</span>':'')+'</div>'+
-      '<div class="name" title="'+esc(c.n)+'">'+esc(c.n)+'</div>'+
-      (c.d&&c.d.length?'<div class="row">'+c.d.slice(0,3).map(function(d){ return '<button type="button" class="mini" data-do="view" data-n="'+d+'" title="Open this Pokémon">#'+d+' '+esc(names[d]||'')+' →</button>'; }).join('')+'</div>':'')+
-      '<div class="meta">'+(isA?esc(c.r||'Art card'):(c.t==='p'?'Not checked yet':(c.sec?'Secret card':'Regular card')))+'</div>'+
-      priceHTML(c)+linkHTML(c)+
-      '<div class="row"><button type="button" class="'+(o?'on':'')+'" data-do="have" data-id="'+esc(c.id)+'">'+(o?'✓ Have it':'Have it')+'</button></div>'+mk+'</div>');
-  });
-  h.push('</div>');
-  $('setsView').innerHTML=h.join('');
-  setStatus(list2.length+' of '+total+' cards shown.');
-}
-async function openSet(id,keepScroll){
-  curSet=id; setFilter=keepScroll?setFilter:'all';
-  if(!keepScroll){ setData=null; renderSets(); }
-  try{
-    var d=setCache[id]||await getJSON('api/set?id='+encodeURIComponent(id));
-    setCache[id]=d;
-    d.map={}; d.cards.forEach(function(c){ c.sid=id; c.a=c.t==='a'?1:0; d.map[c.id]=c; });
-    setData=d;
-  }catch(e){ setStatus('Could not load that set ('+e.message+').'); curSet=null; }
-  var y=window.scrollY; renderSets(); if(keepScroll) window.scrollTo(0,y); else { window.scrollTo(0,0); if(setData) loadPrices(setData.cards); }
-}
-
-/* ---------- navigation: the browser's back and forward buttons stay inside the app ---------- */
-var scrollPos={}, curHash='', closingByRoute=false, skipPop=false, lbByPop=false;
-if('scrollRestoration' in history) history.scrollRestoration='manual';
-function hashNow(){ return location.hash||'#/dex'; }
-function go(h){
-  if(hashNow()===h) return;
-  scrollPos[hashNow()]=window.scrollY;
-  history.pushState({app:1},'',h);
-  applyRoute();
-}
-function goBack(fallback){
-  if(history.state&&history.state.app) history.back();
-  else { history.replaceState(null,'',fallback); applyRoute(); }
-}
-// Routes: #/dex   #/dex/25 (card list of one Pokémon)   #/sets   #/sets/<set id>
-async function applyRoute(){
-  var h=hashNow(), parts=h.replace(/^#\/?/,'').split('/'), keepTop=false;
-  curHash=h;
-  if(parts[0]==='sets'){
-    view='sets';
-    if($('dlg').open){ closingByRoute=true; $('dlg').close(); }
-    var id=parts.length>1&&parts[1]?decodeURIComponent(parts.slice(1).join('/')):null;
-    if(id){ if(curSet!==id) setFilter='all'; await openSet(id,true); }
-    else { curSet=null; setData=null; renderSets(); }
-  } else if(parts[0]==='trainers'){
-    view='trainers'; curSet=null; setData=null;
-    if($('dlg').open){ closingByRoute=true; $('dlg').close(); }
-    render();
-  } else {
-    view='dex'; curSet=null; setData=null;
-    var n=parts[1]?+parts[1]:0;
-    render();
-    if(n>0){ openDex(n); keepTop=true; }
-    else if($('dlg').open){ closingByRoute=true; $('dlg').close(); }
-  }
-  if(!keepTop) requestAnimationFrame(function(){ window.scrollTo(0,scrollPos[h]||0); });
-}
-window.addEventListener('popstate',function(){
-  if($('lb').open){ lbByPop=true; $('lb').close(); return; }
-  if(skipPop){ skipPop=false; return; }
-  scrollPos[curHash]=window.scrollY;
-  applyRoute();
-});
-
-/* ---------- actions ---------- */
-function noteIn(t){ // the status line is behind the card list dialog, so show messages inside it too
-  var b=$('opts'); if(!dexOpen||!b) return;
-  var n=b.querySelector('.note'); if(!n){ b.insertAdjacentHTML('afterbegin','<div class="sec note"></div>'); n=b.querySelector('.note'); }
-  n.textContent=t;
-}
-async function markArt(id,art){
-  var msg=art?'Reading the card details…':'Updating…';
-  setStatus(msg); noteIn(msg);
-  try{ await post('api/card/mark',{id:id,art:art}); }
-  catch(e){ if(e.status===401){ location.reload(); return; } setStatus(e.message); noteIn(e.message); return; }
-  await loadData(); index();
-  if(curSet) await openSet(curSet,true);
-  refresh();
-}
-document.addEventListener('click',function(e){
-  var t=e.target.closest('[data-do]'); if(!t) return;
-  var a=t.dataset.do, n=+t.dataset.n, id=t.dataset.id;
-  if(RO&&/^(any|art|have|main|mark|getp)$/.test(a)) return;
-  if(a==='any'){
-    if(artOwned(n)) return;
-    if(anyOwned(n)){
-      var regs=regOwnedList(n);
-      if(regs.length&&!isArmed('any:'+n)){ arm('any:'+n); refresh(); return; }
-      var o=st.own[n]; if(o){ o.any=false; if(!o.art) delete st.own[n]; }
-      regs.forEach(function(c){ delete st.cards[c.id]; });
-    } else { var o2=st.own[n]=st.own[n]||{any:false,art:false}; o2.any=true; }
-    save(); refresh();
-  } else if(a==='art'){
-    if(!(byDex[n]||[]).length) return;
-    if(artOwned(n)){
-      var k=artOwnedList(n);
-      if(k.length&&!isArmed('art:'+n)){ arm('art:'+n); refresh(); return; }
-      var o3=st.own[n]; if(o3){ o3.art=false; if(!o3.any) delete st.own[n]; }
-      k.forEach(function(c){ delete st.cards[c.id]; });
-    } else { var tg=artTarget(n); if(tg) st.cards[tg.id]=1; }
-    save(); refresh();
-  } else if(a==='have'){
-    if(owned(id)) delete st.cards[id]; else st.cards[id]=1;
-    save(); refresh();
-  } else if(a==='main'){ st.pick[n]=id; save(); refresh(); }
-  else if(a==='view'){ go('#/dex/'+n); }
-  else if(a==='more'){ regShown+=60; fillDex(); }
-  else if(a==='zoom'){ openLb(id); }
-  else if(a==='mark'){
-    var art=t.dataset.v==='1';
-    if(!art&&!isArmed('unart:'+id)){ arm('unart:'+id); refresh(); return; }
-    markArt(id,art);
-  }
-  else if(a==='set'){ go('#/sets/'+encodeURIComponent(id)); }
-  else if(a==='back'){ goBack('#/sets'); }
-  else if(a==='getp'){
-    t.disabled=true; t.textContent='Fetching…'; setStatus('Fetching the price…'); noteIn('Fetching the price…');
-    post('api/card/fetch',{id:id}).then(async function(r){
-      await loadData(); index();
-      if(curSet){ delete setCache[curSet]; await openSet(curSet,true); }
-      refresh();
-      var m=r.notArt?'That card turned out not to be an art card.':(r.price&&(r.price.eu!=null||r.price.us!=null)?'Price updated.':'The card service has no price for this card.');
-      setStatus(m); noteIn(m);
-    }).catch(function(e){ if(e.status===401){ location.reload(); return; } t.disabled=false; t.textContent='Get price'; setStatus(e.message); noteIn(e.message); });
-  }
-  else if(a==='sf'){ setFilter=t.dataset.v; renderSets(); }
-  else if(a==='tf'){ trFilter=t.dataset.v; renderTrainers(); }
-});
-$('tabDex').addEventListener('click',function(){go('#/dex');});
-$('tabSets').addEventListener('click',function(){go('#/sets');});
-$('tabTrainers').addEventListener('click',function(){go('#/trainers');});
-$('dlgClose').addEventListener('click',function(){$('dlg').close();});
-$('dlg').addEventListener('close',function(){
-  dexOpen=null;
-  if(closingByRoute){ closingByRoute=false; return; }
-  if(/^#\/dex\/\d+/.test(location.hash)){
-    if(history.state&&history.state.app) history.back();
-    else { history.replaceState(null,'','#/dex'); curHash='#/dex'; }
-  }
-});
-$('lbClose').addEventListener('click',function(){$('lb').close();});
-$('lb').addEventListener('close',function(){
-  if(lbByPop){ lbByPop=false; return; }
-  if(history.state&&history.state.lb){ skipPop=true; history.back(); }
-});
-$('lb').addEventListener('click',function(e){ if(e.target===$('lb')) $('lb').close(); });
-$('q').addEventListener('input',render);
-$('filter').addEventListener('change',render);
-$('genSel').addEventListener('change',function(){
-  var g=+$('genSel').value;
-  if(!g){ window.scrollTo({top:0,behavior:'smooth'}); return; }
-  var el=document.querySelector('#grid .gen[data-gen="'+g+'"]');
-  if(!el){ $('filter').value='all'; $('q').value=''; render(); el=document.querySelector('#grid .gen[data-gen="'+g+'"]'); }
-  if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
-});
-$('setSort').addEventListener('change',render);
-$('cur').addEventListener('change',function(){st.cur=$('cur').value;save();index();render();});
-
-async function pollRefresh(){
-  if(RO) return;
-  for(;;){
-    var s=await getJSON('api/status').catch(function(){return null;});
-    if(!s||!s.running) break;
-    setStatus('The server is updating its card database'+(s.sets?' ('+s.count+' art cards stored, '+s.backlog+' still to check)':'')+'…');
-    await sleep(5000);
-  }
-  await loadData(); index(); if(curSet) await openSet(curSet,true); refresh();
-}
-$('refresh').addEventListener('click',async function(){
-  try{ await post('api/refresh'); }
-  catch(e){
-    if(e.status===429) setStatus('Please wait a few minutes between manual refreshes.');
-    else if(e.status===409) setStatus('Refreshing is switched off on the server.');
-    else setStatus('Could not reach the server.');
-    return;
-  }
-  pollRefresh();
-});
-function openLogin(){ $('lgMsg').textContent=''; $('lgPw').value=''; $('lgdlg').showModal(); $('lgPw').focus(); }
-if(LOGIN){
-  var lensEl=document.querySelector('.lens');
-  lensEl.addEventListener('click',openLogin);
-  lensEl.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openLogin(); } });
-}
-$('lgClose').addEventListener('click',function(){ $('lgdlg').close(); });
-$('lgForm').addEventListener('submit',async function(e){
-  e.preventDefault(); $('lgMsg').textContent='…';
-  try{ await post('api/login',{password:$('lgPw').value}); location.reload(); }
-  catch(err){ $('lgMsg').textContent=err.status===429?'Too many tries. Wait 15 minutes.':'Wrong password.'; }
-});
-$('logoutBtn').addEventListener('click',async function(){ try{ await post('api/logout'); }catch(e){} location.reload(); });
-$('exp').addEventListener('click',function(){
-  var b=$('bk'); b.hidden=false; b.value=JSON.stringify(st); b.select();
-});
-$('imp').addEventListener('click',function(){
-  var b=$('bk');
-  if(b.hidden){ b.hidden=false; b.value=''; b.placeholder='Paste backup text here, then press Restore again'; return; }
-  try{
-    var j=JSON.parse(b.value);
-    if(j&&j.own){ st={own:j.own||{},cards:j.cards||{},pick:j.pick||{},cur:j.cur||'eu'}; save(); $('cur').value=st.cur; index(); render(); b.value=''; b.hidden=true; }
-  }catch(e){ b.value='That text could not be read as a backup.'; }
-});
-
-(async function start(){
-  try{
-    await loadState();
-    await loadData();
-    index(); await applyRoute();
-    var s=await getJSON('api/status').catch(function(){return null;});
-    if(s&&s.running&&!RO) pollRefresh();
-  }catch(e){
-    setStatus('Could not load card data ('+(e&&e.message||e)+'). Reload the page to try again.');
-  }
-})();
-})();
-</script>
+<div id="toast" popover="manual" role="status"></div>
+<script src="app.js"></script>
 </body>
 </html>
